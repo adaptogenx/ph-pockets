@@ -55,12 +55,29 @@ local function EnsureSavedVariables()
     Pockets.CharDB = PocketsCharDB
 end
 
+local defaultBindingApplied = false
+
+-- Binding APIs are not safe to call from ADDON_LOADED; the binding system
+-- isn't fully initialized until around PLAYER_ENTERING_WORLD. Guarded by
+-- defaultBindingApplied since PLAYER_ENTERING_WORLD can fire more than
+-- once per session (zoning). Wrapped in pcall so a binding-API failure
+-- degrades locally instead of breaking the rest of startup (TDD §22).
 local function EnsureDefaultBinding()
-    if GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY") then
+    if defaultBindingApplied then
         return
     end
-    SetBinding("SHIFT-B", "POCKETS_TOGGLE_FULL_INVENTORY")
-    SaveBindings(GetCurrentBindingSet())
+    defaultBindingApplied = true
+
+    local ok, err = pcall(function()
+        if GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY") then
+            return
+        end
+        SetBinding("SHIFT-B", "POCKETS_TOGGLE_FULL_INVENTORY")
+        SaveBindings(GetCurrentBindingSet() or 1)
+    end)
+    if not ok and Pockets.Debug then
+        Pockets.Debug:LogError("EnsureDefaultBinding failed: " .. tostring(err))
+    end
 end
 
 local function ScheduleRefresh(reason)
@@ -75,7 +92,6 @@ end
 
 local function InitializeAddon()
     EnsureSavedVariables()
-    EnsureDefaultBinding()
 
     Pockets.UI.HUD:Initialize()
     Pockets.UI.TooltipCounts:Initialize()
@@ -102,6 +118,7 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
             InitializeAddon()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
+        EnsureDefaultBinding()
         ScheduleRefresh("player_entering_world")
     elseif event == "PLAYER_REGEN_DISABLED" then
         Pockets.Services.EventBus:Publish(Pockets.Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, { inCombat = true })
