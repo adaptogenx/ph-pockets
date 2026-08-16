@@ -163,6 +163,20 @@ function InventoryState:GetCarriedQuantity(itemID)
     return (totals and totals[itemID]) or 0
 end
 
+-- Finds the first current bag+slot record for an itemID, or nil if not
+-- carried. Used to resolve a Recent Items entry to a real, interactive
+-- location (UI_SPEC §9) - Recent itself only remembers itemID/quantity,
+-- never a bag/slot, since acquisition history and physical location are
+-- different concerns.
+function InventoryState:FindLiveRecordByItemID(itemID)
+    for _, record in pairs(self.items) do
+        if record.itemID == itemID then
+            return record
+        end
+    end
+    return nil
+end
+
 function InventoryState:GetRevision()
     return self.revision
 end

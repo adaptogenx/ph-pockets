@@ -26,7 +26,14 @@ Current coverage:
   states, ETA omission below confidence threshold, discontinuity discount
   after a large negative sample (e.g. a vendor trip).
 - **InventoryStateTests** - capacity result shape, zero-total safety,
-  general/ammo pool independence.
+  general/ammo pool independence, live bag/slot lookup by itemID.
+- **APITests** - Recent category count is entry count (not quantity sum);
+  Recent entries resolve to a live bag/slot when still carried and are
+  marked non-interactive when not (UI_SPEC §9).
+
+These can also be run outside the game with a plain Lua interpreter (no
+WoW client needed) - see `Core/`, `Adapters/ItemAPI.lua`, and `API.lua`
+loaded against a small `GetTime`/`GetItemInfo` stub. Useful for CI.
 
 As bag-scan/diff logic and stack consolidation are implemented (TDD Phases
 1-5), add corresponding tests here and to this coverage list.
@@ -76,6 +83,42 @@ At minimum, test each of the following before calling a phase done
 - [ ] Tooltip hook alongside common tooltip addons
 - [ ] Automatic consolidation while items are locked (once Phase 5 lands)
 - [ ] `/reload` while a flyout/full view is open
+
+### UI_SPEC Acceptance Checks (Pockets_UI_SPEC.md §16)
+
+- [ ] HUD shows a large, recognizable square bag icon (not text-only)
+- [ ] HUD width never changes as used/total digits or ETA appear/disappear
+      (watch it while bags fill from empty to full)
+- [ ] Category flyout width never changes as counts change (test with a
+      1-digit and a 4-digit count, e.g. via `/pockets test recent`)
+- [ ] Category counts stay right-aligned across rows
+- [ ] HUD hover → category flyout feels immediate (no perceptible delay)
+- [ ] Category hover → item panel feels immediate
+- [ ] Moving the mouse from the category flyout into the item panel does
+      NOT flicker-close either panel
+- [ ] Moving the mouse away from the whole HUD+flyout+panel group closes
+      it after a short (~150-250ms) grace period, not instantly and not
+      instantly-forever
+- [ ] Left-click an item button: normal pickup/equip/use behavior
+- [ ] Right-click an item button: normal use behavior
+- [ ] Shift-click an item button: posts the item link to chat (if a chat
+      edit box is focused) like a normal bag slot
+- [ ] Drag an item button to another bag slot: moves the item normally
+- [ ] Drag a cursor item onto an item button: swaps/stacks normally
+- [ ] Hovering an item button shows the normal GameTooltip (durability,
+      comparison, etc.)
+- [ ] A locked item (e.g. mid-trade) shows the normal locked/desaturated
+      visual and doesn't misbehave
+- [ ] Recent Items: an entry for an item you no longer carry is NOT
+      clickable/draggable (no fake action)
+- [ ] Recent Items: an entry for an item you still carry IS interactive and
+      resolves to its current bag/slot
+- [ ] Category icons are visually distinct per category and load without
+      a "missing texture" question-mark
+- [ ] Full inventory (Shift-B) item buttons behave identically to the
+      flyout's (same click/drag/tooltip)
+- [ ] Full inventory scrolls internally instead of growing past its bounds
+      when many categories are populated
 
 For each item above, confirm against the relevant PRD success criteria
 (`Pockets_PRD.md` §6): how full are my bags, about how long until full,

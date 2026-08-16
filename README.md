@@ -143,3 +143,6 @@ bags, skins/themes, plugin ecosystem, large config UI).
 
 - [Pockets_PRD.md](Pockets_PRD.md) - Product requirements
 - [Pockets_TDD.md](Pockets_TDD.md) - Technical design
+- [Pockets_UI_SPEC.md](Pockets_UI_SPEC.md) - UI implementation spec (fixed
+  geometry, icon sourcing, hover behavior, real item buttons) -
+  authoritative over `Pockets_UI_Reference.png` when they differ

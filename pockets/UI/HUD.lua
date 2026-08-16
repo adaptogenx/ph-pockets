@@ -1,9 +1,9 @@
 --[[
-    UI/HUD.lua - Compact bag HUD (TDD §13.1, PRD §3.1)
+    UI/HUD.lua - Compact bag HUD (TDD §13.1, PRD §3.1; UI_SPEC §2)
 
-    A single small frame with minimal child objects: bag status background,
-    capacity text, and a conditionally-shown ETA text. Updates only on
-    capacity/ETA/position changes - never per frame (TDD §21).
+    Fixed-size frame: square bag icon (left) + capacity/ETA text region
+    (right). Width/height never change with content - digit count or ETA
+    appearing/disappearing must not resize the frame (UI_SPEC §16.2).
 ]]
 
 local _, Pockets = ...
@@ -13,6 +13,7 @@ local HUD = Pockets.UI.HUD
 
 local Layout = Pockets.UI.Layout
 local Constants = Pockets.Constants
+local L = Constants.LAYOUT
 
 function HUD:Initialize()
     if self.frame then
@@ -20,7 +21,7 @@ function HUD:Initialize()
     end
 
     local frame = CreateFrame("Button", "PocketsHUDFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(140, 28)
+    frame:SetSize(L.HUD_WIDTH, L.HUD_HEIGHT)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -29,14 +30,32 @@ function HUD:Initialize()
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    frame:SetBackdropColor(0, 0, 0, 0.6)
-    frame:SetBackdropBorderColor(0, 0, 0, 1)
+    frame:SetBackdropColor(0.04, 0.04, 0.04, 0.85)
+    frame:SetBackdropBorderColor(0.35, 0.30, 0.20, 1)
 
+    -- Square bag icon (UI_SPEC §2, §3): a verified built-in Blizzard
+    -- texture, never custom artwork. See Constants.HUD_ICON provenance note.
+    frame.icon = frame:CreateTexture(nil, "ARTWORK")
+    frame.icon:SetSize(L.HUD_ICON_SIZE, L.HUD_ICON_SIZE)
+    frame.icon:SetPoint("LEFT", frame, "LEFT", 2, 0)
+    frame.icon:SetTexture(Constants.HUD_ICON)
+    frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim default icon border padding
+
+    frame.iconBorder = frame:CreateTexture(nil, "OVERLAY")
+    frame.iconBorder:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", -2, 2)
+    frame.iconBorder:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 2, -2)
+    frame.iconBorder:SetColorTexture(0.35, 0.30, 0.20, 1)
+    frame.iconBorder:SetDrawLayer("ARTWORK", -1)
+
+    -- Fixed-width text region: reserving this space (rather than sizing
+    -- fontstrings to their text) is what keeps the frame width constant.
     frame.capacityText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT)
-    frame.capacityText:SetPoint("LEFT", frame, "LEFT", Layout.PADDING, 4)
+    frame.capacityText:SetPoint("LEFT", frame.icon, "RIGHT", 8, 6)
+    frame.capacityText:SetJustifyH("LEFT")
 
     frame.etaText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT_SMALL)
-    frame.etaText:SetPoint("LEFT", frame, "LEFT", Layout.PADDING, -8)
+    frame.etaText:SetPoint("LEFT", frame.icon, "RIGHT", 8, -10)
+    frame.etaText:SetJustifyH("LEFT")
     frame.etaText:SetTextColor(0.7, 0.7, 0.7)
 
     frame:SetScript("OnDragStart", function(self)
@@ -55,12 +74,15 @@ function HUD:Initialize()
     end)
 
     frame:SetScript("OnEnter", function()
+        Pockets.UI.HoverGroup:Enter()
         if Pockets.Adapters.CombatAPI:CanHoverExpand() then
             Pockets.UI.CategoryFlyout:Show(frame)
         end
     end)
     frame:SetScript("OnLeave", function()
-        Pockets.UI.CategoryFlyout:ScheduleHide()
+        Pockets.UI.HoverGroup:Leave(function()
+            Pockets.UI.CategoryFlyout:Hide()
+        end)
     end)
 
     self.frame = frame
@@ -103,7 +125,8 @@ local function FormatETA(seconds)
 end
 
 -- Refreshes HUD text from InventoryState/CapacityEstimator. Cheap and
--- idempotent; safe to call from any domain-event handler.
+-- idempotent; safe to call from any domain-event handler. Never resizes
+-- the frame - text just occupies (or leaves blank) its fixed region.
 function HUD:Update()
     if not self.frame then
         return
@@ -121,18 +144,13 @@ function HUD:Update()
 
     if state == Constants.ESTIMATOR_STATE.FULL then
         self.frame.etaText:SetText("Full")
-        self.frame.etaText:Show()
     elseif state == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
-        local etaText = FormatETA(estimator:GetETA())
-        if etaText then
-            self.frame.etaText:SetText(etaText)
-            self.frame.etaText:Show()
-        else
-            self.frame.etaText:Hide()
-        end
+        self.frame.etaText:SetText(FormatETA(estimator:GetETA()) or "")
     else
-        -- warming_up / stable / freeing / low confidence: prefer omission over noise (TDD §11.4)
-        self.frame.etaText:Hide()
+        -- warming_up / stable / freeing / low confidence: prefer omission
+        -- over noise (TDD §11.4). Text just goes blank; frame size is
+        -- untouched either way.
+        self.frame.etaText:SetText("")
     end
 end
 

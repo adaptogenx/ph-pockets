@@ -80,6 +80,9 @@ globals = {
     "GetContainerItemID",
     "PickupContainerItem",
     "SplitContainerItem",
+    "UseContainerItem",
+    "HandleModifiedItemClick",
+    "IsModifiedClick",
     "GetInventorySlotInfo",
     "GetInventoryItemLink",
     "IsInventoryItemLocked",
@@ -88,6 +91,7 @@ globals = {
     "C_Timer",
     "C_Timer.After",
     "C_Timer.NewTicker",
+    "C_Timer.NewTimer",
 
     -- Combat / binding API
     "GetBindingKey",
@@ -97,6 +101,10 @@ globals = {
 
     -- Tooltip API
     "GameTooltip_SetDefaultAnchor",
+
+    -- Item button visuals
+    "SetItemButtonDesaturated",
+    "ITEM_QUALITY_COLORS",
 
     -- Misc WoW API/constants referenced by adapters
     "ContainerIDToInventoryID",

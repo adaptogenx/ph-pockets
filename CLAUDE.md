@@ -17,10 +17,11 @@ Pockets is a standalone addon and does not require pH to load, but is
 architected so pH and Pockets can share core implementations later
 (`Pockets_TDD.md` §4, §30).
 
-**Source of truth for scope/behavior**: `Pockets_PRD.md` (product) and
-`Pockets_TDD.md` (technical design). When in doubt about a requirement,
-re-read the relevant TDD section number referenced in code comments before
-guessing.
+**Source of truth for scope/behavior**: `Pockets_PRD.md` (product),
+`Pockets_TDD.md` (technical design), and `Pockets_UI_SPEC.md` (exact UI
+geometry/icons/hover behavior - authoritative over `Pockets_UI_Reference.png`
+when they differ). When in doubt about a requirement, re-read the relevant
+section number referenced in code comments before guessing.
 
 ## UI Design
 
@@ -138,5 +139,7 @@ skins/themes, plugin ecosystem, large configuration UI.
 ## Reference Documents
 
 - `Pockets_PRD.md` - product requirements, success criteria
+- `Pockets_UI_SPEC.md` - UI implementation spec; authoritative for pixel
+  geometry, verified icon sourcing, and hover/combat behavior
 - `Pockets_TDD.md` - full technical design, phased implementation plan (§29),
   definition of done (§32)

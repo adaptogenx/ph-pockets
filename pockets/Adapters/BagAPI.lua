@@ -175,3 +175,54 @@ function BagAPI:CountUsedSlots(bagID, slotCount)
     end
     return used
 end
+
+--------------------------------------------------
+-- Real item-button interactions (UI_SPEC §8)
+--
+-- Item icons rendered by Pockets must be real, clickable, draggable item
+-- buttons backed by their current bag+slot - not decorative textures.
+-- These wrappers are the only place button click/drag/tooltip code is
+-- allowed to reach into bag APIs (keeps the rule in the file header true).
+--------------------------------------------------
+
+-- Left-click/drag-start behavior: picks the item up onto the cursor (or
+-- swaps with whatever's already on the cursor) - identical to Blizzard's
+-- own ContainerFrameItemButton_OnClick/OnDragStart.
+function BagAPI:PickupItem(bagID, slotIndex)
+    if C_Container and C_Container.PickupContainerItem then
+        C_Container.PickupContainerItem(bagID, slotIndex)
+    else
+        PickupContainerItem(bagID, slotIndex)
+    end
+end
+
+-- Right-click behavior: normal WoW "use" semantics (equip/consume/open/etc).
+function BagAPI:UseItem(bagID, slotIndex)
+    if C_Container and C_Container.UseContainerItem then
+        C_Container.UseContainerItem(bagID, slotIndex)
+    else
+        UseContainerItem(bagID, slotIndex)
+    end
+end
+
+-- Shift-click/ctrl-click/etc: delegates to Blizzard's own modified-click
+-- handler (chat link, delete-confirm, etc.) rather than reimplementing it.
+function BagAPI:HandleModifiedItemClick(itemLink)
+    if itemLink and HandleModifiedItemClick then
+        HandleModifiedItemClick(itemLink)
+    end
+end
+
+function BagAPI:GetItemLink(bagID, slotIndex)
+    if C_Container and C_Container.GetContainerItemLink then
+        return C_Container.GetContainerItemLink(bagID, slotIndex)
+    end
+    return GetContainerItemLink(bagID, slotIndex)
+end
+
+-- Points a GameTooltip at the live item in a bag/slot (shows durability,
+-- comparison, etc. - richer than a plain SetHyperlink). SetBagItem is a
+-- stable GameTooltip method, not a container-API call, so no branching.
+function BagAPI:SetTooltipToBagItem(tooltip, bagID, slotIndex)
+    tooltip:SetBagItem(bagID, slotIndex)
+end

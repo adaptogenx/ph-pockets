@@ -1,8 +1,10 @@
 --[[
-    UI/Layout.lua - Shared spacing/font/color constants for Pockets UI (TDD §13.5, UI_RULES.md)
+    UI/Layout.lua - Shared font/color constants for Pockets UI (TDD §13.5, UI_RULES.md)
 
-    No UI module should hard-code its own spacing or font values; pull them
-    from here so category/item presentation stays visually consistent.
+    Fixed pixel geometry (widths/heights/columns) lives in
+    Constants.LAYOUT so it has exactly one source of truth across HUD,
+    CategoryFlyout, ItemFlyout, and FullInventory (UI_SPEC §4, §7, §16).
+    This module holds fonts, padding, and the capacity color function.
 ]]
 
 local _, Pockets = ...
@@ -11,13 +13,6 @@ Pockets.UI.Layout = Pockets.UI.Layout or {}
 local Layout = Pockets.UI.Layout
 
 Layout.PADDING = 8
-Layout.ROW_HEIGHT = 18
-Layout.ROW_SPACING = 2
-Layout.ITEM_BUTTON_SIZE = 28
-Layout.ITEM_BUTTON_SPACING = 4
-Layout.MAX_FLYOUT_WIDTH = 220
-Layout.MAX_FULL_INVENTORY_WIDTH = 340
-Layout.MAX_FULL_INVENTORY_HEIGHT = 480
 
 Layout.FONT = "GameFontNormal"
 Layout.FONT_SMALL = "GameFontNormalSmall"

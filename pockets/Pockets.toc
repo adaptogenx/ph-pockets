@@ -34,6 +34,7 @@ Core/StackConsolidator.lua
 
 # UI
 UI/Layout.lua
+UI/HoverGroup.lua
 UI/ItemButtonPool.lua
 UI/HUD.lua
 UI/CategoryFlyout.lua
@@ -53,3 +54,4 @@ Tests/CategorizerTests.lua
 Tests/RecentItemsTests.lua
 Tests/CapacityEstimatorTests.lua
 Tests/InventoryStateTests.lua
+Tests/APITests.lua
