@@ -50,11 +50,11 @@ function HUD:Initialize()
     -- Fixed-width text region: reserving this space (rather than sizing
     -- fontstrings to their text) is what keeps the frame width constant.
     frame.capacityText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT)
-    frame.capacityText:SetPoint("LEFT", frame.icon, "RIGHT", 8, 6)
+    frame.capacityText:SetPoint("LEFT", frame.icon, "RIGHT", 8, 5)
     frame.capacityText:SetJustifyH("LEFT")
 
     frame.etaText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT_SMALL)
-    frame.etaText:SetPoint("LEFT", frame.icon, "RIGHT", 8, -10)
+    frame.etaText:SetPoint("LEFT", frame.icon, "RIGHT", 8, -8)
     frame.etaText:SetJustifyH("LEFT")
     frame.etaText:SetTextColor(0.7, 0.7, 0.7)
 

@@ -111,10 +111,12 @@ Constants.CATEGORY_ICON = {
 }
 
 -- Fixed UI geometry (UI_SPEC §2, §4, §7). Content must never resize these.
+-- HUD_WIDTH intentionally equals FLYOUT_WIDTH so the HUD bar and the
+-- category flyout below it share identical left/right edges.
 Constants.LAYOUT = {
-    HUD_WIDTH = 190,
-    HUD_HEIGHT = 48,
-    HUD_ICON_SIZE = 44,
+    HUD_WIDTH = 220,
+    HUD_HEIGHT = 42,
+    HUD_ICON_SIZE = 38,
 
     FLYOUT_WIDTH = 220,
     FLYOUT_ROW_HEIGHT = 30,
