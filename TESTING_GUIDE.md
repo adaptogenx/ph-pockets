@@ -96,7 +96,7 @@ Per `Pockets_TDD.md` §25.5, a feature is not complete until, in order:
 
 When reporting a Pockets issue, include:
 
-1. WoW version (Classic TBC) and Pockets version (`/pockets help`).
+1. WoW version (Classic Anniversary or TBC) and Pockets version (`/pockets help`).
 2. Steps to reproduce.
 3. Console errors, if any (`/pockets debug verbose on` first).
 4. Output of the relevant `/pockets debug ...` command.

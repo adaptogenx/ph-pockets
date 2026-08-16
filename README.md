@@ -1,6 +1,7 @@
 # Pockets
 
-A minimal, opinionated bag HUD for World of Warcraft Classic TBC. Pockets
+A minimal, opinionated bag HUD for World of Warcraft Classic (Anniversary
+focus, TBC-compatible). Pockets
 answers "how full are my bags, how long until they're full, and what did I
 just pick up" without opening a traditional bag window.
 
@@ -18,8 +19,8 @@ just pick up" without opening a traditional bag window.
 ### Manual Installation (macOS & Windows)
 
 1. Copy the `pockets/` directory to your WoW AddOns folder:
-   - **Windows**: `World of Warcraft/_classic_/Interface/AddOns/`
-   - **Mac**: `/Applications/World of Warcraft/_classic_/Interface/AddOns/`
+   - **Windows**: `World of Warcraft/_anniversary_/Interface/AddOns/` (or `_classic_` for TBC)
+   - **Mac**: `/Applications/World of Warcraft/_anniversary_/Interface/AddOns/` (or `_classic_` for TBC)
 2. Restart WoW or `/reload` if already in-game.
 3. Type `/pockets help`.
 

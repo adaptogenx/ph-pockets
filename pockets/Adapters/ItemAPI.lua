@@ -60,7 +60,7 @@ function ItemAPI:IsPending(itemID)
     return cached == nil or cached.status == "pending"
 end
 
--- Returns whether an item is currently a quest item (Classic TBC quest flag).
+-- Returns whether an item is currently a quest item (WoW Classic quest flag).
 function ItemAPI:IsQuestItem(itemID, itemLink)
     local _, _, _, _, _, itemClass = GetItemInfo(itemLink or itemID)
     return itemClass == (ITEM_CLASS_QUEST or "Quest")

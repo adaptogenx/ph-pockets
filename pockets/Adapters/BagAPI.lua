@@ -3,7 +3,7 @@
 
     Rule: every other module must go through this adapter instead of calling
     Blizzard container APIs directly. This keeps client-version compatibility
-    logic (Classic TBC container API vs C_Container) in one place and lets
+    logic (Classic container API vs C_Container) in one place and lets
     the domain layer work against normalized Pockets-owned tables.
 ]]
 
@@ -12,7 +12,7 @@ local _, Pockets = ...
 Pockets.Adapters.BagAPI = Pockets.Adapters.BagAPI or {}
 local BagAPI = Pockets.Adapters.BagAPI
 
--- Backpack (0) + normal equipped bags (1-4) are general-purpose in Classic TBC.
+-- Backpack (0) + normal equipped bags (1-4) are general-purpose in WoW Classic.
 -- Ammo/soul/quiver bags are detected by bag family and reported separately.
 BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
 
@@ -103,7 +103,7 @@ function BagAPI:IsAmmoBag(bagID)
         return false
     end
 
-    -- Bit 1 (value 2) is the ammo/quiver bag family in Classic TBC's item family bitmask.
+    -- Bit 1 (value 2) is the ammo/quiver bag family in WoW Classic's item family bitmask.
     return bagFamily == CONTAINER_ITEM_FAMILY_AMMO
 end
 

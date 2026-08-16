@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pockets Install Script for macOS
-# Installs the addon to your WoW Classic (TBC) AddOns directory
+# Installs the addon to your WoW Classic AddOns directory
 
 set -e
 
@@ -10,10 +10,16 @@ echo "  Pockets Addon Installer (macOS)"
 echo "======================================"
 echo ""
 
-# Define WoW Classic (TBC) installation paths
+# Define WoW Classic installation paths (same pattern as pH's install.sh).
+# Anniversary is the primary target; "_classic_" (TBC) and "_classic_era_"
+# are also searched since Pockets.toc declares both interface versions.
 WOW_PATHS=(
+    "/Applications/World of Warcraft/_anniversary_/Interface/AddOns"
+    "$HOME/Applications/World of Warcraft/_anniversary_/Interface/AddOns"
     "/Applications/World of Warcraft/_classic_/Interface/AddOns"
     "$HOME/Applications/World of Warcraft/_classic_/Interface/AddOns"
+    "/Applications/World of Warcraft/_classic_era_/Interface/AddOns"
+    "$HOME/Applications/World of Warcraft/_classic_era_/Interface/AddOns"
 )
 
 # Find existing WoW installations
@@ -34,7 +40,7 @@ if [ ${#FOUND_PATHS[@]} -eq 0 ]; then
     done
     echo ""
     echo "Please ensure WoW Classic is installed or specify the path manually:"
-    echo "  ./install.sh /path/to/WoW/_classic_/Interface/AddOns"
+    echo "  ./install.sh /path/to/WoW/_classic_or_anniversary_/Interface/AddOns"
     exit 1
 fi
 

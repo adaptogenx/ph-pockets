@@ -1,5 +1,5 @@
 -- Luacheck configuration for Pockets WoW Addon
--- WoW Classic TBC (2.5.6) uses Lua 5.1
+-- WoW Classic Anniversary (TBC-compatible) uses Lua 5.1
 -- Based on pH's configuration, generalized for the Pockets namespace
 
 std = "lua51"
@@ -70,7 +70,7 @@ globals = {
     "ChatFontNormal",
     "UISpecialFrames",
 
-    -- Item / bag API (Classic TBC container API)
+    -- Item / bag API (Classic container API)
     "GetItemInfo",
     "GetItemInfoInstant",
     "GetItemCount",

@@ -5,7 +5,9 @@ code in this repository.
 
 ## Project Overview
 
-Pockets is a World of Warcraft Classic TBC addon: a minimal, opinionated bag
+Pockets is a World of Warcraft Classic addon (Anniversary is the primary
+target; also loads on TBC via a second declared Interface version): a
+minimal, opinionated bag
 HUD. It shows used/total general-purpose bag slots, an ammo pool tracked
 separately, a bag-full ETA, automatic item categorization, and a progressive
 disclosure UI (HUD → categories → items → full inventory). It is not a
@@ -91,7 +93,9 @@ omission to a noisy/fabricated number.
 
 ### WoW Addon Development Context
 
-- Lua 5.1 (Classic TBC client), Interface version `20504`.
+- Lua 5.1. `Pockets.toc` declares `## Interface: 11509, 20504` - Anniversary
+  (11509) first since it's the primary target, TBC (20504) second for
+  compatibility. Update the Anniversary number when the client patches.
 - `GetItemInfo`-style lookups are not guaranteed synchronous; always go
   through `Adapters/ItemAPI.lua`'s cache, which tracks a `pending` state.
 - Combat state (`InCombatLockdown()`) must be checked at the moment of
