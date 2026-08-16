@@ -47,14 +47,19 @@ function HUD:Initialize()
     frame.iconBorder:SetColorTexture(0.35, 0.30, 0.20, 1)
     frame.iconBorder:SetDrawLayer("ARTWORK", -1)
 
-    -- Fixed-width text region: reserving this space (rather than sizing
-    -- fontstrings to their text) is what keeps the frame width constant.
+    -- Single-line status: "85 / 86 · ~13m to full". The frame's fixed
+    -- width (not these fontstrings) is what keeps HUD width constant -
+    -- text just occupies more/less of that fixed region as it changes,
+    -- and can never resize the frame itself (UI_SPEC §16.2).
     frame.capacityText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT)
-    frame.capacityText:SetPoint("LEFT", frame.icon, "RIGHT", 8, 5)
+    frame.capacityText:SetPoint("LEFT", frame.icon, "RIGHT", 8, 0)
     frame.capacityText:SetJustifyH("LEFT")
 
+    -- Anchored to the right of the capacity text (not below it) so ETA
+    -- stays on the same line, secondary/gray rather than competing with
+    -- the capacity count.
     frame.etaText = frame:CreateFontString(nil, "OVERLAY", Layout.FONT_SMALL)
-    frame.etaText:SetPoint("LEFT", frame.icon, "RIGHT", 8, -8)
+    frame.etaText:SetPoint("LEFT", frame.capacityText, "RIGHT", 4, 0)
     frame.etaText:SetJustifyH("LEFT")
     frame.etaText:SetTextColor(0.7, 0.7, 0.7)
 
@@ -114,15 +119,17 @@ function HUD:SavePosition()
     hud.y = y
 end
 
-local function FormatETA(seconds)
+-- " · ~13m to full" (or " · <1m to full"). Leading separator included so
+-- callers can just append this straight after the capacity text.
+local function FormatETASuffix(seconds)
     if not seconds then
-        return nil
+        return ""
     end
     local minutes = math.floor(seconds / 60)
     if minutes < 1 then
-        return "<1m"
+        return " \194\183 <1m to full"
     end
-    return string.format("~%dm", minutes)
+    return string.format(" \194\183 ~%dm to full", minutes)
 end
 
 -- Refreshes HUD text from InventoryState/CapacityEstimator. Cheap and
@@ -144,13 +151,13 @@ function HUD:Update()
     local confidenceOK = estimator:GetConfidence() >= 0.5
 
     if state == Constants.ESTIMATOR_STATE.FULL then
-        self.frame.etaText:SetText("Full")
+        self.frame.etaText:SetText(" \194\183 Full")
     elseif state == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
-        self.frame.etaText:SetText(FormatETA(estimator:GetETA()) or "")
+        self.frame.etaText:SetText(FormatETASuffix(estimator:GetETA()))
     else
         -- warming_up / stable / freeing / low confidence: prefer omission
         -- over noise (TDD §11.4). Text just goes blank; frame size is
-        -- untouched either way.
+        -- untouched either way - only "85 / 86" remains.
         self.frame.etaText:SetText("")
     end
 end
