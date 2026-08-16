@@ -17,8 +17,12 @@ Adapters/CombatAPI.lua
 Adapters/TooltipAPI.lua
 Adapters/BindingsAPI.lua
 
-# Keybinding header/name strings must exist before Bindings.xml is parsed
-Bindings.xml
+# NOTE: Bindings.xml is intentionally NOT listed here. WoW auto-discovers
+# and parses a file literally named "Bindings.xml" in the addon's root
+# directory using its dedicated keybinding-XML parser. Listing it in Files
+# routes it through the generic UI-XML loader instead, which doesn't
+# recognize the <Binding> element/attributes and throws
+# "Unrecognized XML" errors.
 
 # Domain services (no visible frames)
 Core/EventBus.lua

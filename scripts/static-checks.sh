@@ -64,6 +64,17 @@ else
     pass "No duplicate .toc entries"
 fi
 
+# Bindings.xml is intentionally excluded from the .toc's Files list (WoW
+# auto-discovers it by filename), so verify its presence separately.
+if [ -f "$ADDON_DIR/Bindings.xml" ]; then
+    pass "Bindings.xml present (auto-discovered by WoW, not in .toc Files)"
+else
+    fail "Bindings.xml missing from $ADDON_DIR"
+fi
+if grep -qE '^[[:space:]]*Bindings\.xml[[:space:]]*$' "$TOC_FILE"; then
+    fail "Bindings.xml must NOT be listed in Pockets.toc's Files (breaks WoW's bindings parser)"
+fi
+
 # --- Check 3: stale pH_/GoldPH_ namespace references ---
 STALE=$(grep -rnE '\b(pH_[A-Za-z]+|GoldPH_[A-Za-z]+)\b' "$ADDON_DIR" --include='*.lua' 2>/dev/null || true)
 if [ -n "$STALE" ]; then
