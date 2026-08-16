@@ -1,0 +1,51 @@
+## Interface: 20504
+## Title: Pockets
+## Notes: Minimal, opinionated bag HUD with progressive disclosure, bag-full ETA, and automatic categorization (WoW Classic TBC)
+## Author: Claude Code
+## Version: 0.1.0
+## SavedVariables: PocketsDB
+## SavedVariablesPerCharacter: PocketsCharDB
+
+# Bootstrap (namespace + constants must load first)
+Init.lua
+Constants.lua
+
+# WoW API Adapters (isolate direct Blizzard API access)
+Adapters/BagAPI.lua
+Adapters/ItemAPI.lua
+Adapters/CombatAPI.lua
+Adapters/TooltipAPI.lua
+Adapters/BindingsAPI.lua
+
+# Keybinding header/name strings must exist before Bindings.xml is parsed
+Bindings.xml
+
+# Domain services (no visible frames)
+Core/EventBus.lua
+Core/ItemCategorizer.lua
+Core/RecentItems.lua
+Core/CapacityEstimator.lua
+Core/InventoryState.lua
+Core/StackConsolidator.lua
+
+# UI
+UI/Layout.lua
+UI/ItemButtonPool.lua
+UI/HUD.lua
+UI/CategoryFlyout.lua
+UI/ItemFlyout.lua
+UI/Search.lua
+UI/FullInventory.lua
+UI/TooltipCounts.lua
+
+# Cross-cutting event wiring + public API
+Events.lua
+API.lua
+
+# Debug/test infrastructure
+Debug.lua
+Tests/TestRunner.lua
+Tests/CategorizerTests.lua
+Tests/RecentItemsTests.lua
+Tests/CapacityEstimatorTests.lua
+Tests/InventoryStateTests.lua
