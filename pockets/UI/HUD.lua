@@ -69,8 +69,10 @@ function HUD:Initialize()
     end)
 
     frame:SetScript("OnClick", function()
-        -- Click always reveals the category flyout, in and out of combat (TDD §14).
-        Pockets.UI.CategoryFlyout:Show(frame)
+        -- Click toggles the category flyout, in and out of combat (TDD
+        -- §14). Toggling (not just opening) gives an explicit, always-
+        -- available way to close a flyout that hover left open/"stuck".
+        Pockets.UI.CategoryFlyout:Toggle(frame)
     end)
 
     frame:SetScript("OnEnter", function()

@@ -65,7 +65,22 @@ function CategoryFlyout:EnsureFrame()
     frame:SetScript("OnLeave", function()
         Pockets.UI.HoverGroup:Leave(function() CategoryFlyout:Hide() end)
     end)
+    -- Cascades to the item panel regardless of *how* this frame gets
+    -- hidden (Escape via UISpecialFrames, the close button, HUD toggle,
+    -- or the hover grace timer) so nothing is ever left stuck open.
+    frame:SetScript("OnHide", function() Pockets.UI.ItemFlyout:Hide() end)
     frame:Hide()
+
+    -- Explicit close affordance (UI_SPEC has no close button, but flyouts
+    -- getting "stuck" open is a real usability problem hover-only close
+    -- doesn't fully solve). Always works, in and out of combat.
+    frame.closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.closeButton:SetSize(20, 20)
+    frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 2, 2)
+    frame.closeButton:SetScript("OnClick", function() CategoryFlyout:Hide() end)
+
+    -- Escape closes it like any other WoW panel.
+    table.insert(UISpecialFrames, "PocketsCategoryFlyout")
 
     self.frame = frame
     self.rows = {}
@@ -127,7 +142,14 @@ end
 
 function CategoryFlyout:Hide()
     if self.frame then
-        self.frame:Hide()
+        self.frame:Hide() -- OnHide cascades to ItemFlyout:Hide()
     end
-    Pockets.UI.ItemFlyout:Hide()
+end
+
+function CategoryFlyout:Toggle(anchorFrame)
+    if self.frame and self.frame:IsShown() then
+        self:Hide()
+    else
+        self:Show(anchorFrame)
+    end
 end
