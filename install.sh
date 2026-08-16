@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pockets Install Script for macOS
-# Installs the addon to your WoW Classic AddOns directory
+# Installs the addon to your WoW Classic Anniversary AddOns directory.
 
 set -e
 
@@ -10,64 +10,41 @@ echo "  Pockets Addon Installer (macOS)"
 echo "======================================"
 echo ""
 
-# Define WoW Classic installation paths (same pattern as pH's install.sh).
-# Anniversary is the primary target; "_classic_" (TBC) and "_classic_era_"
-# are also searched since Pockets.toc declares both interface versions.
-WOW_PATHS=(
+# Anniversary is the only auto-detected target - it's Pockets' primary
+# client (Pockets.toc's first declared Interface version). Other Classic
+# flavors aren't auto-selected; pass an explicit AddOns path as $1 for those.
+ANNIVERSARY_PATHS=(
     "/Applications/World of Warcraft/_anniversary_/Interface/AddOns"
     "$HOME/Applications/World of Warcraft/_anniversary_/Interface/AddOns"
-    "/Applications/World of Warcraft/_classic_/Interface/AddOns"
-    "$HOME/Applications/World of Warcraft/_classic_/Interface/AddOns"
-    "/Applications/World of Warcraft/_classic_era_/Interface/AddOns"
-    "$HOME/Applications/World of Warcraft/_classic_era_/Interface/AddOns"
 )
 
-# Find existing WoW installations
-FOUND_PATHS=()
-for path in "${WOW_PATHS[@]}"; do
-    if [ -d "$path" ]; then
-        FOUND_PATHS+=("$path")
-    fi
-done
-
-# Check if a WoW Classic installation was found
-if [ ${#FOUND_PATHS[@]} -eq 0 ]; then
-    echo "❌ Error: Could not find WoW Classic AddOns directory"
-    echo ""
-    echo "Searched in:"
-    for path in "${WOW_PATHS[@]}"; do
-        echo "  - $path"
-    done
-    echo ""
-    echo "Please ensure WoW Classic is installed or specify the path manually:"
-    echo "  ./install.sh /path/to/WoW/_classic_or_anniversary_/Interface/AddOns"
-    exit 1
-fi
-
-# Use the first found path or the one specified by user
 if [ -n "$1" ]; then
     ADDONS_DIR="$1"
     if [ ! -d "$ADDONS_DIR" ]; then
         echo "❌ Error: Specified directory does not exist: $ADDONS_DIR"
         exit 1
     fi
-elif [ ${#FOUND_PATHS[@]} -eq 1 ]; then
-    ADDONS_DIR="${FOUND_PATHS[0]}"
 else
-    # Multiple installations found, let user choose
-    echo "Found multiple WoW installations:"
-    for i in "${!FOUND_PATHS[@]}"; do
-        echo "  $((i+1)). ${FOUND_PATHS[$i]}"
+    ADDONS_DIR=""
+    for path in "${ANNIVERSARY_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            ADDONS_DIR="$path"
+            break
+        fi
     done
-    echo ""
-    read -p "Select installation (1-${#FOUND_PATHS[@]}): " choice
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#FOUND_PATHS[@]} ]; then
-        echo "❌ Invalid selection"
+    if [ -z "$ADDONS_DIR" ]; then
+        echo "❌ Error: Could not find WoW Classic Anniversary AddOns directory"
+        echo ""
+        echo "Searched in:"
+        for path in "${ANNIVERSARY_PATHS[@]}"; do
+            echo "  - $path"
+        done
+        echo ""
+        echo "Please ensure WoW Classic Anniversary is installed, or specify the path manually:"
+        echo "  ./install.sh /path/to/WoW/_classic_or_anniversary_/Interface/AddOns"
         exit 1
     fi
-
-    ADDONS_DIR="${FOUND_PATHS[$((choice-1))]}"
 fi
 
 TARGET_DIR="$ADDONS_DIR/Pockets"
