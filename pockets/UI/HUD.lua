@@ -76,16 +76,15 @@ function HUD:Initialize()
     end)
 
     frame:SetScript("OnEnter", function()
-        Pockets.UI.HoverGroup:Enter()
         if Pockets.Adapters.CombatAPI:CanHoverExpand() then
             Pockets.UI.CategoryFlyout:Show(frame)
         end
     end)
-    frame:SetScript("OnLeave", function()
-        Pockets.UI.HoverGroup:Leave(function()
-            Pockets.UI.CategoryFlyout:Hide()
-        end)
-    end)
+    -- No OnLeave needed here: HoverGroup polls the whole HUD+flyout region
+    -- once CategoryFlyout is open, so leaving the HUD toward the flyout
+    -- (or back again) is handled centrally, not per-frame.
+
+    Pockets.UI.HoverGroup:RegisterMember(frame)
 
     self.frame = frame
     self:RestorePosition()

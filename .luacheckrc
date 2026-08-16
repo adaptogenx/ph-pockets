@@ -92,6 +92,8 @@ globals = {
     "C_Timer.After",
     "C_Timer.NewTicker",
     "C_Timer.NewTimer",
+    "GetMouseFocus",
+    "GetMouseFoci",
 
     -- Combat / binding API
     "GetBindingKey",

@@ -36,13 +36,13 @@ function ItemFlyout:EnsureFrame()
     frame:SetBackdropColor(0.05, 0.05, 0.05, 0.92)
     frame:SetBackdropBorderColor(0.35, 0.30, 0.20, 1)
     frame:EnableMouse(true)
-    frame:SetScript("OnEnter", function() Pockets.UI.HoverGroup:Enter() end)
-    frame:SetScript("OnLeave", function()
-        Pockets.UI.HoverGroup:Leave(function() ItemFlyout:Hide() end)
-    end)
     frame:Hide()
 
     self.frame = frame
+    -- Registered as a HoverGroup member so hovering it (or any child item
+    -- button) counts as "inside" the group; CategoryFlyout owns the
+    -- actual open/close ticker (UI/HoverGroup.lua).
+    Pockets.UI.HoverGroup:RegisterMember(frame)
 
     -- Stale-location safety (UI_SPEC §8): if inventory changes while a
     -- panel is open, re-render so buttons never act on an old bag/slot.
@@ -90,7 +90,6 @@ end
 
 function ItemFlyout:Show(anchorRow, categoryID)
     local frame = self:EnsureFrame()
-    Pockets.UI.HoverGroup:Enter()
 
     self:Render(categoryID)
 

@@ -61,15 +61,17 @@ function CategoryFlyout:EnsureFrame()
     frame:SetBackdropColor(0.05, 0.05, 0.05, 0.92)
     frame:SetBackdropBorderColor(0.35, 0.30, 0.20, 1)
     frame:EnableMouse(true)
-    frame:SetScript("OnEnter", function() Pockets.UI.HoverGroup:Enter() end)
-    frame:SetScript("OnLeave", function()
-        Pockets.UI.HoverGroup:Leave(function() CategoryFlyout:Hide() end)
-    end)
     -- Cascades to the item panel regardless of *how* this frame gets
     -- hidden (Escape via UISpecialFrames, the close button, HUD toggle,
-    -- or the hover grace timer) so nothing is ever left stuck open.
-    frame:SetScript("OnHide", function() Pockets.UI.ItemFlyout:Hide() end)
+    -- or the hover grace timer) so nothing is ever left stuck open, and
+    -- stops the HoverGroup ticker so it doesn't keep polling while closed.
+    frame:SetScript("OnHide", function()
+        Pockets.UI.HoverGroup:StopWatching()
+        Pockets.UI.ItemFlyout:Hide()
+    end)
     frame:Hide()
+
+    Pockets.UI.HoverGroup:RegisterMember(frame)
 
     -- Explicit close affordance (UI_SPEC has no close button, but flyouts
     -- getting "stuck" open is a real usability problem hover-only close
@@ -91,7 +93,7 @@ end
 
 function CategoryFlyout:Show(anchorFrame)
     local frame = self:EnsureFrame()
-    Pockets.UI.HoverGroup:Enter()
+    Pockets.UI.HoverGroup:Watch(function() CategoryFlyout:Hide() end)
 
     frame:ClearAllPoints()
     -- Zero gap: touching frame edges means the mouse is never briefly
@@ -127,7 +129,6 @@ function CategoryFlyout:Show(anchorFrame)
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y)
             row:SetScript("OnEnter", function()
-                Pockets.UI.HoverGroup:Enter()
                 if Pockets.Adapters.CombatAPI:CanHoverExpand() then
                     Pockets.UI.ItemFlyout:Show(row, entry.categoryID)
                 end
