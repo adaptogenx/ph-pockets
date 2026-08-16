@@ -97,11 +97,14 @@ function ItemFlyout:Show(anchorRow, categoryID)
     frame:ClearAllPoints()
     local width = frame:GetWidth()
     local rightEdgeX = (anchorRow:GetRight() or 0) + width
+    -- Zero gap against the row (see CategoryFlyout's anchor for why): the
+    -- mouse must never be briefly outside both frames while crossing
+    -- between them, or it triggers a premature close.
     if rightEdgeX > UIParent:GetWidth() then
         -- Not enough room to the right; flip left (UI_SPEC §7, §13).
-        frame:SetPoint("TOPRIGHT", anchorRow, "TOPLEFT", -2, 0)
+        frame:SetPoint("TOPRIGHT", anchorRow, "TOPLEFT", 0, 0)
     else
-        frame:SetPoint("TOPLEFT", anchorRow, "TOPRIGHT", 2, 0)
+        frame:SetPoint("TOPLEFT", anchorRow, "TOPRIGHT", 0, 0)
     end
 
     frame:Show()

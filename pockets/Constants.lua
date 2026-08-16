@@ -133,7 +133,7 @@ Constants.LAYOUT = {
 
     -- UI_SPEC §5: open must feel immediate; close gets a small grace
     -- period so crossing the gap between panels doesn't flicker-close.
-    HOVER_CLOSE_GRACE_SECONDS = 0.2,
+    HOVER_CLOSE_GRACE_SECONDS = 0.25,
 }
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)

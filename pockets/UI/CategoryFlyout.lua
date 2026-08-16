@@ -76,7 +76,9 @@ function CategoryFlyout:EnsureFrame()
     -- doesn't fully solve). Always works, in and out of combat.
     frame.closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     frame.closeButton:SetSize(20, 20)
-    frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 2, 2)
+    -- Kept fully inside the frame's own rect (not overhanging the edge)
+    -- so hovering it never counts as leaving the frame.
+    frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
     frame.closeButton:SetScript("OnClick", function() CategoryFlyout:Hide() end)
 
     -- Escape closes it like any other WoW panel.
@@ -92,7 +94,10 @@ function CategoryFlyout:Show(anchorFrame)
     Pockets.UI.HoverGroup:Enter()
 
     frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -2)
+    -- Zero gap: touching frame edges means the mouse is never briefly
+    -- outside both frames while crossing between them, which would
+    -- otherwise trigger a premature close (UI_SPEC §5, §13).
+    frame:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, 0)
 
     -- Reads precomputed category/recent summaries only - no bag scan or
     -- categorization runs here (UI_SPEC §6).
