@@ -158,6 +158,48 @@ function InventoryState:GetItemsByCategory(categoryID)
     return out
 end
 
+-- Collapses a list of per-slot records into one entry per itemID (TDD §6):
+-- the full inventory grid must render one icon per itemID even when it's
+-- spread across many physical stacks. Pure function - no bag scan, so
+-- it's directly unit-testable with hand-built record lists. Returns an
+-- array (insertion order = first-seen order in `records`) of:
+--   { itemID, itemLink, name, texture, quality, categoryID,
+--     totalQuantity, stacks = { { bagID, slotID, quantity, isLocked }, ... } }
+function InventoryState:AggregateRecords(records)
+    local order = {}
+    local byItemID = {}
+
+    for _, record in ipairs(records) do
+        local agg = byItemID[record.itemID]
+        if not agg then
+            agg = {
+                itemID = record.itemID,
+                itemLink = record.itemLink,
+                name = record.name,
+                texture = record.texture,
+                quality = record.quality,
+                categoryID = record.categoryID,
+                totalQuantity = 0,
+                stacks = {},
+            }
+            byItemID[record.itemID] = agg
+            table.insert(order, agg)
+        end
+
+        agg.totalQuantity = agg.totalQuantity + (record.quantity or 0)
+        if record.bagID and record.slotID then
+            table.insert(agg.stacks, {
+                bagID = record.bagID,
+                slotID = record.slotID,
+                quantity = record.quantity,
+                isLocked = record.isLocked,
+            })
+        end
+    end
+
+    return order
+end
+
 function InventoryState:GetCarriedQuantity(itemID)
     local totals = self.previousQuantitiesByItemID
     return (totals and totals[itemID]) or 0
@@ -179,4 +221,32 @@ end
 
 function InventoryState:GetRevision()
     return self.revision
+end
+
+-- True if bagID/slotID still holds an unlocked, current stack of itemID
+-- (TDD/Glance UI §7 "reject stale location"). A rendered aggregate binds
+-- to one representative stack at render time; this is the check callers
+-- must run again at the moment of interaction before trusting it.
+function InventoryState:IsValidStack(bagID, slotID, itemID)
+    if bagID == nil or slotID == nil then
+        return false
+    end
+    local record = self.items[bagID .. ":" .. slotID]
+    return record ~= nil and record.itemID == itemID and not record.isLocked
+end
+
+-- Finds the smallest current unlocked physical stack of itemID (Glance UI
+-- §7 "use the SMALLEST valid physical stack first" - less disruptive to a
+-- player's deliberately-maintained stack sizes). Returns nil if the item
+-- isn't currently carried in any unlocked stack.
+function InventoryState:ResolveSmallestStack(itemID)
+    local best = nil
+    for _, record in pairs(self.items) do
+        if record.itemID == itemID and not record.isLocked then
+            if not best or (record.quantity or 0) < (best.quantity or 0) then
+                best = record
+            end
+        end
+    end
+    return best
 end

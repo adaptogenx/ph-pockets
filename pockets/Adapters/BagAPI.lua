@@ -142,21 +142,20 @@ function BagAPI:ScanAllBags()
     return snapshot
 end
 
--- Returns { used, total } general-purpose slot counts from a snapshot's bag list.
-function BagAPI:GetCapacityCounts()
+-- Pure aggregation step, split out from GetCapacityCounts so the
+-- general/ammo split is unit-testable without a live bag scan (TESTING_GUIDE.md).
+-- bagEntries: array of { isAmmo, slotCount, usedSlots }.
+function BagAPI:ClassifyCapacity(bagEntries)
     local generalUsed, generalTotal = 0, 0
     local ammoUsed, ammoTotal = 0, 0
 
-    for _, bag in ipairs(self:GetEquippedBags()) do
-        local isAmmo = self:IsAmmoBag(bag.bagID)
-        local freeSlots = self:GetBagSlotCount(bag.bagID) - self:CountUsedSlots(bag.bagID, bag.slotCount)
-
-        if isAmmo then
-            ammoTotal = ammoTotal + bag.slotCount
-            ammoUsed = ammoUsed + (bag.slotCount - freeSlots)
+    for _, entry in ipairs(bagEntries) do
+        if entry.isAmmo then
+            ammoTotal = ammoTotal + entry.slotCount
+            ammoUsed = ammoUsed + entry.usedSlots
         else
-            generalTotal = generalTotal + bag.slotCount
-            generalUsed = generalUsed + (bag.slotCount - freeSlots)
+            generalTotal = generalTotal + entry.slotCount
+            generalUsed = generalUsed + entry.usedSlots
         end
     end
 
@@ -164,6 +163,22 @@ function BagAPI:GetCapacityCounts()
         general = { used = generalUsed, total = generalTotal },
         ammo = { used = ammoUsed, total = ammoTotal },
     }
+end
+
+-- Returns { general = {used,total}, ammo = {used,total} } slot counts.
+-- Ammo capacity is keyed off equipped bag family (IsAmmoBag), never off
+-- what item category is carried - an ammo-specialized bag (quiver/ammo
+-- pouch) is the only thing that creates an ammo pool (PRD §3.9, TDD §7).
+function BagAPI:GetCapacityCounts()
+    local bagEntries = {}
+    for _, bag in ipairs(self:GetEquippedBags()) do
+        table.insert(bagEntries, {
+            isAmmo = self:IsAmmoBag(bag.bagID),
+            slotCount = bag.slotCount,
+            usedSlots = self:CountUsedSlots(bag.bagID, bag.slotCount),
+        })
+    end
+    return self:ClassifyCapacity(bagEntries)
 end
 
 function BagAPI:CountUsedSlots(bagID, slotCount)
@@ -202,6 +217,16 @@ function BagAPI:UseItem(bagID, slotIndex)
         C_Container.UseContainerItem(bagID, slotIndex)
     else
         UseContainerItem(bagID, slotIndex)
+    end
+end
+
+-- Shift+left-click-drag split-stack behavior, called back by
+-- OpenStackSplitFrame once the player confirms a split amount.
+function BagAPI:SplitStack(bagID, slotIndex, amount)
+    if C_Container and C_Container.SplitContainerItem then
+        C_Container.SplitContainerItem(bagID, slotIndex, amount)
+    else
+        SplitContainerItem(bagID, slotIndex, amount)
     end
 end
 

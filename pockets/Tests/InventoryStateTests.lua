@@ -38,3 +38,81 @@ Pockets.Tests.TestRunner:Register("InventoryState: carried quantity defaults to 
     local qty = InventoryState:GetCarriedQuantity(-1)
     return qty == 0, qty == 0 and "OK" or string.format("expected 0, got %s", tostring(qty))
 end)
+
+Pockets.Tests.TestRunner:Register("InventoryState: bag-full ETA sampling uses GENERAL capacity only, never ammo", function()
+    local BagAPI = Pockets.Adapters.BagAPI
+    local CapacityEstimator = Pockets.Services.CapacityEstimator
+    local originalScan = BagAPI.ScanAllBags
+    local originalCounts = BagAPI.GetCapacityCounts
+
+    -- Stub the adapter boundary (no live bag scan needed): empty bags so
+    -- BuildRecord never runs, and a GENERAL/AMMO split that would be
+    -- wrong if ETA sampling ever blended the two pools.
+    BagAPI.ScanAllBags = function() return {} end
+    BagAPI.GetCapacityCounts = function()
+        return { general = { used = 10, total = 20 }, ammo = { used = 5, total = 16 } }
+    end
+
+    CapacityEstimator:Reset("test")
+    InventoryState:Refresh("test")
+
+    BagAPI.ScanAllBags = originalScan
+    BagAPI.GetCapacityCounts = originalCounts
+
+    local last = CapacityEstimator.samples[#CapacityEstimator.samples]
+    local ok = last and last.usedSlots == 10 and last.totalSlots == 20
+    return ok, ok and "OK" or "estimator sample did not match GENERAL capacity (ammo may have leaked in)"
+end)
+
+Pockets.Tests.TestRunner:Register("InventoryState: AggregateRecords collapses split stacks into one itemID entry", function()
+    local records = {
+        { itemID = 100, itemLink = "item:100", name = "Netherweave Cloth", texture = 1, quality = 1,
+            categoryID = "trade_goods", quantity = 20, bagID = 0, slotID = 1 },
+        { itemID = 100, itemLink = "item:100", name = "Netherweave Cloth", texture = 1, quality = 1,
+            categoryID = "trade_goods", quantity = 20, bagID = 0, slotID = 2 },
+        { itemID = 100, itemLink = "item:100", name = "Netherweave Cloth", texture = 1, quality = 1,
+            categoryID = "trade_goods", quantity = 20, bagID = 0, slotID = 3 },
+        { itemID = 100, itemLink = "item:100", name = "Netherweave Cloth", texture = 1, quality = 1,
+            categoryID = "trade_goods", quantity = 3, bagID = 0, slotID = 4 },
+    }
+    local aggregates = InventoryState:AggregateRecords(records)
+    local ok = #aggregates == 1 and aggregates[1].totalQuantity == 63 and #aggregates[1].stacks == 4
+    return ok, ok and "OK" or string.format(
+        "expected 1 aggregate at 63 total across 4 stacks, got %d aggregates, total=%s",
+        #aggregates, ok and "" or tostring(aggregates[1] and aggregates[1].totalQuantity))
+end)
+
+Pockets.Tests.TestRunner:Register("ItemButtonPool.ToButtonRecord: sums totalQuantity into quantity, prefers an unlocked stack", function()
+    local agg = {
+        itemID = 100, itemLink = "item:100", texture = 1, quality = 1, totalQuantity = 63,
+        stacks = {
+            { bagID = 0, slotID = 1, quantity = 20, isLocked = true },
+            { bagID = 0, slotID = 2, quantity = 40, isLocked = false },
+            { bagID = 0, slotID = 3, quantity = 3, isLocked = false },
+        },
+    }
+    local record = Pockets.UI.ItemButtonPool.ToButtonRecord(agg)
+    local ok = record.quantity == 63 and record.bagID == 0 and record.slotID == 2 and record.interactive == true
+    return ok, ok and "OK" or string.format(
+        "expected quantity=63 slotID=2(unlocked), got quantity=%s slotID=%s",
+        tostring(record.quantity), tostring(record.slotID))
+end)
+
+Pockets.Tests.TestRunner:Register("ItemButtonPool.ToButtonRecord: no stacks means non-interactive", function()
+    local agg = { itemID = 1, texture = 1, totalQuantity = 0, stacks = {} }
+    local record = Pockets.UI.ItemButtonPool.ToButtonRecord(agg)
+    local ok = record.interactive == false and record.bagID == nil
+    return ok, ok and "OK" or "expected a stack-less aggregate to be non-interactive"
+end)
+
+Pockets.Tests.TestRunner:Register("InventoryState: AggregateRecords keeps distinct itemIDs separate, in first-seen order", function()
+    local records = {
+        { itemID = 200, name = "Linen Cloth", quantity = 10, bagID = 0, slotID = 1 },
+        { itemID = 300, name = "Wool Cloth", quantity = 5, bagID = 0, slotID = 2 },
+        { itemID = 200, name = "Linen Cloth", quantity = 8, bagID = 0, slotID = 3 },
+    }
+    local aggregates = InventoryState:AggregateRecords(records)
+    local ok = #aggregates == 2 and aggregates[1].itemID == 200 and aggregates[1].totalQuantity == 18
+        and aggregates[2].itemID == 300 and aggregates[2].totalQuantity == 5
+    return ok, ok and "OK" or "expected two distinct aggregates in first-seen order"
+end)

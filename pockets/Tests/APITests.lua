@@ -59,3 +59,27 @@ Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) resolves carrie
     local ok = #items == 1 and items[1].bagID == 0 and items[1].slotID == 2 and items[1].interactive ~= false
     return ok, ok and "OK" or "expected carried recent entry resolved to live bag/slot"
 end)
+
+Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) dedupes repeated pickups of the same itemID", function()
+    InventoryState.items = { ["0:1"] = { key = "0:1", bagID = 0, slotID = 1, itemID = 55, quantity = 12 } }
+    RecentItems:Clear()
+    RecentItems:Record({ itemID = 55, quantity = 5, timestamp = 1 })
+    RecentItems:Record({ itemID = 55, quantity = 7, timestamp = 2 })
+
+    local items = Pockets.API.GetCategoryItems(Pockets.Constants.CATEGORY.RECENT)
+    local ok = #items == 1 and items[1].quantity == 12 -- true carried total, not either delta
+    return ok, ok and "OK" or string.format(
+        "expected 1 deduped entry at true carried total 12, got %d entries qty=%s",
+        #items, tostring(items[1] and items[1].quantity))
+end)
+
+Pockets.Tests.TestRunner:Register("API: GetAggregatedCategoryItems collapses split stacks into one itemID entry", function()
+    InventoryState.items = {
+        ["0:1"] = { key = "0:1", bagID = 0, slotID = 1, itemID = 100, quantity = 20, categoryID = "trade_goods" },
+        ["0:2"] = { key = "0:2", bagID = 0, slotID = 2, itemID = 100, quantity = 40, categoryID = "trade_goods" },
+    }
+    local items = Pockets.API.GetAggregatedCategoryItems("trade_goods")
+    local ok = #items == 1 and items[1].quantity == 60
+    return ok, ok and "OK" or string.format(
+        "expected 1 aggregated entry at quantity 60, got %d entries", #items)
+end)

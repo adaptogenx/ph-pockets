@@ -44,8 +44,8 @@ function Debug:DumpInventory()
     print(string.format("  Ammo: %d/%d", ammo.used, ammo.total))
 
     for key, item in pairs(Pockets.Services.InventoryState:GetItems()) do
-        print(string.format("  [%s] %s x%d (%s)", key, item.name or ("item:" .. tostring(item.itemID)),
-            item.quantity, item.categoryID))
+        print(string.format("  [%s] %s x%s (%s)", tostring(key), item.name or ("item:" .. tostring(item.itemID)),
+            tostring(item.quantity), tostring(item.categoryID)))
     end
     print(COLOR_YELLOW .. "==========================" .. COLOR_RESET)
 end

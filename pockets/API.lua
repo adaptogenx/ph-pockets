@@ -35,22 +35,46 @@ end
 -- entries are resolved against current InventoryState here rather than in
 -- UI code, so both the flyout and full inventory stay consistent
 -- (UI_SPEC §9 "Recent Items", §10 "share item rendering code").
+--
+-- Deduplicated by itemID (newest acquisition wins position/ordering,
+-- RecentItems:GetRecent is already newest-first) so repeated recent
+-- pickups of the same item render as one aggregate entry, matching the
+-- full-inventory grid's "one icon per itemID" rule. When still carried,
+-- the displayed quantity is the true current total (GetCarriedQuantity),
+-- not just whatever one physical stack happens to report.
 local function GetResolvedRecentItems()
     local out = {}
+    local seen = {}
     for _, entry in ipairs(Pockets.Services.RecentItems:GetRecent(Pockets.Constants.RECENT_DISPLAY_LIMIT)) do
-        local live = Pockets.Services.InventoryState:FindLiveRecordByItemID(entry.itemID)
-        if live then
-            table.insert(out, live)
-        else
-            local meta = Pockets.Adapters.ItemAPI:GetItemMetadata(entry.itemID, entry.itemLink)
-            table.insert(out, {
-                itemID = entry.itemID,
-                itemLink = entry.itemLink,
-                quantity = entry.quantity,
-                texture = meta and meta.texture,
-                quality = meta and meta.quality,
-                interactive = false, -- no longer carried; never a fake action (UI_SPEC §9)
-            })
+        if not seen[entry.itemID] then
+            seen[entry.itemID] = true
+            local live = Pockets.Services.InventoryState:FindLiveRecordByItemID(entry.itemID)
+            if live then
+                local carriedTotal = Pockets.Services.InventoryState:GetCarriedQuantity(entry.itemID)
+                table.insert(out, {
+                    itemID = entry.itemID,
+                    itemLink = live.itemLink,
+                    name = live.name,
+                    quantity = carriedTotal > 0 and carriedTotal or live.quantity,
+                    texture = live.texture,
+                    quality = live.quality,
+                    isLocked = live.isLocked,
+                    bagID = live.bagID,
+                    slotID = live.slotID,
+                    interactive = true,
+                })
+            else
+                local meta = Pockets.Adapters.ItemAPI:GetItemMetadata(entry.itemID, entry.itemLink)
+                table.insert(out, {
+                    itemID = entry.itemID,
+                    itemLink = entry.itemLink,
+                    name = meta and meta.name,
+                    quantity = entry.quantity,
+                    texture = meta and meta.texture,
+                    quality = meta and meta.quality,
+                    interactive = false, -- no longer carried; never a fake action (UI_SPEC §9)
+                })
+            end
         end
     end
     return out
@@ -65,6 +89,24 @@ function API.GetCategoryItems(categoryID)
         return GetResolvedRecentItems()
     end
     return Pockets.Services.InventoryState:GetItemsByCategory(categoryID)
+end
+
+-- Same as GetCategoryItems, but collapsed to one entry per itemID
+-- (InventoryState:AggregateRecords + ItemButtonPool.ToButtonRecord) -
+-- an item spread across many bag slots renders as a single button with
+-- a summed count everywhere Pockets shows an item grid (UI_SPEC §7/§10).
+-- Recent is already itemID-deduped/button-shaped by GetCategoryItems, so
+-- no further aggregation is needed there.
+function API.GetAggregatedCategoryItems(categoryID)
+    if categoryID == Pockets.Constants.CATEGORY.RECENT then
+        return API.GetCategoryItems(categoryID)
+    end
+    local aggregates = Pockets.Services.InventoryState:AggregateRecords(API.GetCategoryItems(categoryID))
+    local out = {}
+    for _, agg in ipairs(aggregates) do
+        table.insert(out, Pockets.UI.ItemButtonPool.ToButtonRecord(agg))
+    end
+    return out
 end
 
 function API.GetCategorySummary()
@@ -93,20 +135,23 @@ function API.GetCarriedQuantity(itemID)
     return Pockets.Services.InventoryState:GetCarriedQuantity(itemID)
 end
 
+-- Open/Close/Toggle and the Shift-B binding all land in All Items directly
+-- (.plans/Pockets_Glance_UI.md §4 "HUD +/expanded action -> ALL directly"),
+-- never a second window - there is only the one Shell root frame.
 function API.Open()
-    Pockets.UI.FullInventory:Show()
+    Pockets.UI.Shell:SetState(Pockets.UI.Shell.STATE.ALL)
 end
 
 function API.Close()
-    Pockets.UI.FullInventory:Hide()
+    Pockets.UI.Shell:SetState(Pockets.UI.Shell.STATE.MENU)
 end
 
 function API.Toggle()
-    Pockets.UI.FullInventory:Toggle()
+    Pockets.UI.Shell:ToggleAllItems()
 end
 
 function API.ToggleFullInventory()
-    Pockets.UI.FullInventory:Toggle()
+    Pockets.UI.Shell:ToggleAllItems()
 end
 
 function API.Subscribe(eventName, callback, owner)

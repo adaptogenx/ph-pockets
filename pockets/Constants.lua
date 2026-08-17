@@ -57,12 +57,6 @@ Constants.CAPACITY_COLOR_THRESHOLDS = {
     RED_AT = 0.90,
 }
 
-Constants.CAPACITY_COLOR = {
-    GREEN = { r = 0.20, g = 0.80, b = 0.30 },
-    YELLOW = { r = 0.95, g = 0.85, b = 0.20 },
-    RED = { r = 0.90, g = 0.25, b = 0.20 },
-}
-
 -- Estimator states (TDD §5.4, §11.4)
 Constants.ESTIMATOR_STATE = {
     WARMING_UP = "warming_up",
@@ -110,32 +104,43 @@ Constants.CATEGORY_ICON = {
     other = 133628,
 }
 
--- Fixed UI geometry (UI_SPEC §2, §4, §7). Content must never resize these.
--- HUD_WIDTH intentionally equals FLYOUT_WIDTH so the HUD bar and the
--- category flyout below it share identical left/right edges.
+-- Fixed UI geometry for the single-frame Glance -> Menu -> Category -> All
+-- Items shell (.plans/Pockets_Glance_UI.md). Only Glance is exempt from the
+-- stable width/header/footer contract shared by Menu/Category/All.
 Constants.LAYOUT = {
-    HUD_WIDTH = 220,
-    HUD_HEIGHT = 42,
-    HUD_ICON_SIZE = 38,
+    -- Glance: small, square-ish, exempt from the stable shell contract.
+    GLANCE_WIDTH = 140,
+    GLANCE_ICON_SIZE = 44,
+    GLANCE_PADDING = 12,
+    GLANCE_ROW_GAP = 3,
+    GLANCE_CAPACITY_ROW_HEIGHT = 20,
+    GLANCE_ETA_ROW_HEIGHT = 14,
+    GLANCE_AMMO_ROW_HEIGHT = 14,
 
-    FLYOUT_WIDTH = 220,
-    FLYOUT_ROW_HEIGHT = 30,
-    FLYOUT_PADDING = 10,
-    FLYOUT_ICON_SIZE = 21,
-    FLYOUT_COUNT_WIDTH = 60,
+    -- Stable shell: Menu/Category/All share this exact width, header
+    -- height, body viewport height, and footer height (§3 "Stable
+    -- application shell") - only the content inside those regions changes.
+    SHELL_WIDTH = 220,
+    SHELL_PADDING = 8,
+    SHELL_HEADER_HEIGHT = 26,
+    SHELL_BODY_HEIGHT = 260,
+    SHELL_FOOTER_HEIGHT = 20,
+    -- Fixed left (back) and right (+/search) header action-zone widths -
+    -- the control occupying a zone may change, the zone itself never moves.
+    SHELL_HEADER_SIDE_WIDTH = 20,
+    SHELL_HEADER_RIGHT_WIDTH = 60,
+
+    MENU_ROW_HEIGHT = 24,
+    MENU_ROW_ICON_SIZE = 16,
+    MENU_ROW_COUNT_WIDTH = 34,
 
     ITEM_PANEL_COLUMNS = 4,
     ITEM_BUTTON_SIZE = 40,
     ITEM_BUTTON_GAP = 4,
-    ITEM_PANEL_PADDING = 9,
-    ITEM_PANEL_MAX_ROWS = 6,
 
-    FULL_INVENTORY_WIDTH = 340,
-    FULL_INVENTORY_HEIGHT = 480,
-
-    -- UI_SPEC §5: open must feel immediate; close gets a small grace
-    -- period so crossing the gap between panels doesn't flicker-close.
-    HOVER_CLOSE_GRACE_SECONDS = 0.25,
+    FULL_INVENTORY_LABEL_HEIGHT = 16,
+    FULL_INVENTORY_LABEL_ICON_SIZE = 12,
+    FULL_INVENTORY_LABEL_ICON_GAP = 4,
 }
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)

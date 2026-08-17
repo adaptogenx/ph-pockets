@@ -10,6 +10,10 @@
 Init.lua
 Constants.lua
 
+# Shared, addon-agnostic UI theming primitives (colors/fonts/backdrops/
+# panel+button factories) - self-contained, no Pockets namespace dependency
+Shared/PHUI.lua
+
 # WoW API Adapters (isolate direct Blizzard API access)
 Adapters/BagAPI.lua
 Adapters/ItemAPI.lua
@@ -34,13 +38,10 @@ Core/StackConsolidator.lua
 
 # UI
 UI/Layout.lua
-UI/HoverGroup.lua
 UI/ItemButtonPool.lua
-UI/HUD.lua
-UI/CategoryFlyout.lua
-UI/ItemFlyout.lua
 UI/Search.lua
-UI/FullInventory.lua
+UI/FlowLayout.lua
+UI/Shell.lua
 UI/TooltipCounts.lua
 
 # Cross-cutting event wiring + public API
@@ -54,4 +55,10 @@ Tests/CategorizerTests.lua
 Tests/RecentItemsTests.lua
 Tests/CapacityEstimatorTests.lua
 Tests/InventoryStateTests.lua
+Tests/BagAPITests.lua
+Tests/SearchTests.lua
+Tests/ItemButtonPoolTests.lua
+Tests/FlowLayoutTests.lua
 Tests/APITests.lua
+Tests/ShellTests.lua
+Tests/StackResolverTests.lua

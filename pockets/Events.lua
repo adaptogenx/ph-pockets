@@ -93,7 +93,7 @@ end
 local function InitializeAddon()
     EnsureSavedVariables()
 
-    Pockets.UI.HUD:Initialize()
+    Pockets.UI.Shell:Initialize()
     Pockets.UI.TooltipCounts:Initialize()
 
     Pockets.Services.InventoryState:Refresh("initial_load")
@@ -169,7 +169,7 @@ local function HandleCommand(msg)
     local cmd = (args[1] or "help"):lower()
 
     if cmd == "show" then
-        Pockets.UI.HUD:Toggle()
+        Pockets.UI.Shell:Toggle()
     elseif cmd == "toggle" then
         Pockets.API.Toggle()
     elseif cmd == "debug" then

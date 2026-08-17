@@ -33,6 +33,7 @@ globals = {
     -- Pockets-specific globals (must be included)
     "_G",
     "Pockets",
+    "PHUI",
     "PocketsDB",
     "PocketsCharDB",
     "SLASH_POCKETS1",
@@ -81,6 +82,7 @@ globals = {
     "PickupContainerItem",
     "SplitContainerItem",
     "UseContainerItem",
+    "OpenStackSplitFrame",
     "HandleModifiedItemClick",
     "IsModifiedClick",
     "GetInventorySlotInfo",
@@ -106,6 +108,7 @@ globals = {
 
     -- Item button visuals
     "SetItemButtonDesaturated",
+    "SetItemButtonCount",
     "ITEM_QUALITY_COLORS",
 
     -- Misc WoW API/constants referenced by adapters

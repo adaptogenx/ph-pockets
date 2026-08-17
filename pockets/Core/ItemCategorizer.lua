@@ -78,7 +78,7 @@ end
 -- categorizer can later record a richer internalCategory while still
 -- mapping to one simplified display bucket.
 function ItemCategorizer:GetDisplayCategory(item)
-    return self:Categorize(item)
+    return self:Categorize(item) or CATEGORY.OTHER
 end
 
 function ItemCategorizer:GetCategoryDefinition(categoryID)
