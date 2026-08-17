@@ -250,6 +250,96 @@ Pockets.Tests.TestRunner:Register("Shell: PositionStrategy V1 anchor is TOPLEFT"
     return ok, ok and "OK" or "expected the V1 position strategy to report TOPLEFT"
 end)
 
+Pockets.Tests.TestRunner:Register("Shell: full state sequence GLANCE>MENU>CATEGORY>ALL>MENU>GLANCE holds one TOPLEFT (§10)", function()
+    ResetToGlance()
+    local _, _, _, x0, y0 = Shell.frame:GetPoint()
+
+    local sequence = {
+        { Shell.STATE.MENU, nil },
+        { Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.QUEST } },
+        { Shell.STATE.ALL, nil },
+        { Shell.STATE.MENU, nil },
+        { Shell.STATE.GLANCE, nil },
+    }
+
+    local drifted = false
+    for _, step in ipairs(sequence) do
+        Shell:SetState(step[1], step[2])
+        local _, _, _, x, y = Shell.frame:GetPoint()
+        if x ~= x0 or y ~= y0 then
+            drifted = true
+        end
+    end
+
+    local ok = not drifted
+    return ok, ok and "OK" or "TOPLEFT drifted somewhere in GLANCE>MENU>CATEGORY>ALL>MENU>GLANCE"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: repeated Glance<->Menu and Menu<->Category cycles never drift", function()
+    ResetToGlance()
+    local _, _, _, x0, y0 = Shell.frame:GetPoint()
+
+    local drifted = false
+    for _ = 1, 6 do
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.AMMO })
+        Shell:GoBack()
+        ResetToGlance()
+        local _, _, _, x, y = Shell.frame:GetPoint()
+        if x ~= x0 or y ~= y0 then
+            drifted = true
+        end
+    end
+
+    local ok = not drifted
+    return ok, ok and "OK" or "repeated Glance<->Menu<->Category cycling drifted TOPLEFT"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: changing width/height via SetSize alone never moves TOPLEFT", function()
+    ResetToGlance()
+    local _, _, _, x0, y0 = Shell.frame:GetPoint()
+
+    Shell.frame:SetSize(140, 90)
+    local _, _, _, xa, ya = Shell.frame:GetPoint()
+    Shell.frame:SetSize(220, 400)
+    local _, _, _, xb, yb = Shell.frame:GetPoint()
+
+    ResetToGlance()
+    local ok = x0 == xa and y0 == ya and xa == xb and ya == yb
+    return ok, ok and "OK" or "SetSize alone moved the frame's TOPLEFT anchor"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Render skips re-anchoring while a drag is in progress", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.MENU)
+    local _, _, _, savedX, savedY = Shell.frame:GetPoint()
+
+    -- Mid-drag: simulates StartMoving() having already moved the frame,
+    -- then a background event (bag update, ETA tick) calling Render()
+    -- before the player has released the mouse.
+    Shell.isDragging = true
+    Shell.frame:ClearAllPoints()
+    Shell.frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", savedX + 37, savedY - 41)
+    Shell:Render()
+    local _, _, _, midDragX, midDragY = Shell.frame:GetPoint()
+    local heldDuringDrag = midDragX == savedX + 37 and midDragY == savedY - 41
+
+    -- Drag ends: OnDragStop clears isDragging and saves the new position
+    -- together (Shell.lua's OnDragStop handler), so the next Render()
+    -- should reapply that NEW position, not the pre-drag one.
+    Shell.isDragging = false
+    Shell:SavePosition()
+    Shell:Render()
+    local _, _, _, afterX, afterY = Shell.frame:GetPoint()
+
+    -- restore the real saved position so later tests aren't affected
+    Pockets.SavedSettings.hud.x, Pockets.SavedSettings.hud.y = savedX, savedY
+    ResetToGlance()
+
+    local ok = heldDuringDrag and afterX == savedX + 37 and afterY == savedY - 41
+    return ok, ok and "OK" or "Render fought an in-progress drag or lost the position saved when it ended"
+end)
+
 --------------------------------------------------
 -- Height: content-driven Menu, bounded Category/All (§5, §6, §18)
 --------------------------------------------------
@@ -344,6 +434,87 @@ Pockets.Tests.TestRunner:Register("Shell: removing Ammo from the footer does not
     ResetToGlance()
     local ok = bagsLeftBefore == bagsLeftAfter
     return ok, ok and "OK" or "Bags anchor moved when Ammo visibility changed"
+end)
+
+--------------------------------------------------
+-- Menu -> Glance back navigation (UI/anchoring fix pass §4, §5, §11)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: Menu header shows a back button", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local ok = Shell.frame.shell.header.backButton:IsShown()
+    ResetToGlance()
+    return ok, ok and "OK" or "expected Menu's header to show the back button"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking Menu's back button navigates to Glance", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell.frame.shell.header.backButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or string.format("expected GLANCE after clicking Menu's back button, got %s", tostring(Shell:GetState()))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking Category's back button navigates to Menu", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.EQUIPMENT })
+    Shell.frame.shell.header.backButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.MENU
+    ResetToGlance()
+    return ok, ok and "OK" or "expected MENU after clicking Category's back button"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking All's back button navigates to Menu", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.ALL)
+    Shell.frame.shell.header.backButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.MENU
+    ResetToGlance()
+    return ok, ok and "OK" or "expected MENU after clicking All's back button"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: back button and Escape use the same navigation method (GoBack)", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+
+    local originalGoBack = Shell.GoBack
+    local calls = 0
+    Shell.GoBack = function(self, ...)
+        calls = calls + 1
+        return originalGoBack(self, ...)
+    end
+
+    Shell.frame.shell.header.backButton:Click()
+    local afterBackClick = calls
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+    Shell:HandleEscape()
+    local afterEscape = calls
+
+    Shell.GoBack = originalGoBack
+    ResetToGlance()
+
+    local ok = afterBackClick == 1 and afterEscape == 2
+    return ok, ok and "OK" or string.format(
+        "expected the back button and Escape to both route through GoBack exactly once each, got %d/%d",
+        afterBackClick, afterEscape - afterBackClick)
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: header title sits at the same fixed offset in Menu, Category, and All (§6)", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local menuLeft = Shell.frame.shell.header.titleText:GetLeft()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local categoryLeft = Shell.frame.shell.header.titleText:GetLeft()
+
+    Shell:SetState(Shell.STATE.ALL)
+    local allLeft = Shell.frame.shell.header.titleText:GetLeft()
+
+    ResetToGlance()
+    local ok = menuLeft == categoryLeft and categoryLeft == allLeft
+    return ok, ok and "OK" or string.format(
+        "expected a stable title x-offset, got menu=%s category=%s all=%s",
+        tostring(menuLeft), tostring(categoryLeft), tostring(allLeft))
 end)
 
 --------------------------------------------------

@@ -244,18 +244,20 @@ function Shell:Initialize()
 
     frame:SetScript("OnDragStart", function(self)
         if not Pockets.SavedSettings.hud.locked then
+            Shell.isDragging = true
             self:StartMoving()
         end
     end)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        Shell.isDragging = false
         Shell:SavePosition()
     end)
     -- Growing DOWN/RIGHT from a fixed TOPLEFT must never depend on the
-    -- frame's SIZE at drag time, so OnSizeChanged deliberately does NOT
-    -- re-anchor here - PositionStrategy only sets the anchor once
-    -- (RestorePosition) and after a user drag (SavePosition); state
-    -- transitions only ever call SetSize (§1, §15).
+    -- frame's SIZE - no OnSizeChanged handler here re-anchors anything.
+    -- Position is only ever written by a user drag (SavePosition) and
+    -- only ever read/reapplied by Render's RestorePosition call (§1, §2,
+    -- §15) - there is no other path that touches the root frame's point.
 
     -- Click is the only navigation mechanism (§1). Clicking Glance opens
     -- Menu; clicks inside Menu/Category/All are handled by their own
@@ -372,6 +374,19 @@ function Shell:Render()
     local frame = self.frame
     local state = self.state
 
+    -- Single root position ownership (§1/§2): every state - GLANCE
+    -- included - reapplies the exact same saved TOPLEFT anchor through
+    -- the one PositionStrategy-backed function before anything else runs.
+    -- The rest of Render only ever calls SetSize afterward, so a state
+    -- transition can resize the frame but can never drift its origin.
+    -- Skipped mid-drag: WoW's StartMoving() is already live-updating the
+    -- frame's anchor from the cursor, and a background data-change event
+    -- (bag update, ETA tick) calling Render while the player is
+    -- repositioning Pockets must not snap it back to the pre-drag spot.
+    if not self.isDragging then
+        self:RestorePosition()
+    end
+
     if state == self.STATE.GLANCE then
         frame.shell:Hide()
         frame.glance:Show()
@@ -447,28 +462,37 @@ end
 -- Header (§3 header contracts)
 --------------------------------------------------
 
+-- Fixed title left offset (past the back-button zone) - a constant, not
+-- derived from header.backButton's actual rendered position, so the
+-- title never shifts based on whether/how the back button happens to be
+-- configured (§6 "give the title its own stable region or stable
+-- x-offset"). Every expanded state shows the back button now (§4), but
+-- the offset is a constant on principle regardless.
+local TITLE_LEFT_OFFSET = L.SHELL_PADDING + L.SHELL_HEADER_SIDE_WIDTH + 4
+
+-- Reconfigures the ONE header (left/title/right zones never move, only
+-- what occupies them does - §4, §6). The back button is a single
+-- reused widget whose onClick (Shell:GoBack, wired once in BuildShell)
+-- already resolves MENU -> GLANCE, CATEGORY -> MENU, and ALL -> MENU via
+-- the same ESCAPE_PARENT map Escape uses (§5 "same navigation method").
 function Shell:ConfigureHeader()
     local header = self.frame.shell.header
     local state = self.state
 
+    header.backButton:Show()
     header.titleText:ClearAllPoints()
+    header.titleText:SetPoint("LEFT", header, "LEFT", TITLE_LEFT_OFFSET, 0)
     header.titleText:SetPoint("RIGHT", header, "RIGHT", -(L.SHELL_HEADER_RIGHT_WIDTH + L.SHELL_PADDING), 0)
 
     if state == self.STATE.MENU then
-        header.backButton:Hide()
-        header.titleText:SetPoint("LEFT", header, "LEFT", L.SHELL_PADDING, 0)
         header.titleText:SetText("Pockets")
         header.plusButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.CATEGORY then
-        header.backButton:Show()
-        header.titleText:SetPoint("LEFT", header.backButton, "RIGHT", 4, 0)
         header.titleText:SetText(Constants.CATEGORY_LABEL[self.context.categoryID] or "")
         header.plusButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.ALL then
-        header.backButton:Show()
-        header.titleText:SetPoint("LEFT", header.backButton, "RIGHT", 4, 0)
         header.titleText:SetText("All")
         header.plusButton:Hide() -- already in All Items - its slot becomes Search (§3)
         header.searchBox:Show()

@@ -22,26 +22,32 @@ local BAG_UPDATE_EVENTS = {
 local DEBOUNCE_SECONDS = 0.2
 local pendingRefreshTimer = nil
 
+-- Always a fresh table copy, never a direct reference to
+-- Constants.DEFAULT_SETTINGS.hud - Shell:SavePosition() mutates
+-- Pockets.SavedSettings.hud in place on every drag, and aliasing it to
+-- the shared constants table would let a drag silently corrupt the
+-- addon's own defaults for the rest of the session.
+local function DefaultHud()
+    local default = Pockets.Constants.DEFAULT_SETTINGS.hud
+    return {
+        point = default.point,
+        relativePoint = default.relativePoint,
+        x = default.x,
+        y = default.y,
+        locked = default.locked,
+    }
+end
+
 local function EnsureSavedVariables()
     if not PocketsDB then
-        PocketsDB = {
-            version = 1,
-            settings = {
-                hud = {
-                    point = Pockets.Constants.DEFAULT_SETTINGS.hud.point,
-                    relativePoint = Pockets.Constants.DEFAULT_SETTINGS.hud.relativePoint,
-                    x = Pockets.Constants.DEFAULT_SETTINGS.hud.x,
-                    y = Pockets.Constants.DEFAULT_SETTINGS.hud.y,
-                    locked = Pockets.Constants.DEFAULT_SETTINGS.hud.locked,
-                },
-            },
-        }
+        PocketsDB = { version = 1, settings = { hud = DefaultHud() } }
     end
+
     if not PocketsDB.settings then
-        PocketsDB.settings = { hud = Pockets.Constants.DEFAULT_SETTINGS.hud }
+        PocketsDB.settings = { hud = DefaultHud() }
     end
     if not PocketsDB.settings.hud then
-        PocketsDB.settings.hud = Pockets.Constants.DEFAULT_SETTINGS.hud
+        PocketsDB.settings.hud = DefaultHud()
     end
     -- One-time migration: Pockets' V1 positioning uses a single fixed
     -- TOPLEFT anchor (UI layout pass §1). A position saved under the old
@@ -50,13 +56,8 @@ local function EnsureSavedVariables()
     -- to produce a mismatched anchor.
     if PocketsDB.settings.hud.point ~= "TOPLEFT" then
         local locked = PocketsDB.settings.hud.locked
-        PocketsDB.settings.hud = {
-            point = Pockets.Constants.DEFAULT_SETTINGS.hud.point,
-            relativePoint = Pockets.Constants.DEFAULT_SETTINGS.hud.relativePoint,
-            x = Pockets.Constants.DEFAULT_SETTINGS.hud.x,
-            y = Pockets.Constants.DEFAULT_SETTINGS.hud.y,
-            locked = locked or false,
-        }
+        PocketsDB.settings.hud = DefaultHud()
+        PocketsDB.settings.hud.locked = locked or false
     end
 
     if not PocketsCharDB then
