@@ -82,7 +82,11 @@ Pockets.Tests.TestRunner:Register("InventoryState: AggregateRecords collapses sp
         #aggregates, ok and "" or tostring(aggregates[1] and aggregates[1].totalQuantity))
 end)
 
-Pockets.Tests.TestRunner:Register("ItemButtonPool.ToButtonRecord: sums totalQuantity into quantity, prefers an unlocked stack", function()
+-- Physical stack resolver (.plans/Pockets_Glance_UI.md §7) picks the
+-- SMALLEST unlocked stack, not just any/the first unlocked one - less
+-- disruptive to manipulate. slotID 1 (qty 20) is locked and skipped;
+-- between the two unlocked stacks (40, 3), the smaller (slotID 3) wins.
+Pockets.Tests.TestRunner:Register("ItemButtonPool.ToButtonRecord: sums totalQuantity into quantity, prefers the smallest unlocked stack", function()
     local agg = {
         itemID = 100, itemLink = "item:100", texture = 1, quality = 1, totalQuantity = 63,
         stacks = {
@@ -92,9 +96,9 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool.ToButtonRecord: sums totalQuan
         },
     }
     local record = Pockets.UI.ItemButtonPool.ToButtonRecord(agg)
-    local ok = record.quantity == 63 and record.bagID == 0 and record.slotID == 2 and record.interactive == true
+    local ok = record.quantity == 63 and record.bagID == 0 and record.slotID == 3 and record.interactive == true
     return ok, ok and "OK" or string.format(
-        "expected quantity=63 slotID=2(unlocked), got quantity=%s slotID=%s",
+        "expected quantity=63 slotID=3(smallest unlocked), got quantity=%s slotID=%s",
         tostring(record.quantity), tostring(record.slotID))
 end)
 

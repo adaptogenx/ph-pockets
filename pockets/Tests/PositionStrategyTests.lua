@@ -10,6 +10,17 @@ local _, Pockets = ...
 
 local PositionStrategy = Pockets.UI.PositionStrategy
 
+-- GetPoint() coordinates round-trip through UIParent's effective scale
+-- (screen pixels <-> UI units), so a value SetPoint with as a plain Lua
+-- number can come back a few millionths off (e.g. 42 -> 41.999996) even
+-- though nothing actually moved. Compare with a tolerance well below one
+-- screen pixel, not exact equality, whenever a literal/arithmetic value
+-- is being checked against a value read back off a live frame.
+local EPSILON = 0.01
+local function ApproxEqual(a, b)
+    return math.abs(a - b) < EPSILON
+end
+
 Pockets.Tests.TestRunner:Register("PositionStrategy: V1 anchor is TOPLEFT", function()
     local ok = PositionStrategy:GetRootAnchor() == "TOPLEFT"
     return ok, ok and "OK" or "expected V1 to report a fixed TOPLEFT anchor"
@@ -20,7 +31,8 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: ApplyRootPosition anchors T
     PositionStrategy:ApplyRootPosition(frame, { x = 42, y = -17 })
 
     local point, relativeTo, relativePoint, x, y = frame:GetPoint()
-    local ok = point == "TOPLEFT" and relativeTo == UIParent and relativePoint == "TOPLEFT" and x == 42 and y == -17
+    local ok = point == "TOPLEFT" and relativeTo == UIParent and relativePoint == "TOPLEFT"
+        and ApproxEqual(x, 42) and ApproxEqual(y, -17)
     return ok, ok and "OK" or string.format(
         "expected TOPLEFT/UIParent/TOPLEFT at (42,-17), got %s/%s/%s at (%s,%s)",
         tostring(point), tostring(relativeTo), tostring(relativePoint), tostring(x), tostring(y))
@@ -32,7 +44,7 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition round-
 
     local captured = PositionStrategy:CaptureSavedPosition(frame)
     local ok = captured.point == "TOPLEFT" and captured.relativePoint == "TOPLEFT"
-        and captured.x == 10 and captured.y == -20
+        and ApproxEqual(captured.x, 10) and ApproxEqual(captured.y, -20)
     return ok, ok and "OK" or "captured position did not match what was applied"
 end)
 

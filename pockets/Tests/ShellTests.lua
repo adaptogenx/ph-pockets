@@ -15,6 +15,15 @@ local function ResetToGlance()
     Shell:SetState(Shell.STATE.GLANCE)
 end
 
+-- GetPoint() coordinates round-trip through UIParent's effective scale,
+-- so comparing a value it returns against a plain Lua arithmetic result
+-- (e.g. savedX + 37) needs a tolerance, not exact equality - see the same
+-- note in Tests/PositionStrategyTests.lua.
+local EPSILON = 0.01
+local function ApproxEqual(a, b)
+    return math.abs(a - b) < EPSILON
+end
+
 --------------------------------------------------
 -- Pure predicates
 --------------------------------------------------
@@ -322,7 +331,7 @@ Pockets.Tests.TestRunner:Register("Shell: Render skips re-anchoring while a drag
     Shell.frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", savedX + 37, savedY - 41)
     Shell:Render()
     local _, _, _, midDragX, midDragY = Shell.frame:GetPoint()
-    local heldDuringDrag = midDragX == savedX + 37 and midDragY == savedY - 41
+    local heldDuringDrag = ApproxEqual(midDragX, savedX + 37) and ApproxEqual(midDragY, savedY - 41)
 
     -- Drag ends: OnDragStop clears isDragging and saves the new position
     -- together (Shell.lua's OnDragStop handler), so the next Render()
@@ -336,7 +345,7 @@ Pockets.Tests.TestRunner:Register("Shell: Render skips re-anchoring while a drag
     Pockets.SavedSettings.hud.x, Pockets.SavedSettings.hud.y = savedX, savedY
     ResetToGlance()
 
-    local ok = heldDuringDrag and afterX == savedX + 37 and afterY == savedY - 41
+    local ok = heldDuringDrag and ApproxEqual(afterX, savedX + 37) and ApproxEqual(afterY, savedY - 41)
     return ok, ok and "OK" or "Render fought an in-progress drag or lost the position saved when it ended"
 end)
 
