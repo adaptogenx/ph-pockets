@@ -117,14 +117,18 @@ Constants.LAYOUT = {
     GLANCE_ETA_ROW_HEIGHT = 14,
     GLANCE_AMMO_ROW_HEIGHT = 14,
 
-    -- Stable shell: Menu/Category/All share this exact width, header
-    -- height, body viewport height, and footer height (§3 "Stable
-    -- application shell") - only the content inside those regions changes.
+    -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
+    -- header height, footer height, and body left/right bounds (§3/§8
+    -- "Stable application shell"). Total HEIGHT is intentionally NOT
+    -- shared - Menu's body is content-driven (MENU_BODY_HEIGHT, derived
+    -- below from the fixed category count) while Category/All get a
+    -- bounded, scrollable browsing viewport (SHELL_BODY_MAX_HEIGHT). The
+    -- invariant is position stability, not identical frame height.
     SHELL_WIDTH = 220,
     SHELL_PADDING = 8,
     SHELL_HEADER_HEIGHT = 26,
-    SHELL_BODY_HEIGHT = 260,
-    SHELL_FOOTER_HEIGHT = 20,
+    SHELL_BODY_MAX_HEIGHT = 260,
+    SHELL_FOOTER_HEIGHT = 22,
     -- Fixed left (back) and right (+/search) header action-zone widths -
     -- the control occupying a zone may change, the zone itself never moves.
     SHELL_HEADER_SIDE_WIDTH = 20,
@@ -141,7 +145,23 @@ Constants.LAYOUT = {
     FULL_INVENTORY_LABEL_HEIGHT = 16,
     FULL_INVENTORY_LABEL_ICON_SIZE = 12,
     FULL_INVENTORY_LABEL_ICON_GAP = 4,
+
+    -- Centralized expanded-surface opacity (UI layout pass §9) - Glance
+    -- keeps the lighter, passive-HUD-like alpha; every expanded state
+    -- (Menu/Category/All) uses one shared, more opaque body alpha plus a
+    -- slightly-more-opaque header/footer chrome band, so nothing hardcodes
+    -- its own alpha independently.
+    GLANCE_ALPHA = 0.85,
+    EXPANDED_BODY_ALPHA = 0.92,
+    EXPANDED_CHROME_ALPHA = 0.96,
 }
+
+-- Menu's body height is derived, not hand-tuned: HEADER + one row per
+-- category + FOOTER + top/bottom padding, and nothing else (§5 "no giant
+-- empty body"). Computed once here (not per-render) since the category
+-- count is fixed at load time.
+Constants.LAYOUT.MENU_BODY_HEIGHT = #Constants.CATEGORY_ORDER * Constants.LAYOUT.MENU_ROW_HEIGHT
+    + Constants.LAYOUT.SHELL_PADDING * 2
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)
 Constants.DOMAIN_EVENT = {
@@ -154,13 +174,16 @@ Constants.DOMAIN_EVENT = {
     READY = "POCKETS_READY",
 }
 
--- Default SavedVariables shape (TDD §19)
+-- Default SavedVariables shape (TDD §19). TOPLEFT is Pockets' one V1
+-- positional anchor (UI layout pass §1/§2) - Glance and every expanded
+-- state share this same screen-space origin; only TOPLEFT-anchored
+-- positions are ever saved/restored (see UI/PositionStrategy.lua).
 Constants.DEFAULT_SETTINGS = {
     hud = {
-        point = "CENTER",
-        relativePoint = "CENTER",
-        x = 0,
-        y = 0,
+        point = "TOPLEFT",
+        relativePoint = "TOPLEFT",
+        x = 100,
+        y = -100,
         locked = false,
     },
 }

@@ -27,6 +27,7 @@ local Layout = Pockets.UI.Layout
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
 local FlowLayout = Pockets.UI.FlowLayout
+local PositionStrategy = Pockets.UI.PositionStrategy
 
 Shell.STATE = {
     GLANCE = "GLANCE",
@@ -42,9 +43,13 @@ local ESCAPE_PARENT = {
     [Shell.STATE.MENU] = Shell.STATE.GLANCE,
 }
 
-local SHELL_TOTAL_HEIGHT = L.SHELL_HEADER_HEIGHT + L.SHELL_PADDING
-    + L.SHELL_BODY_HEIGHT + L.SHELL_PADDING
-    + L.SHELL_FOOTER_HEIGHT + L.SHELL_PADDING
+-- Root total height for a given body height (UI layout pass §6): Menu's
+-- body is content-driven (L.MENU_BODY_HEIGHT), Category/All get a fixed
+-- bounded viewport (L.SHELL_BODY_MAX_HEIGHT) - the shared invariant is
+-- TOPLEFT/width/header/footer stability, not identical total height.
+local function TotalHeightForBody(bodyHeight)
+    return L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
+end
 
 --------------------------------------------------
 -- Pure predicates (unit-testable without a live frame)
@@ -129,6 +134,8 @@ end
 function Shell:BuildShell()
     local frame = self.frame
     local shell = CreateFrame("Frame", nil, frame)
+    -- shell fills frame's rect exactly - frame itself is the one thing
+    -- Shell:ApplyDimensions ever resizes (§3 "one logical root frame").
     shell:SetAllPoints(frame)
     frame.shell = shell
     shell.menuRows = {}
@@ -136,11 +143,20 @@ function Shell:BuildShell()
 
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
     -- the control occupying a zone changes, the zone itself never moves.
+    -- Anchored only to the shell's top edge (§8) - never repositioned by
+    -- state changes, only its contents are reconfigured.
     local header = CreateFrame("Frame", nil, shell)
     header:SetPoint("TOPLEFT", shell, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", 0, 0)
     header:SetHeight(L.SHELL_HEADER_HEIGHT)
     shell.header = header
+
+    -- Slightly more opaque than the body (§9), drawn above the root
+    -- frame's own panel backdrop to read as a distinct chrome band.
+    header.bg = header:CreateTexture(nil, "BACKGROUND", nil, 1)
+    header.bg:SetAllPoints(header)
+    local chromeColor = PHUI.Colors.BG_PARCHMENT
+    header.bg:SetColorTexture(chromeColor[1], chromeColor[2], chromeColor[3], L.EXPANDED_CHROME_ALPHA)
 
     header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
         tooltipText = "Back",
@@ -179,33 +195,40 @@ function Shell:BuildShell()
     local dividerColor = PHUI.Colors.DIVIDER
     header.divider:SetColorTexture(dividerColor[1], dividerColor[2], dividerColor[3], dividerColor[4] or 1)
 
-    -- Body: one scrolling viewport reused by Menu/Category/All (§3
-    -- "consistent body viewport").
-    shell.scrollFrame = CreateFrame("ScrollFrame", nil, shell, "UIPanelScrollFrameTemplate")
-    shell.scrollFrame:SetPoint("TOPLEFT", shell, "TOPLEFT", L.SHELL_PADDING, -(L.SHELL_HEADER_HEIGHT + L.SHELL_PADDING))
-    shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT",
-        -(L.SHELL_PADDING + 20), L.SHELL_FOOTER_HEIGHT + L.SHELL_PADDING)
-
-    shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
-    shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2 - 20)
-    shell.content:SetHeight(1)
-    shell.scrollFrame:SetScrollChild(shell.content)
-
-    -- Footer: same Bags/ETA/Ammo semantics as before, one compact row.
+    -- Footer: anchored only to the shell's bottom edge (§8) - never moves
+    -- when the body resizes above it.
     shell.footer = CreateFrame("Frame", nil, shell)
-    shell.footer:SetPoint("BOTTOMLEFT", shell, "BOTTOMLEFT", L.SHELL_PADDING, L.SHELL_PADDING)
-    shell.footer:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
+    shell.footer:SetPoint("BOTTOMLEFT", shell, "BOTTOMLEFT", 0, 0)
+    shell.footer:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", 0, 0)
     shell.footer:SetHeight(L.SHELL_FOOTER_HEIGHT)
 
+    shell.footer.bg = shell.footer:CreateTexture(nil, "BACKGROUND", nil, 1)
+    shell.footer.bg:SetAllPoints(shell.footer)
+    shell.footer.bg:SetColorTexture(chromeColor[1], chromeColor[2], chromeColor[3], L.EXPANDED_CHROME_ALPHA)
+
     shell.footerBagsText = PHUI.CreateLabel(shell.footer, "primary", nil, PHUI.Fonts.SMALL)
-    shell.footerBagsText:SetPoint("LEFT", shell.footer, "LEFT", 0, 0)
+    shell.footerBagsText:SetPoint("LEFT", shell.footer, "LEFT", L.SHELL_PADDING, 0)
 
     shell.footerEtaText = PHUI.CreateLabel(shell.footer, "muted", nil, PHUI.Fonts.SMALL)
     shell.footerEtaText:SetPoint("LEFT", shell.footerBagsText, "RIGHT", 4, 0)
 
     shell.footerAmmoText = PHUI.CreateLabel(shell.footer, "primary", nil, PHUI.Fonts.SMALL)
-    shell.footerAmmoText:SetPoint("RIGHT", shell.footer, "RIGHT", 0, 0)
+    shell.footerAmmoText:SetPoint("RIGHT", shell.footer, "RIGHT", -L.SHELL_PADDING, 0)
     shell.footerAmmoText:Hide()
+
+    -- Body: the ONE region whose height actually varies by state - it
+    -- fills whatever space is left between header and footer once
+    -- Shell:ApplyDimensions resizes the root frame (§8), so nothing here
+    -- ever needs to be repositioned by hand per state. One scrolling
+    -- viewport reused by Menu/Category/All (§3 "consistent body bounds").
+    shell.scrollFrame = CreateFrame("ScrollFrame", nil, shell, "UIPanelScrollFrameTemplate")
+    shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
+    shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + 20), L.SHELL_PADDING)
+
+    shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
+    shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2 - 20)
+    shell.content:SetHeight(1)
+    shell.scrollFrame:SetScrollChild(shell.content)
 end
 
 function Shell:Initialize()
@@ -228,6 +251,11 @@ function Shell:Initialize()
         self:StopMovingOrSizing()
         Shell:SavePosition()
     end)
+    -- Growing DOWN/RIGHT from a fixed TOPLEFT must never depend on the
+    -- frame's SIZE at drag time, so OnSizeChanged deliberately does NOT
+    -- re-anchor here - PositionStrategy only sets the anchor once
+    -- (RestorePosition) and after a user drag (SavePosition); state
+    -- transitions only ever call SetSize (§1, §15).
 
     -- Click is the only navigation mechanism (§1). Clicking Glance opens
     -- Menu; clicks inside Menu/Category/All are handled by their own
@@ -263,19 +291,21 @@ function Shell:Initialize()
     self:Render()
 end
 
+-- Position and size are independent concerns (§2): this is the ONLY place
+-- that ever anchors the root frame to UIParent. Every state transition
+-- afterward touches SetSize only, so the anchor set here is what pins
+-- Glance's TOPLEFT and every expanded state's TOPLEFT to the same point.
 function Shell:RestorePosition()
-    local hud = Pockets.SavedSettings.hud
-    self.frame:ClearAllPoints()
-    self.frame:SetPoint(hud.point, UIParent, hud.relativePoint, hud.x, hud.y)
+    PositionStrategy:ApplyRootPosition(self.frame, Pockets.SavedSettings.hud)
 end
 
 function Shell:SavePosition()
     local hud = Pockets.SavedSettings.hud
-    local point, _, relativePoint, x, y = self.frame:GetPoint()
-    hud.point = point
-    hud.relativePoint = relativePoint
-    hud.x = x
-    hud.y = y
+    local captured = PositionStrategy:CaptureSavedPosition(self.frame)
+    hud.point = captured.point
+    hud.relativePoint = captured.relativePoint
+    hud.x = captured.x
+    hud.y = captured.y
 end
 
 --------------------------------------------------
@@ -311,6 +341,33 @@ function Shell:OnDataChanged()
     end
 end
 
+-- Resizes the root frame only - never touches its anchor (§1/§2/§15).
+-- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
+-- right/down from that fixed point.
+function Shell:ApplyDimensions(bodyHeight)
+    self.frame:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight))
+end
+
+-- Explicit body-clear lifecycle step (§7): hides every kind of body
+-- content Shell can render (Menu rows, Category/All item buttons,
+-- category labels) and resets scroll/content cursor state, so a state
+-- transition never leaves the previous state's widgets visible behind
+-- the new one. Called before every RenderMenu/RenderCategory/RenderAll,
+-- regardless of whether they were reached via SetState or (RenderAll's
+-- case) a direct search-box re-render.
+function Shell:ClearBody()
+    local shell = self.frame.shell
+    for _, row in ipairs(shell.menuRows) do
+        row:Hide()
+    end
+    for _, widget in ipairs(shell.categoryLabels) do
+        widget:Hide()
+    end
+    Pockets.UI.ItemButtonPool:ReleaseAll(shell.content)
+    shell.scrollFrame:SetVerticalScroll(0)
+    shell.content:SetHeight(1)
+end
+
 function Shell:Render()
     local frame = self.frame
     local state = self.state
@@ -319,6 +376,7 @@ function Shell:Render()
         frame.shell:Hide()
         frame.glance:Show()
         frame:EnableKeyboard(false)
+        PHUI.ApplyBackdrop(frame, { bgAlpha = L.GLANCE_ALPHA })
         self:RenderGlance()
         return
     end
@@ -326,10 +384,12 @@ function Shell:Render()
     frame.glance:Hide()
     frame.shell:Show()
     frame:EnableKeyboard(true)
-    frame:SetSize(L.SHELL_WIDTH, SHELL_TOTAL_HEIGHT)
+    PHUI.ApplyBackdrop(frame, { bgAlpha = L.EXPANDED_BODY_ALPHA })
 
-    self:RenderHeader()
-    self:RenderFooter()
+    local bodyHeight = (state == self.STATE.MENU) and L.MENU_BODY_HEIGHT or L.SHELL_BODY_MAX_HEIGHT
+    self:ApplyDimensions(bodyHeight)
+
+    self:ConfigureHeader()
 
     if state == self.STATE.MENU then
         self:RenderMenu()
@@ -338,6 +398,8 @@ function Shell:Render()
     elseif state == self.STATE.ALL then
         self:RenderAll(frame.shell.header.searchBox:GetText())
     end
+
+    self:ConfigureFooter()
 end
 
 --------------------------------------------------
@@ -385,7 +447,7 @@ end
 -- Header (§3 header contracts)
 --------------------------------------------------
 
-function Shell:RenderHeader()
+function Shell:ConfigureHeader()
     local header = self.frame.shell.header
     local state = self.state
 
@@ -418,11 +480,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderMenu()
+    self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
-    for _, row in ipairs(shell.menuRows) do
-        row:Hide()
-    end
 
     local rowWidth = content:GetWidth()
     local summary = Pockets.API.GetCategorySummary()
@@ -457,13 +517,10 @@ end
 --------------------------------------------------
 
 function Shell:RenderCategory(categoryID)
+    self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
-    pool:ReleaseAll(content)
-    for _, widget in ipairs(shell.categoryLabels) do
-        widget:Hide()
-    end
 
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
     local rowWidth = content:GetWidth()
@@ -547,13 +604,10 @@ local function BuildFlatSearchResults(query)
 end
 
 function Shell:RenderAll(query)
+    self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
-    pool:ReleaseAll(content)
-    for _, widget in ipairs(shell.categoryLabels) do
-        widget:Hide()
-    end
 
     local rowWidth = content:GetWidth()
     local itemSize = L.ITEM_BUTTON_SIZE
@@ -629,7 +683,7 @@ end
 -- Footer (shared by MENU/CATEGORY/ALL)
 --------------------------------------------------
 
-function Shell:RenderFooter()
+function Shell:ConfigureFooter()
     local shell = self.frame.shell
     local InventoryState = Pockets.Services.InventoryState
 

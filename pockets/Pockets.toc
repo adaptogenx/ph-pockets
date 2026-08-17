@@ -38,6 +38,7 @@ Core/StackConsolidator.lua
 
 # UI
 UI/Layout.lua
+UI/PositionStrategy.lua
 UI/ItemButtonPool.lua
 UI/Search.lua
 UI/FlowLayout.lua
@@ -62,3 +63,4 @@ Tests/FlowLayoutTests.lua
 Tests/APITests.lua
 Tests/ShellTests.lua
 Tests/StackResolverTests.lua
+Tests/PositionStrategyTests.lua

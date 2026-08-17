@@ -206,6 +206,147 @@ Pockets.Tests.TestRunner:Register("Shell: header action zones stay fixed - only 
 end)
 
 --------------------------------------------------
+-- Hard anchor rule: TOPLEFT is the origin (UI layout pass §1, §18)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: Glance -> Menu -> Category -> All -> Glance never moves TOPLEFT", function()
+    ResetToGlance()
+    local _, _, _, gx1, gy1 = Shell.frame:GetPoint()
+
+    Shell:SetState(Shell.STATE.MENU)
+    local _, _, _, mx, my = Shell.frame:GetPoint()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.CONSUMABLE })
+    local _, _, _, cx, cy = Shell.frame:GetPoint()
+
+    Shell:SetState(Shell.STATE.ALL)
+    local _, _, _, ax, ay = Shell.frame:GetPoint()
+
+    ResetToGlance()
+    local _, _, _, gx2, gy2 = Shell.frame:GetPoint()
+
+    local ok = gx1 == mx and mx == cx and cx == ax and ax == gx2
+        and gy1 == my and my == cy and cy == ay and ay == gy2
+    return ok, ok and "OK" or string.format(
+        "TOPLEFT drifted: glance=(%s,%s) menu=(%s,%s) category=(%s,%s) all=(%s,%s) glance2=(%s,%s)",
+        tostring(gx1), tostring(gy1), tostring(mx), tostring(my), tostring(cx), tostring(cy),
+        tostring(ax), tostring(ay), tostring(gx2), tostring(gy2))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: expanding from Glance grows right/down only (TOPLEFT edge fixed)", function()
+    ResetToGlance()
+    local glanceLeft, glanceTop = Shell.frame:GetLeft(), Shell.frame:GetTop()
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuLeft, menuTop = Shell.frame:GetLeft(), Shell.frame:GetTop()
+
+    ResetToGlance()
+    local ok = glanceLeft == menuLeft and glanceTop == menuTop
+    return ok, ok and "OK" or "left/top edge shifted when Glance expanded into Menu"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: PositionStrategy V1 anchor is TOPLEFT", function()
+    local ok = Pockets.UI.PositionStrategy:GetRootAnchor() == "TOPLEFT"
+    return ok, ok and "OK" or "expected the V1 position strategy to report TOPLEFT"
+end)
+
+--------------------------------------------------
+-- Height: content-driven Menu, bounded Category/All (§5, §6, §18)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: Menu body height is derived from category count, not a fixed giant viewport", function()
+    local L = Pockets.Constants.LAYOUT
+    local expected = #Pockets.Constants.CATEGORY_ORDER * L.MENU_ROW_HEIGHT + L.SHELL_PADDING * 2
+    local ok = L.MENU_BODY_HEIGHT == expected and L.MENU_BODY_HEIGHT < L.SHELL_BODY_MAX_HEIGHT
+    return ok, ok and "OK" or string.format(
+        "expected MENU_BODY_HEIGHT (%s) to equal rows*height+padding (%s) and be smaller than the Category/All viewport",
+        tostring(L.MENU_BODY_HEIGHT), tostring(expected))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Menu is shorter overall than Category/All (no giant empty body)", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local menuHeight = Shell.frame:GetHeight()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local categoryHeight = Shell.frame:GetHeight()
+
+    ResetToGlance()
+    local ok = menuHeight < categoryHeight
+    return ok, ok and "OK" or string.format("expected Menu (%s) shorter than Category (%s)",
+        tostring(menuHeight), tostring(categoryHeight))
+end)
+
+--------------------------------------------------
+-- Render cleanup: no cross-state leakage (§7, §18)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: Menu -> Category leaves zero Menu rows visible", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+    local anyVisible = false
+    for _, row in ipairs(Shell.frame.shell.menuRows) do
+        if row:IsShown() then
+            anyVisible = true
+        end
+    end
+
+    ResetToGlance()
+    local ok = not anyVisible
+    return ok, ok and "OK" or "a Menu row was still visible after switching to Category"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Category -> Menu leaves zero item buttons visible in the body", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.TRADE_GOODS })
+    Shell:GoBack() -- Category -> Menu
+
+    local pool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.shell.content)
+    local anyVisible = false
+    for _, button in ipairs(pool.active) do
+        if button:IsShown() then
+            anyVisible = true
+        end
+    end
+
+    ResetToGlance()
+    local ok = not anyVisible and #pool.active == 0
+    return ok, ok and "OK" or "an item button was still active/visible after returning from Category to Menu"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: repeated Menu<->Category transitions do not grow the row/button pool unboundedly", function()
+    Shell:SetState(Shell.STATE.MENU)
+    for _ = 1, 5 do
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+        Shell:GoBack()
+    end
+    local rowCount = #Shell.frame.shell.menuRows
+    ResetToGlance()
+    local ok = rowCount == #Pockets.Constants.CATEGORY_ORDER
+    return ok, ok and "OK" or string.format(
+        "expected the Menu row pool to stay at exactly %d rows, got %d",
+        #Pockets.Constants.CATEGORY_ORDER, rowCount)
+end)
+
+--------------------------------------------------
+-- Footer stability (§14, §18)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: removing Ammo from the footer does not shift the Bags anchor", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local shell = Shell.frame.shell
+    local bagsLeftBefore = shell.footerBagsText:GetLeft()
+
+    shell.footerAmmoText:Show() -- simulate an ammo pool being present
+    Shell:ConfigureFooter() -- re-derives visibility from real (ammo-less) state, hiding it again
+    local bagsLeftAfter = shell.footerBagsText:GetLeft()
+
+    ResetToGlance()
+    local ok = bagsLeftBefore == bagsLeftAfter
+    return ok, ok and "OK" or "Bags anchor moved when Ammo visibility changed"
+end)
+
+--------------------------------------------------
 -- Render smoke tests
 --------------------------------------------------
 

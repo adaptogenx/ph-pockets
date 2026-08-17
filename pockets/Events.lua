@@ -43,6 +43,21 @@ local function EnsureSavedVariables()
     if not PocketsDB.settings.hud then
         PocketsDB.settings.hud = Pockets.Constants.DEFAULT_SETTINGS.hud
     end
+    -- One-time migration: Pockets' V1 positioning uses a single fixed
+    -- TOPLEFT anchor (UI layout pass §1). A position saved under the old
+    -- CENTER-anchored scheme can't be meaningfully reprojected without a
+    -- live frame, so it's reset to the TOPLEFT default rather than left
+    -- to produce a mismatched anchor.
+    if PocketsDB.settings.hud.point ~= "TOPLEFT" then
+        local locked = PocketsDB.settings.hud.locked
+        PocketsDB.settings.hud = {
+            point = Pockets.Constants.DEFAULT_SETTINGS.hud.point,
+            relativePoint = Pockets.Constants.DEFAULT_SETTINGS.hud.relativePoint,
+            x = Pockets.Constants.DEFAULT_SETTINGS.hud.x,
+            y = Pockets.Constants.DEFAULT_SETTINGS.hud.y,
+            locked = locked or false,
+        }
+    end
 
     if not PocketsCharDB then
         PocketsCharDB = { debug = { enabled = false, verbose = false } }
