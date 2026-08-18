@@ -221,14 +221,6 @@ function Shell:BuildShell()
     shell.menuRows = {}
     shell.categoryLabels = {}
     shell.categoryListRows = {}
-    -- A dedicated ItemButtonPool key (not `shell.content`, which Grid's
-    -- own pool uses) - List rows are acquired ONCE and reused indefinitely
-    -- (unlike Grid's per-render Acquire/ReleaseAll), and each one is
-    -- resized/reparented for the row layout. Sharing Grid's pool key
-    -- would let a resized List row get recycled back into Grid mode
-    -- still shaped like a List row. Never visually shown itself - purely
-    -- a stable pool-key/CreateFrame-parent object.
-    shell.categoryListPoolAnchor = CreateFrame("Frame", nil, shell)
 
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
     -- the control occupying a zone changes, the zone itself never moves.
@@ -313,6 +305,20 @@ function Shell:BuildShell()
     shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2)
     shell.content:SetHeight(1)
     shell.scrollFrame:SetScrollChild(shell.content)
+
+    -- A dedicated ItemButtonPool key (not `shell.content` itself, which
+    -- Grid's own pool uses) - List rows are acquired ONCE and reused
+    -- indefinitely (unlike Grid's per-render Acquire/ReleaseAll), and
+    -- each one is resized/reparented for the row layout. Sharing Grid's
+    -- pool key would let a resized List row get recycled back into Grid
+    -- mode still shaped like a List row. MUST be parented under
+    -- `shell.content` (not a sibling of it) - WoW only clips/scrolls a
+    -- ScrollFrame's actual frame DESCENDANTS, not frames merely
+    -- SetPoint-anchored relative to its scroll child. A sibling parent
+    -- here previously let List rows render entirely unclipped, spilling
+    -- past the panel and even the footer once a category had more items
+    -- than fit the visible viewport.
+    shell.categoryListPoolAnchor = CreateFrame("Frame", nil, shell.content)
 end
 
 function Shell:Initialize()

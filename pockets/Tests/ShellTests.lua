@@ -784,6 +784,35 @@ Pockets.Tests.TestRunner:Register("CategoryList: exactly 8 items (the cap) - sti
     return true, "OK"
 end)
 
+-- WoW only clips/scrolls a ScrollFrame's actual frame DESCENDANTS, not
+-- frames merely SetPoint-anchored relative to its scroll child. List
+-- rows previously lived in a pool parented as a SIBLING of
+-- shell.content, so they rendered unclipped and spilled straight past
+-- the panel (and the footer) once a category had more items than the
+-- visible viewport (vertical scrolling overflow fix).
+Pockets.Tests.TestRunner:Register("CategoryList: rows are real frame descendants of the scrollable content (not just SetPoint-adjacent)", function()
+    WithNItems(3, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+        local row = Shell.frame.shell.categoryListRows[1]
+        local isDescendant = false
+        local ancestor = row and row:GetParent()
+        while ancestor do
+            if ancestor == Shell.frame.shell.content then
+                isDescendant = true
+                break
+            end
+            ancestor = ancestor:GetParent()
+        end
+        if not isDescendant then
+            error("expected a Category List row's frame ancestry to include shell.content", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
 Pockets.Tests.TestRunner:Register("CategoryList: 9 items - scrollbar appears", function()
     CheckListScrollState(Pockets.Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS + 1, true)
     return true, "OK"
