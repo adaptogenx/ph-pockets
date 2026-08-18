@@ -566,17 +566,50 @@ Pockets.Tests.TestRunner:Register("Shell: Menu body height is derived from categ
         tostring(L.MENU_BODY_HEIGHT), tostring(expected))
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: Menu is shorter overall than Category/All (no giant empty body)", function()
+-- Dynamic body height pass: Category/All no longer always claim
+-- SHELL_BODY_MAX_HEIGHT - they grow to fit actual content, floored at
+-- SHELL_BODY_MIN_HEIGHT and capped at SHELL_BODY_MAX_HEIGHT.
+Pockets.Tests.TestRunner:Register("Shell: Category body height with a small item count is well under the max (not pinned to it)", function()
+    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    Pockets.API.GetAggregatedCategoryItems = function()
+        return { { itemID = 1, name = "Solo Item", texture = 1, quantity = 1, bagID = 0, slotID = 1 } }
+    end
+
     Shell:SetState(Shell.STATE.MENU)
-    local menuHeight = Shell.frame:GetHeight()
-
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
-    local categoryHeight = Shell.frame:GetHeight()
+    local height = Shell.frame:GetHeight()
+    local L = Pockets.Constants.LAYOUT
+    local maxTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MAX_HEIGHT + L.SHELL_FOOTER_HEIGHT
+    local minTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MIN_HEIGHT + L.SHELL_FOOTER_HEIGHT
 
+    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
     ResetToGlance()
-    local ok = menuHeight < categoryHeight
-    return ok, ok and "OK" or string.format("expected Menu (%s) shorter than Category (%s)",
-        tostring(menuHeight), tostring(categoryHeight))
+
+    local ok = height == minTotal and height < maxTotal
+    return ok, ok and "OK" or string.format(
+        "expected height clamped to the minimum (%s), got %s (max would be %s)",
+        tostring(minTotal), tostring(height), tostring(maxTotal))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Category body height grows to (but never past) the max once content overflows", function()
+    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    local manyItems = {}
+    for i = 1, 200 do
+        manyItems[i] = { itemID = i, name = "Item " .. i, texture = 1, quantity = 1, bagID = 0, slotID = i }
+    end
+    Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
+
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local height = Shell.frame:GetHeight()
+    local L = Pockets.Constants.LAYOUT
+    local maxTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MAX_HEIGHT + L.SHELL_FOOTER_HEIGHT
+
+    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
+    ResetToGlance()
+
+    local ok = height == maxTotal
+    return ok, ok and "OK" or string.format("expected height capped at max (%s), got %s", tostring(maxTotal), tostring(height))
 end)
 
 --------------------------------------------------

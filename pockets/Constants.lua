@@ -135,10 +135,13 @@ Constants.LAYOUT = {
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
     -- "Stable application shell"). Total HEIGHT is intentionally NOT
-    -- shared - Menu's body is content-driven (MENU_BODY_HEIGHT, derived
-    -- below from the fixed category count) while Category/All get a
-    -- bounded, scrollable browsing viewport (SHELL_BODY_MAX_HEIGHT). The
-    -- invariant is position stability, not identical frame height.
+    -- shared - Menu's body is a fixed constant (MENU_BODY_HEIGHT, derived
+    -- below from the fixed category count) while Category/All are
+    -- dynamic: their body grows to fit actual content between
+    -- SHELL_BODY_MIN_HEIGHT and SHELL_BODY_MAX_HEIGHT (a scrollbar only
+    -- appears past the max), rather than always claiming the max whether
+    -- or not the content needs it. The invariant is position stability,
+    -- not identical frame height.
     -- Wide enough that Category/All's item grid defaults to 5 columns
     -- (5*ITEM_BUTTON_SIZE + 4*ITEM_BUTTON_GAP = 216, plus a few px slack)
     -- when no scrollbar is showing - narrower values (192, and the
@@ -148,6 +151,11 @@ Constants.LAYOUT = {
     SHELL_WIDTH = 236,
     SHELL_PADDING = 8,
     SHELL_HEADER_HEIGHT = 26,
+    -- Sensible floor for Category/All's dynamic body height (dynamic
+    -- height pass) - comfortably fits one Grid item row or two List rows
+    -- even for a near-empty category, so the panel never collapses to
+    -- something absurdly thin.
+    SHELL_BODY_MIN_HEIGHT = 64,
     SHELL_BODY_MAX_HEIGHT = 260,
     SHELL_FOOTER_HEIGHT = 22,
     -- Fixed left (back) and right (+/search) header action-zone widths -

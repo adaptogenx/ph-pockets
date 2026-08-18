@@ -51,6 +51,22 @@ local function TotalHeightForBody(bodyHeight)
     return L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
 end
 
+-- The body viewport's width never actually varies (SHELL_WIDTH is
+-- constant across every expanded state), so this is a fixed computation
+-- rather than a live frame read - lets Category/All renderers plan their
+-- layout (and thus their own dynamic height) before calling
+-- ApplyDimensions, instead of needing the frame already sized first.
+local function BodyViewportWidth()
+    return L.SHELL_WIDTH - L.SHELL_PADDING * 2
+end
+
+-- Dynamic body height (dynamic height pass): grows to fit actual content,
+-- floored at a sensible minimum and capped at the bounded/scrollable
+-- maximum - never just claims the max whether or not content needs it.
+local function ClampBodyHeight(contentHeight)
+    return math.min(math.max(contentHeight, L.SHELL_BODY_MIN_HEIGHT), L.SHELL_BODY_MAX_HEIGHT)
+end
+
 -- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
 -- Blizzard scrollbar widget UIPanelScrollFrameTemplate creates as
 -- "<name>ScrollBar" - callers are responsible for sizing `content` to
@@ -489,12 +505,16 @@ function Shell:Render()
     frame:EnableKeyboard(true)
     PHUI.ApplyBackdrop(frame, { bgAlpha = L.EXPANDED_BODY_ALPHA })
 
-    local bodyHeight = (state == self.STATE.MENU) and L.MENU_BODY_HEIGHT or L.SHELL_BODY_MAX_HEIGHT
-    self:ApplyDimensions(bodyHeight)
-
     self:ConfigureHeader()
 
+    -- Menu's height is a fixed constant (always all 8 categories), so it
+    -- applies dimensions here. Category/All are content-driven (dynamic
+    -- height pass) - each computes its own actual content height and
+    -- calls ApplyDimensions itself, clamped between a sensible minimum
+    -- and the bounded/scrollable maximum, instead of always claiming the
+    -- maximum whether or not the content needs it.
     if state == self.STATE.MENU then
+        self:ApplyDimensions(L.MENU_BODY_HEIGHT)
         self:RenderMenu()
     elseif state == self.STATE.CATEGORY then
         self:RenderCategory(self.context.categoryID)
@@ -672,19 +692,23 @@ function Shell:RenderCategoryGrid(categoryID)
     -- Conditional scrollbar (§4): FlowLayout:PlanFlat is a pure geometry
     -- function (no widget creation), so it's cheap to try at the full
     -- viewport width first and only redo it narrower - once - if that
-    -- would actually overflow. Real item buttons only ever get
-    -- created/positioned once, from whichever plan is final.
-    local viewportWidth = shell.scrollFrame:GetWidth()
-    local viewportHeight = shell.scrollFrame:GetHeight()
+    -- would actually overflow the MAX body height. Real item buttons
+    -- only ever get created/positioned once, from whichever plan is
+    -- final. Width is a constant (BodyViewportWidth), not read off the
+    -- live frame, so this can run before the frame is sized for this
+    -- render at all (dynamic height pass - ApplyDimensions runs below,
+    -- once the actual content height is known).
+    local viewportWidth = BodyViewportWidth()
 
     local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
-    local needsScrollbar = plan.contentHeight > viewportHeight
+    local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
     local usableWidth = viewportWidth
     if needsScrollbar then
         usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
         plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
     end
 
+    self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
     content:SetWidth(usableWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -771,13 +795,14 @@ function Shell:RenderCategoryList(categoryID)
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
 
     -- Same conditional-scrollbar rule as Grid/Menu (§4/§10): fixed row
-    -- height makes this pure arithmetic, no FlowLayout call needed.
-    local viewportWidth = shell.scrollFrame:GetWidth()
-    local viewportHeight = shell.scrollFrame:GetHeight()
+    -- height makes this pure arithmetic, no FlowLayout call needed. Width
+    -- is a constant (dynamic height pass - see RenderCategoryGrid's note).
+    local viewportWidth = BodyViewportWidth()
     local contentHeight = #items * L.CATEGORY_LIST_ROW_HEIGHT
-    local needsScrollbar = contentHeight > viewportHeight
+    local needsScrollbar = contentHeight > L.SHELL_BODY_MAX_HEIGHT
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
+    self:ApplyDimensions(ClampBodyHeight(contentHeight))
     content:SetWidth(rowWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -889,20 +914,24 @@ function Shell:RenderAll(query)
 
     -- Conditional scrollbar (§4): try the full viewport width first (both
     -- FlowLayout functions are pure geometry, no widget creation), redo
-    -- once narrower only if that would actually overflow. Real widgets
-    -- only ever get created/positioned once, from the final plan.
-    local viewportWidth = shell.scrollFrame:GetWidth()
-    local viewportHeight = shell.scrollFrame:GetHeight()
+    -- once narrower only if that would actually overflow the MAX body
+    -- height. Real widgets only ever get created/positioned once, from
+    -- the final plan. Width is a constant, not read off the live frame
+    -- (dynamic height pass - RenderAll can also be called directly from
+    -- the search box, bypassing Shell:Render(), so it must be able to
+    -- size itself unconditionally here too).
+    local viewportWidth = BodyViewportWidth()
 
     if hasQuery then
         local items = BuildFlatSearchResults(query)
         local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = itemSize, gap = gap })
-        local needsScrollbar = plan.contentHeight > viewportHeight
+        local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
         local usableWidth = viewportWidth
         if needsScrollbar then
             usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
             plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = itemSize, gap = gap })
         end
+        self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
         content:SetWidth(usableWidth)
         SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -942,7 +971,7 @@ function Shell:RenderAll(query)
         gap = gap,
         labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
     })
-    local needsScrollbar = plan.contentHeight > viewportHeight
+    local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
     local usableWidth = viewportWidth
     if needsScrollbar then
         usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
@@ -953,6 +982,7 @@ function Shell:RenderAll(query)
             labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
         })
     end
+    self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
     content:SetWidth(usableWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
