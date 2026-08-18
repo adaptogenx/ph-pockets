@@ -135,13 +135,13 @@ Constants.LAYOUT = {
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
     -- "Stable application shell"). Total HEIGHT is intentionally NOT
-    -- shared - Menu's body is a fixed constant (MENU_BODY_HEIGHT, derived
-    -- below from the fixed category count) while Category/All are
-    -- dynamic: their body grows to fit actual content between
-    -- SHELL_BODY_MIN_HEIGHT and SHELL_BODY_MAX_HEIGHT (a scrollbar only
-    -- appears past the max), rather than always claiming the max whether
-    -- or not the content needs it. The invariant is position stability,
-    -- not identical frame height.
+    -- shared - every expanded state's body grows to fit its actual
+    -- visible content between SHELL_BODY_MIN_HEIGHT and
+    -- SHELL_BODY_MAX_HEIGHT (a scrollbar only appears past the max;
+    -- Category List uses its own row-count-based cap instead - see
+    -- CATEGORY_LIST_MAX_VISIBLE_ROWS), rather than always claiming the
+    -- max whether or not the content needs it. The invariant is position
+    -- stability, not identical frame height.
     -- Wide enough that Category/All's item grid defaults to 5 columns
     -- (5*ITEM_BUTTON_SIZE + 4*ITEM_BUTTON_GAP = 216, plus a few px slack)
     -- when no scrollbar is showing - narrower values (192, and the
@@ -163,14 +163,26 @@ Constants.LAYOUT = {
     SHELL_HEADER_SIDE_WIDTH = 20,
     SHELL_HEADER_RIGHT_WIDTH = 60,
 
-    -- Category row layout: fixed conceptual columns ICON | LABEL | FLEX |
-    -- COUNT | CHEVRON (§3, §11) - only LABEL/FLEX ever changes width.
-    MENU_ROW_HEIGHT = 24,
-    MENU_ROW_ICON_SIZE = 16,
-    MENU_ROW_PADDING = 4,
-    MENU_ROW_GAP = 4,
-    MENU_ROW_COUNT_WIDTH = 26,
-    MENU_ROW_CHEVRON_WIDTH = 16,
+    -- Shared Pockets list-row visual geometry (row unification pass) -
+    -- Category List is the visual source of truth; Menu category rows
+    -- and Category item rows are the SAME row component (same height,
+    -- icon size, padding, gap, count column, hover treatment), only
+    -- their semantics differ. Fixed conceptual columns ICON | LABEL |
+    -- FLEX | COUNT | CHEVRON - only LABEL/FLEX ever changes width, and
+    -- item rows reserve the same trailing CHEVRON column (left empty)
+    -- so their count lines up with category rows' count exactly.
+    LIST_ROW_HEIGHT = 30,
+    LIST_ICON_SIZE = 24,
+    LIST_ROW_PADDING = 4,
+    LIST_ROW_GAP = 4,
+    LIST_ROW_COUNT_WIDTH = 26,
+    LIST_ROW_CHEVRON_WIDTH = 16,
+
+    -- Category List's own visible-row cap (List max-height pass) -
+    -- deliberately separate from Grid/All's SHELL_BODY_MAX_HEIGHT since
+    -- this is row-count-based, not a raw pixel cap. Implementation
+    -- constant, not a user preference yet.
+    CATEGORY_LIST_MAX_VISIBLE_ROWS = 8,
 
     -- Real Blizzard scrollbar + the gap PHUI leaves beside it - the width
     -- reclaimed from the body when no scrollbar is needed (§4).
@@ -188,11 +200,6 @@ Constants.LAYOUT = {
     FULL_INVENTORY_LABEL_ICON_SIZE = 12,
     FULL_INVENTORY_LABEL_ICON_GAP = 4,
 
-    -- Category List view: same compact visual grammar as Menu rows
-    -- (MENU_ROW_PADDING/GAP/COUNT_WIDTH, reused directly).
-    CATEGORY_LIST_ROW_HEIGHT = 30,
-    CATEGORY_LIST_ICON_SIZE = 24,
-
     -- Centralized expanded-surface opacity (UI layout pass §9) - Glance
     -- keeps the lighter, passive-HUD-like alpha; every expanded state
     -- (Menu/Category/All) uses one shared, more opaque body alpha plus a
@@ -203,12 +210,20 @@ Constants.LAYOUT = {
     EXPANDED_CHROME_ALPHA = 0.96,
 }
 
--- Menu's body height is derived, not hand-tuned: HEADER + one row per
--- category + FOOTER + top/bottom padding, and nothing else (§5 "no giant
--- empty body"). Computed once here (not per-render) since the category
--- count is fixed at load time.
-Constants.LAYOUT.MENU_BODY_HEIGHT = #Constants.CATEGORY_ORDER * Constants.LAYOUT.MENU_ROW_HEIGHT
+-- Category List's max browsing height before a scrollbar takes over
+-- (List max-height pass): exactly CATEGORY_LIST_MAX_VISIBLE_ROWS full
+-- rows, not a raw pixel budget that happens to leave slack for a
+-- non-integer row count.
+Constants.LAYOUT.CATEGORY_LIST_MAX_BODY_HEIGHT = Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS
+    * Constants.LAYOUT.LIST_ROW_HEIGHT
     + Constants.LAYOUT.SHELL_PADDING * 2
+
+-- NOTE: Menu's body height is NOT a load-time constant - zero-count
+-- categories are hidden at render time (§10 of the row-unification
+-- pass), so the visible row count (and thus height) can only be known
+-- when Shell:RenderMenu() actually reads live category counts. See
+-- Shell.lua's RenderMenu, which computes and applies it per-render the
+-- same way Category/All already do.
 
 -- Glance's width is the true minimum that fits [padding][icon][gap]
 -- [text column][padding] with zero slack - never hand-picked, so it can

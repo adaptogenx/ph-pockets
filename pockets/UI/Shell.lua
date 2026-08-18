@@ -43,10 +43,11 @@ local ESCAPE_PARENT = {
     [Shell.STATE.MENU] = Shell.STATE.GLANCE,
 }
 
--- Root total height for a given body height (UI layout pass §6): Menu's
--- body is content-driven (L.MENU_BODY_HEIGHT), Category/All get a fixed
--- bounded viewport (L.SHELL_BODY_MAX_HEIGHT) - the shared invariant is
--- TOPLEFT/width/header/footer stability, not identical total height.
+-- Root total height for a given body height (UI layout pass §6): every
+-- expanded state's body height is computed dynamically from actual
+-- content (visible category count for Menu, laid-out items for
+-- Category/All) - the shared invariant is TOPLEFT/width/header/footer
+-- stability, not identical total height.
 local function TotalHeightForBody(bodyHeight)
     return L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
 end
@@ -109,16 +110,16 @@ end
 -- 3-digit count never shifts the label and the chevron never moves.
 local function CreateMenuRow(parent, rowWidth)
     local row = CreateFrame("Button", nil, parent)
-    row:SetHeight(L.MENU_ROW_HEIGHT)
+    row:SetHeight(L.LIST_ROW_HEIGHT)
     row:SetWidth(rowWidth)
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(L.MENU_ROW_ICON_SIZE, L.MENU_ROW_ICON_SIZE)
-    row.icon:SetPoint("LEFT", row, "LEFT", L.MENU_ROW_PADDING, 0)
+    row.icon:SetSize(L.LIST_ICON_SIZE, L.LIST_ICON_SIZE)
+    row.icon:SetPoint("LEFT", row, "LEFT", L.LIST_ROW_PADDING, 0)
 
     row.count = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
-    row.count:SetPoint("RIGHT", row, "RIGHT", -(L.MENU_ROW_PADDING + L.MENU_ROW_CHEVRON_WIDTH + L.MENU_ROW_GAP), 0)
-    row.count:SetWidth(L.MENU_ROW_COUNT_WIDTH)
+    row.count:SetPoint("RIGHT", row, "RIGHT", -(L.LIST_ROW_PADDING + L.LIST_ROW_CHEVRON_WIDTH + L.LIST_ROW_GAP), 0)
+    row.count:SetWidth(L.LIST_ROW_COUNT_WIDTH)
     row.count:SetJustifyH("RIGHT")
 
     -- An unmistakable ">" navigation affordance, not the old ambiguous
@@ -131,23 +132,22 @@ local function CreateMenuRow(parent, rowWidth)
     local mutedColor = PHUI.Colors.TEXT_MUTED
     row.chevron:SetTextColor(mutedColor[1], mutedColor[2], mutedColor[3], mutedColor[4] or 1)
     row.chevron:SetText(">")
-    row.chevron:SetWidth(L.MENU_ROW_CHEVRON_WIDTH)
+    row.chevron:SetWidth(L.LIST_ROW_CHEVRON_WIDTH)
     row.chevron:SetJustifyH("CENTER")
-    row.chevron:SetPoint("RIGHT", row, "RIGHT", -L.MENU_ROW_PADDING, 0)
+    row.chevron:SetPoint("RIGHT", row, "RIGHT", -L.LIST_ROW_PADDING, 0)
 
     row.label = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
-    row.label:SetPoint("LEFT", row.icon, "RIGHT", L.MENU_ROW_GAP, 0)
-    row.label:SetPoint("RIGHT", row.count, "LEFT", -L.MENU_ROW_GAP, 0)
+    row.label:SetPoint("LEFT", row.icon, "RIGHT", L.LIST_ROW_GAP, 0)
+    row.label:SetPoint("RIGHT", row.count, "LEFT", -L.LIST_ROW_GAP, 0)
     row.label:SetJustifyH("LEFT")
     row.label:SetWordWrap(false)
 
-    row.highlight = row:CreateTexture(nil, "BACKGROUND")
-    row.highlight:SetAllPoints(row)
-    local hoverColor = PHUI.Colors.HOVER
-    row.highlight:SetColorTexture(hoverColor[1], hoverColor[2], hoverColor[3], hoverColor[4] or 1)
-    row.highlight:Hide()
-    row:HookScript("OnEnter", function(self) self.highlight:Show() end)
-    row:HookScript("OnLeave", function(self) self.highlight:Hide() end)
+    -- Same full-row hover treatment Category List rows get for free from
+    -- ItemButtonTemplate (row unification pass §8) - the standard
+    -- Blizzard button highlight, not a bespoke PHUI overlay, so both row
+    -- types share one hover mechanism instead of two different-looking
+    -- ones.
+    row:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
     return row
 end
@@ -507,14 +507,10 @@ function Shell:Render()
 
     self:ConfigureHeader()
 
-    -- Menu's height is a fixed constant (always all 8 categories), so it
-    -- applies dimensions here. Category/All are content-driven (dynamic
-    -- height pass) - each computes its own actual content height and
-    -- calls ApplyDimensions itself, clamped between a sensible minimum
-    -- and the bounded/scrollable maximum, instead of always claiming the
-    -- maximum whether or not the content needs it.
+    -- Every branch here computes its own actual content height and calls
+    -- ApplyDimensions itself (dynamic height pass) - none of them just
+    -- claim a fixed/maximum height regardless of what's actually shown.
     if state == self.STATE.MENU then
-        self:ApplyDimensions(L.MENU_BODY_HEIGHT)
         self:RenderMenu()
     elseif state == self.STATE.CATEGORY then
         self:RenderCategory(self.context.categoryID)
@@ -604,23 +600,28 @@ function Shell:RenderMenu()
     local shell = self.frame.shell
     local content = shell.content
 
-    -- Menu is content-driven (MENU_BODY_HEIGHT already sizes the
-    -- viewport to exactly fit every category row), so a scrollbar here
-    -- only means real overflow (e.g. screen clamping) - not the normal
-    -- case (§4 "only allow Menu scrolling if screen clamping creates a
-    -- real overflow situation").
-    local summary = Pockets.API.GetCategorySummary()
-    local contentHeight = #summary * L.MENU_ROW_HEIGHT
-    local viewportWidth = shell.scrollFrame:GetWidth()
-    local viewportHeight = shell.scrollFrame:GetHeight()
-    local needsScrollbar = contentHeight > viewportHeight
+    -- Zero-count categories are absent, not shown as empty rows (§10) -
+    -- Menu's height (and thus, in practice, whether it can ever overflow
+    -- at all) is entirely a function of how many categories are actually
+    -- visible right now, never the fixed full taxonomy.
+    local visible = {}
+    for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
+        if entry.count > 0 then
+            table.insert(visible, entry)
+        end
+    end
+
+    local viewportWidth = BodyViewportWidth()
+    local contentHeight = #visible * L.LIST_ROW_HEIGHT
+    local needsScrollbar = contentHeight > L.SHELL_BODY_MAX_HEIGHT
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
+    self:ApplyDimensions(ClampBodyHeight(contentHeight))
     content:SetWidth(rowWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
     local y = 0
-    for index, entry in ipairs(summary) do
+    for index, entry in ipairs(visible) do
         local row = shell.menuRows[index]
         if not row then
             row = CreateMenuRow(content, rowWidth)
@@ -639,7 +640,7 @@ function Shell:RenderMenu()
         end)
         row:Show()
 
-        y = y + L.MENU_ROW_HEIGHT
+        y = y + L.LIST_ROW_HEIGHT
     end
 
     content:SetHeight(math.max(contentHeight, 1))
@@ -730,7 +731,7 @@ end
 -- interaction target (§8), with name/qty labels anchored onto it.
 local function CreateCategoryListRow(poolAnchor)
     local row = Pockets.UI.ItemButtonPool:Acquire(poolAnchor)
-    row:SetHeight(L.CATEGORY_LIST_ROW_HEIGHT)
+    row:SetHeight(L.LIST_ROW_HEIGHT)
 
     if not row.categoryListInitialized then
         row.categoryListInitialized = true
@@ -740,8 +741,8 @@ local function CreateCategoryListRow(poolAnchor)
         -- small square on the left so widening the row (below) doesn't
         -- stretch the item art across the whole row.
         row.icon:ClearAllPoints()
-        row.icon:SetPoint("LEFT", row, "LEFT", L.MENU_ROW_PADDING, 0)
-        row.icon:SetSize(L.CATEGORY_LIST_ICON_SIZE, L.CATEGORY_LIST_ICON_SIZE)
+        row.icon:SetPoint("LEFT", row, "LEFT", L.LIST_ROW_PADDING, 0)
+        row.icon:SetSize(L.LIST_ICON_SIZE, L.LIST_ICON_SIZE)
         if row.IconBorder then
             row.IconBorder:ClearAllPoints()
             row.IconBorder:SetAllPoints(row.icon)
@@ -773,16 +774,21 @@ local function CreateCategoryListRow(poolAnchor)
         -- own hover highlight.
 
         row.name = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
-        row.name:SetPoint("LEFT", row.icon, "RIGHT", L.MENU_ROW_GAP, 0)
+        row.name:SetPoint("LEFT", row.icon, "RIGHT", L.LIST_ROW_GAP, 0)
         row.name:SetJustifyH("LEFT")
         row.name:SetWordWrap(false)
 
+        -- Reserves the same trailing CHEVRON column Menu rows use, left
+        -- empty here (item rows never navigate deeper - §7), so the
+        -- count/qty column sits at the exact same X coordinate in both
+        -- row types regardless of the chevron only existing in one of
+        -- them.
         row.qty = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
-        row.qty:SetPoint("RIGHT", row, "RIGHT", -L.MENU_ROW_PADDING, 0)
-        row.qty:SetWidth(L.MENU_ROW_COUNT_WIDTH)
+        row.qty:SetPoint("RIGHT", row, "RIGHT", -(L.LIST_ROW_PADDING + L.LIST_ROW_CHEVRON_WIDTH + L.LIST_ROW_GAP), 0)
+        row.qty:SetWidth(L.LIST_ROW_COUNT_WIDTH)
         row.qty:SetJustifyH("RIGHT")
 
-        row.name:SetPoint("RIGHT", row.qty, "LEFT", -L.MENU_ROW_GAP, 0)
+        row.name:SetPoint("RIGHT", row.qty, "LEFT", -L.LIST_ROW_GAP, 0)
     end
 
     return row
@@ -794,15 +800,21 @@ function Shell:RenderCategoryList(categoryID)
 
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
 
-    -- Same conditional-scrollbar rule as Grid/Menu (§4/§10): fixed row
-    -- height makes this pure arithmetic, no FlowLayout call needed. Width
-    -- is a constant (dynamic height pass - see RenderCategoryGrid's note).
+    -- List max-height pass: capped by row COUNT
+    -- (CATEGORY_LIST_MAX_VISIBLE_ROWS), not the generic Grid/All pixel
+    -- budget (SHELL_BODY_MAX_HEIGHT) - 8 whole rows should be visible
+    -- before a scrollbar appears, not however many happen to fit under an
+    -- unrelated pixel cap. Fixed row height makes this pure arithmetic,
+    -- no FlowLayout call needed. Width is a constant (dynamic height pass
+    -- - see RenderCategoryGrid's note).
     local viewportWidth = BodyViewportWidth()
-    local contentHeight = #items * L.CATEGORY_LIST_ROW_HEIGHT
-    local needsScrollbar = contentHeight > L.SHELL_BODY_MAX_HEIGHT
+    local contentHeight = #items * L.LIST_ROW_HEIGHT
+    local maxVisibleHeight = L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT
+    local needsScrollbar = contentHeight > maxVisibleHeight
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
+    local bodyHeight = needsScrollbar and maxVisibleHeight or math.max(contentHeight, L.SHELL_BODY_MIN_HEIGHT)
 
-    self:ApplyDimensions(ClampBodyHeight(contentHeight))
+    self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -833,7 +845,7 @@ function Shell:RenderCategoryList(categoryID)
         end
 
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * L.CATEGORY_LIST_ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
         row:Show()
     end
 

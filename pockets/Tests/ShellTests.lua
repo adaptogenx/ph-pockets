@@ -557,13 +557,271 @@ end)
 -- Height: content-driven Menu, bounded Category/All (§5, §6, §18)
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("Shell: Menu body height is derived from category count, not a fixed giant viewport", function()
+-- Row unification pass (§10/§11): zero-count categories are hidden, so
+-- Menu's height is derived at render time from the VISIBLE category
+-- count, not a load-time constant covering the full taxonomy.
+Pockets.Tests.TestRunner:Register("Shell: Menu body height is derived from the visible (non-zero) category count", function()
     local L = Pockets.Constants.LAYOUT
-    local expected = #Pockets.Constants.CATEGORY_ORDER * L.MENU_ROW_HEIGHT + L.SHELL_PADDING * 2
-    local ok = L.MENU_BODY_HEIGHT == expected and L.MENU_BODY_HEIGHT < L.SHELL_BODY_MAX_HEIGHT
-    return ok, ok and "OK" or string.format(
-        "expected MENU_BODY_HEIGHT (%s) to equal rows*height+padding (%s) and be smaller than the Category/All viewport",
-        tostring(L.MENU_BODY_HEIGHT), tostring(expected))
+    local originalGetSummary = Pockets.API.GetCategorySummary
+    Pockets.API.GetCategorySummary = function()
+        return {
+            { categoryID = "a", label = "A", icon = 1, count = 3 },
+            { categoryID = "b", label = "B", icon = 1, count = 0 },
+            { categoryID = "c", label = "C", icon = 1, count = 5 },
+        }
+    end
+
+    Shell:SetState(Shell.STATE.MENU)
+    local height = Shell.frame:GetHeight()
+
+    Pockets.API.GetCategorySummary = originalGetSummary
+    ResetToGlance()
+
+    -- 2 visible rows (zero-count "b" hidden) + header/footer/padding.
+    local expected = L.SHELL_HEADER_HEIGHT + math.max(2 * L.LIST_ROW_HEIGHT, L.SHELL_BODY_MIN_HEIGHT) + L.SHELL_FOOTER_HEIGHT
+    local ok = height == expected
+    return ok, ok and "OK" or string.format("expected height %s for 2 visible categories, got %s",
+        tostring(expected), tostring(height))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Menu hides zero-count categories entirely (no empty rows)", function()
+    local originalGetSummary = Pockets.API.GetCategorySummary
+    Pockets.API.GetCategorySummary = function()
+        return {
+            { categoryID = "a", label = "A", icon = 1, count = 0 },
+            { categoryID = "b", label = "B", icon = 1, count = 2 },
+        }
+    end
+
+    Shell:SetState(Shell.STATE.MENU)
+    local visibleLabels = {}
+    for _, row in ipairs(Shell.frame.shell.menuRows) do
+        if row:IsShown() then
+            table.insert(visibleLabels, row.label:GetText())
+        end
+    end
+
+    Pockets.API.GetCategorySummary = originalGetSummary
+    ResetToGlance()
+
+    local ok = #visibleLabels == 1 and visibleLabels[1] == "B"
+    return ok, ok and "OK" or "expected exactly one visible row (the non-zero category)"
+end)
+
+--------------------------------------------------
+-- Row unification: Menu category rows and Category List item rows share
+-- one visual row component (§1-§9)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("RowUnification: Menu row height equals Category List row height", function()
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuRowHeight = Shell.frame.shell.menuRows[1] and Shell.frame.shell.menuRows[1]:GetHeight()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local listRowHeight = Shell.frame.shell.categoryListRows[1] and Shell.frame.shell.categoryListRows[1]:GetHeight()
+
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    ResetToGlance()
+
+    local ok = menuRowHeight and listRowHeight and menuRowHeight == listRowHeight
+        and menuRowHeight == Pockets.Constants.LAYOUT.LIST_ROW_HEIGHT
+    return ok, ok and "OK" or string.format("expected equal row heights, got menu=%s list=%s",
+        tostring(menuRowHeight), tostring(listRowHeight))
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: Menu icon size equals Category List icon size", function()
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuIconSize = Shell.frame.shell.menuRows[1] and select(1, Shell.frame.shell.menuRows[1].icon:GetSize())
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local listIconSize = Shell.frame.shell.categoryListRows[1] and select(1, Shell.frame.shell.categoryListRows[1].icon:GetSize())
+
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    ResetToGlance()
+
+    local ok = menuIconSize and listIconSize and menuIconSize == listIconSize
+        and menuIconSize == Pockets.Constants.LAYOUT.LIST_ICON_SIZE
+    return ok, ok and "OK" or string.format("expected equal icon sizes, got menu=%s list=%s",
+        tostring(menuIconSize), tostring(listIconSize))
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: category label and item name start at the same X", function()
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuLabelLeft = Shell.frame.shell.menuRows[1] and Shell.frame.shell.menuRows[1].label:GetLeft()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local itemNameLeft = Shell.frame.shell.categoryListRows[1] and Shell.frame.shell.categoryListRows[1].name:GetLeft()
+
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    ResetToGlance()
+
+    local ok = menuLabelLeft and itemNameLeft and math.abs(menuLabelLeft - itemNameLeft) < 0.01
+    return ok, ok and "OK" or string.format("expected matching label X, got menu=%s item=%s",
+        tostring(menuLabelLeft), tostring(itemNameLeft))
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: category count and item qty share the same right edge (chevron doesn't shift it)", function()
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuRow = Shell.frame.shell.menuRows[1]
+    menuRow.count:SetText("180") -- worst-case 3-digit count
+    local menuCountRight = menuRow.count:GetRight()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local listRow = Shell.frame.shell.categoryListRows[1]
+    local itemQtyRight = listRow and listRow.qty:GetRight()
+
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    ResetToGlance()
+
+    local ok = itemQtyRight and math.abs(menuCountRight - itemQtyRight) < 0.01
+    return ok, ok and "OK" or string.format("expected matching count/qty right edge, got menu=%s item=%s",
+        tostring(menuCountRight), tostring(itemQtyRight))
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: item rows have no chevron", function()
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local listRow = Shell.frame.shell.categoryListRows[1]
+
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    ResetToGlance()
+
+    local ok = listRow and listRow.chevron == nil
+    return ok, ok and "OK" or "expected Category List rows to have no chevron field at all"
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: Menu and Category List rows use the same Blizzard highlight texture mechanism", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local menuRow = Shell.frame.shell.menuRows[1]
+    local ok = menuRow and menuRow.GetHighlightTexture and menuRow:GetHighlightTexture() ~= nil
+    ResetToGlance()
+    return ok, ok and "OK" or "expected Menu rows to use a real Button highlight texture, not a bespoke overlay"
+end)
+
+Pockets.Tests.TestRunner:Register("RowUnification: category rows still navigate, item rows still resolve to a real stack", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell.frame.shell.menuRows[1]:Click()
+    local navigated = Shell:GetState() == Shell.STATE.CATEGORY
+    ResetToGlance()
+    return navigated, navigated and "OK" or "expected clicking a Menu row to still navigate into its category"
+end)
+
+--------------------------------------------------
+-- Category List max visible rows (List max-height pass)
+--------------------------------------------------
+
+local function WithNItems(n, fn)
+    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    local items = {}
+    for i = 1, n do
+        items[i] = { itemID = i, name = "Item " .. i, texture = 1, quantity = 1, bagID = 0, slotID = i }
+    end
+    Pockets.API.GetAggregatedCategoryItems = function() return items end
+    local originalMode = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+
+    local ok, err = pcall(fn)
+
+    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
+    Pockets.SavedSettings.categoryViewMode = originalMode
+    if not ok then
+        error(err, 0)
+    end
+end
+
+local function CheckListScrollState(n, expectScrollbar)
+    WithNItems(n, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+        local scrollFrame = Shell.frame.shell.scrollFrame
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local shown = scrollBar and scrollBar:IsShown() or false
+        local contentWidth = Shell.frame.shell.content:GetWidth()
+        local viewportWidth = scrollFrame:GetWidth()
+        local noGutter = math.abs(contentWidth - viewportWidth) < 0.01
+
+        if shown ~= expectScrollbar then
+            error(string.format("n=%d: expected scrollbar shown=%s, got %s", n, tostring(expectScrollbar), tostring(shown)), 0)
+        end
+        if (not expectScrollbar) and not noGutter then
+            error(string.format("n=%d: expected zero scrollbar gutter when hidden", n), 0)
+        end
+    end)
+    ResetToGlance()
+end
+
+for _, n in ipairs({ 1, 3, 6 }) do
+    Pockets.Tests.TestRunner:Register(string.format("CategoryList: %d item(s) - no scrollbar", n), function()
+        CheckListScrollState(n, false)
+        return true, "OK"
+    end)
+end
+
+Pockets.Tests.TestRunner:Register("CategoryList: exactly 8 items (the cap) - still no scrollbar", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS, false)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryList: 9 items - scrollbar appears", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS + 1, true)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryList: large category (200 items) - scrollbar appears", function()
+    CheckListScrollState(200, true)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryList: body height caps at exactly MAX_VISIBLE_ROWS*rowHeight, not the generic Grid/All budget", function()
+    WithNItems(200, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        local L = Pockets.Constants.LAYOUT
+        local expected = L.SHELL_HEADER_HEIGHT + (L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT) + L.SHELL_FOOTER_HEIGHT
+        local height = Shell.frame:GetHeight()
+        if height ~= expected then
+            error(string.format("expected height %d, got %d", expected, height), 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 to 8 items only extends the bottom edge (TOPLEFT fixed)", function()
+    ResetToGlance()
+    local _, _, _, x0, y0 = Shell.frame:GetPoint()
+
+    WithNItems(3, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    end)
+    local _, _, _, x1, y1 = Shell.frame:GetPoint()
+
+    WithNItems(8, function()
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    end)
+    local _, _, _, x2, y2 = Shell.frame:GetPoint()
+
+    ResetToGlance()
+
+    local ok = x0 == x1 and y0 == y1 and x1 == x2 and y1 == y2
+    return ok, ok and "OK" or "TOPLEFT moved while the List body grew from 3 to 8 rows"
 end)
 
 -- Dynamic body height pass: Category/All no longer always claim
