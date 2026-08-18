@@ -726,18 +726,23 @@ local function CreateCategoryListRow(poolAnchor)
         -- defaults to SetAllPoints(button) - left alone, it stretches
         -- into a long repeating slot-frame graphic across the wide row.
         -- List rows use plain Menu-style rows with no button chrome, so
-        -- it's just hidden rather than reanchored to nothing useful.
-        -- SetNormalTexture(nil) itself errors on this client ("Usage:
-        -- self:SetNormalTexture(asset)") - clear the texture OBJECT
-        -- instead, which does accept nil.
-        local normalTexture = row.GetNormalTexture and row:GetNormalTexture()
-        if normalTexture then
-            normalTexture:SetTexture(nil)
-        end
-        local pushedTexture = row.GetPushedTexture and row:GetPushedTexture()
-        if pushedTexture then
-            pushedTexture:SetTexture(nil)
-        end
+        -- it's just made invisible rather than reanchored to nothing
+        -- useful. Both SetNormalTexture(nil) AND Texture:SetTexture(nil)
+        -- throw "Usage: self:SetNormalTexture(asset)" on this client -
+        -- SetColorTexture(0,0,0,0) (fully transparent, plain numeric
+        -- args, no asset-path validation) is what actually works.
+        -- pcall'd regardless, so any further texture-API surprise here
+        -- can never crash a render/EventBus subscriber again.
+        pcall(function()
+            local normalTexture = row.GetNormalTexture and row:GetNormalTexture()
+            if normalTexture then
+                normalTexture:SetColorTexture(0, 0, 0, 0)
+            end
+            local pushedTexture = row.GetPushedTexture and row:GetPushedTexture()
+            if pushedTexture then
+                pushedTexture:SetColorTexture(0, 0, 0, 0)
+            end
+        end)
         -- HighlightTexture is left alone deliberately - it already
         -- covers the full (now row-width) button via SetAllPoints,
         -- giving a whole-row hover glow for free, matching Menu rows'
