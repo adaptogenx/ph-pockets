@@ -34,12 +34,33 @@ function PositionStrategy:ApplyRootPosition(frame, savedPosition)
     frame:SetPoint(anchor, UIParent, anchor, savedPosition.x or 0, savedPosition.y or 0)
 end
 
--- Reads the frame's current anchor offset back out, in the same
--- anchor/relativeAnchor terms ApplyRootPosition used - safe to call after
--- a user drag, since dragging a TOPLEFT-anchored frame only ever mutates
--- that anchor's x/y, never its anchor points.
+-- Reads the frame's current position back out as a TOPLEFT-of-frame to
+-- TOPLEFT-of-UIParent offset. Deliberately does NOT trust
+-- frame:GetPoint()'s reported point/relativePoint/offsets - WoW's own
+-- StartMoving()/StopMovingOrSizing() drag commit does not reliably keep
+-- reporting the exact anchor pairing ApplyRootPosition set (this was
+-- observed producing an impossible positive y offset - off the top of
+-- the screen - after a real in-game drag). Absolute screen position
+-- (GetLeft/GetTop, scale-corrected) is unambiguous regardless of which
+-- corner/relativePoint the drag actually committed to, so the offset is
+-- rederived from that instead of read back verbatim.
 function PositionStrategy:CaptureSavedPosition(frame)
     local anchor = self:GetRootAnchor()
-    local _, _, _, x, y = frame:GetPoint()
+
+    local frameScale = frame:GetEffectiveScale()
+    local parentScale = UIParent:GetEffectiveScale()
+
+    -- Absolute screen-pixel position of both TOPLEFT corners.
+    local screenLeft = frame:GetLeft() * frameScale
+    local screenTop = frame:GetTop() * frameScale
+    local parentScreenLeft = UIParent:GetLeft() * parentScale
+    local parentScreenTop = UIParent:GetTop() * parentScale
+
+    -- Back into UIParent's own coordinate space - the units SetPoint
+    -- expects for offsets against a UIParent-relative anchor. A frame
+    -- entirely on-screen always yields x >= 0 and y <= 0 here.
+    local x = (screenLeft - parentScreenLeft) / parentScale
+    local y = (screenTop - parentScreenTop) / parentScale
+
     return { point = anchor, relativePoint = anchor, x = x, y = y }
 end

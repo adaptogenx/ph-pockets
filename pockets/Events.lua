@@ -54,8 +54,18 @@ local function EnsureSavedVariables()
     -- CENTER-anchored scheme can't be meaningfully reprojected without a
     -- live frame, so it's reset to the TOPLEFT default rather than left
     -- to produce a mismatched anchor.
-    if PocketsDB.settings.hud.point ~= "TOPLEFT" then
-        local locked = PocketsDB.settings.hud.locked
+    -- A TOPLEFT-of-frame to TOPLEFT-of-UIParent offset can never be
+    -- validly positive on Y (UIParent's TOPLEFT is already the top of
+    -- the screen - nothing on-screen can sit above it) or negative on X.
+    -- A previous drag could have saved exactly such an impossible value
+    -- (UI/PositionStrategy.lua's CaptureSavedPosition used to trust
+    -- frame:GetPoint()'s reported offset verbatim after a WoW drag
+    -- commit, which turned out not to reliably match the TOPLEFT/TOPLEFT
+    -- pairing actually applied). Treat that the same as a bad anchor
+    -- type and reset to default rather than restoring an off-screen spot.
+    local hud = PocketsDB.settings.hud
+    if hud.point ~= "TOPLEFT" or (hud.y or 0) > 1 or (hud.x or 0) < -1 then
+        local locked = hud.locked
         PocketsDB.settings.hud = DefaultHud()
         PocketsDB.settings.hud.locked = locked or false
     end

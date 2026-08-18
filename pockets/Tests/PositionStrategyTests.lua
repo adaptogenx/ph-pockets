@@ -48,6 +48,30 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition round-
     return ok, ok and "OK" or "captured position did not match what was applied"
 end)
 
+Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition is correct even if the frame's live anchor isn't TOPLEFT/UIParent", function()
+    -- Models the real bug: a live in-game drag left saved y=+88 (positive
+    -- - literally above the top of the screen, impossible for a
+    -- TOPLEFT/UIParent/TOPLEFT anchor), meaning frame:GetPoint()'s
+    -- reported point/relativeTo/offset after WoW's own
+    -- StartMoving()/StopMovingOrSizing() drag commit could not be trusted
+    -- verbatim. `frame` here is anchored to a DIFFERENT relativeTo (not
+    -- UIParent) at zero offset, landing at the exact same on-screen spot
+    -- TOPLEFT/UIParent/TOPLEFT(30,-40) would - proving capture is derived
+    -- from absolute position, not naively trusted off GetPoint()'s fields.
+    local reference = CreateFrame("Frame", nil, UIParent)
+    PositionStrategy:ApplyRootPosition(reference, { x = 30, y = -40 })
+
+    local frame = CreateFrame("Frame", nil, UIParent)
+    frame:SetPoint("TOPLEFT", reference, "TOPLEFT", 0, 0)
+
+    local captured = PositionStrategy:CaptureSavedPosition(frame)
+    local ok = ApproxEqual(captured.x, 30) and ApproxEqual(captured.y, -40)
+        and captured.point == "TOPLEFT" and captured.relativePoint == "TOPLEFT"
+    return ok, ok and "OK" or string.format(
+        "expected (30,-40) derived from absolute position regardless of relativeTo, got (%s,%s)",
+        tostring(captured.x), tostring(captured.y))
+end)
+
 Pockets.Tests.TestRunner:Register("PositionStrategy: resizing a positioned frame does not change its captured anchor", function()
     local frame = CreateFrame("Frame", nil, UIParent)
     PositionStrategy:ApplyRootPosition(frame, { x = 5, y = -5 })
