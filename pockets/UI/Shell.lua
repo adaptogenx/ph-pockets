@@ -159,9 +159,7 @@ function Shell:BuildGlance()
 
     glance.textBlock = CreateFrame("Frame", nil, glance)
     glance.textBlock:SetPoint("LEFT", glance.icon, "RIGHT", L.GLANCE_TEXT_GAP_X, 0)
-    glance.textBlock:SetSize(
-        L.GLANCE_WIDTH - L.GLANCE_PADDING * 2 - L.GLANCE_ICON_SIZE - L.GLANCE_TEXT_GAP_X,
-        L.GLANCE_ICON_SIZE)
+    glance.textBlock:SetSize(L.GLANCE_TEXT_BLOCK_WIDTH, L.GLANCE_ICON_SIZE)
 
     glance.capacityText = PHUI.CreateLabel(glance.textBlock, "primary", nil, PHUI.Fonts.NORMAL)
     glance.capacityText:SetPoint("TOPLEFT", glance.textBlock, "TOPLEFT", 0, 0)

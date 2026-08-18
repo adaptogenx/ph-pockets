@@ -112,12 +112,17 @@ Constants.LAYOUT = {
     -- contract. Fixed size (no longer content-dependent - Ammo was
     -- dropped from Glance entirely) so it stays as compact as possible:
     -- icon + "59 / 76" on one row, compact "13m" ETA on the next.
-    GLANCE_WIDTH = 128,
+    -- GLANCE_WIDTH is DERIVED (below), not hand-picked - it's the true
+    -- minimum that fits the icon and text column with no slack, so
+    -- Glance can never be wider than it needs to be.
     GLANCE_HEIGHT = 52,
     GLANCE_ICON_SIZE = 30,
-    GLANCE_PADDING = 8,
-    GLANCE_TEXT_GAP_X = 6,
+    GLANCE_PADDING = 6,
+    GLANCE_TEXT_GAP_X = 4,
     GLANCE_TEXT_GAP_Y = 1,
+    -- Just enough for the worst realistic capacity string ("199 / 200")
+    -- at GameFontNormal - the ETA line ("13m") never needs more.
+    GLANCE_TEXT_BLOCK_WIDTH = 62,
 
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
@@ -183,6 +188,14 @@ Constants.LAYOUT = {
 -- count is fixed at load time.
 Constants.LAYOUT.MENU_BODY_HEIGHT = #Constants.CATEGORY_ORDER * Constants.LAYOUT.MENU_ROW_HEIGHT
     + Constants.LAYOUT.SHELL_PADDING * 2
+
+-- Glance's width is the true minimum that fits [padding][icon][gap]
+-- [text column][padding] with zero slack - never hand-picked, so it can
+-- never be wider than it needs to be (Glance minimum-width pass).
+Constants.LAYOUT.GLANCE_WIDTH = Constants.LAYOUT.GLANCE_PADDING * 2
+    + Constants.LAYOUT.GLANCE_ICON_SIZE
+    + Constants.LAYOUT.GLANCE_TEXT_GAP_X
+    + Constants.LAYOUT.GLANCE_TEXT_BLOCK_WIDTH
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)
 Constants.DOMAIN_EVENT = {

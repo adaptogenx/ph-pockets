@@ -384,11 +384,24 @@ end)
 -- Glance compactness pass
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("Shell: Glance size is within the compact target (120-150 x 48-60)", function()
+Pockets.Tests.TestRunner:Register("Shell: Glance height is within the compact target (48-60)", function()
     ResetToGlance()
-    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
-    local ok = width >= 120 and width <= 150 and height >= 48 and height <= 60
-    return ok, ok and "OK" or string.format("expected 120-150 x 48-60, got %sx%s", tostring(width), tostring(height))
+    local height = Shell.frame:GetHeight()
+    local ok = height >= 48 and height <= 60
+    return ok, ok and "OK" or string.format("expected height 48-60, got %s", tostring(height))
+end)
+
+-- Glance minimum-width pass: GLANCE_WIDTH must be DERIVED from its
+-- actual content (padding+icon+gap+text column), never a hand-picked
+-- number with slack - this is what "minimum width possible" means and
+-- what keeps it from silently regressing wider later.
+Pockets.Tests.TestRunner:Register("Shell: Glance width is the derived minimum, not hand-picked slack", function()
+    local L = Pockets.Constants.LAYOUT
+    local expected = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_TEXT_GAP_X + L.GLANCE_TEXT_BLOCK_WIDTH
+    ResetToGlance()
+    local width = Shell.frame:GetWidth()
+    local ok = width == L.GLANCE_WIDTH and width == expected
+    return ok, ok and "OK" or string.format("expected derived width %s, got %s", tostring(expected), tostring(width))
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: Glance no longer shows Ammo", function()
