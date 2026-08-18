@@ -51,6 +51,14 @@ Constants.CATEGORY_LABEL = {
     [Constants.CATEGORY.OTHER] = "Other",
 }
 
+-- Category body presentation preference (Category List/Grid view pass).
+-- Grid is the existing, preserved-exactly implementation; List is new.
+-- Grid stays the default until a deliberate future product decision.
+Constants.CATEGORY_VIEW_MODE = {
+    GRID = "GRID",
+    LIST = "LIST",
+}
+
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
 Constants.CAPACITY_COLOR_THRESHOLDS = {
     YELLOW_AT = 0.70,
@@ -172,6 +180,11 @@ Constants.LAYOUT = {
     FULL_INVENTORY_LABEL_ICON_SIZE = 12,
     FULL_INVENTORY_LABEL_ICON_GAP = 4,
 
+    -- Category List view: same compact visual grammar as Menu rows
+    -- (MENU_ROW_PADDING/GAP/COUNT_WIDTH, reused directly).
+    CATEGORY_LIST_ROW_HEIGHT = 30,
+    CATEGORY_LIST_ICON_SIZE = 24,
+
     -- Centralized expanded-surface opacity (UI layout pass §9) - Glance
     -- keeps the lighter, passive-HUD-like alpha; every expanded state
     -- (Menu/Category/All) uses one shared, more opaque body alpha plus a
@@ -220,4 +233,5 @@ Constants.DEFAULT_SETTINGS = {
         y = -100,
         locked = false,
     },
+    categoryViewMode = Constants.CATEGORY_VIEW_MODE.GRID,
 }

@@ -179,6 +179,15 @@ function Shell:BuildShell()
     frame.shell = shell
     shell.menuRows = {}
     shell.categoryLabels = {}
+    shell.categoryListRows = {}
+    -- A dedicated ItemButtonPool key (not `shell.content`, which Grid's
+    -- own pool uses) - List rows are acquired ONCE and reused indefinitely
+    -- (unlike Grid's per-render Acquire/ReleaseAll), and each one is
+    -- resized/reparented for the row layout. Sharing Grid's pool key
+    -- would let a resized List row get recycled back into Grid mode
+    -- still shaped like a List row. Never visually shown itself - purely
+    -- a stable pool-key/CreateFrame-parent object.
+    shell.categoryListPoolAnchor = CreateFrame("Frame", nil, shell)
 
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
     -- the control occupying a zone changes, the zone itself never moves.
@@ -428,6 +437,13 @@ function Shell:ClearBody()
     for _, widget in ipairs(shell.categoryLabels) do
         widget:Hide()
     end
+    -- Category List rows are long-lived real item buttons (created once
+    -- per index, reconfigured on each render from their own dedicated
+    -- pool key) rather than Acquire/ReleaseAll'd per render like Grid's,
+    -- so they're hidden explicitly instead of through the pool.
+    for _, row in ipairs(shell.categoryListRows) do
+        row:Hide()
+    end
     Pockets.UI.ItemButtonPool:ReleaseAll(shell.content)
     shell.scrollFrame:SetVerticalScroll(0)
     shell.content:SetHeight(1)
@@ -610,12 +626,43 @@ function Shell:RenderMenu()
 end
 
 --------------------------------------------------
--- CATEGORY (§3 STATE 3) - straightforward responsive item grid, same
--- pooled real item-button component as All Items.
+-- CATEGORY (§3 STATE 3) - one navigation state, two body presentations
+-- (Category List/Grid view pass). Header/footer/root/navigation/capacity
+-- status stay identical between them; only the body renderer differs.
 --------------------------------------------------
 
+-- Dispatches to whichever body renderer the persisted preference names,
+-- falling back to Grid for anything else (matches the SavedVariables
+-- validation in Events.lua - belt and suspenders against a bad value).
+-- ClearBody runs exactly once here, before either renderer, so switching
+-- Grid<->List (or Menu/All -> Category) never leaves the other
+-- presentation's widgets on screen.
 function Shell:RenderCategory(categoryID)
     self:ClearBody()
+    if Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
+        self:RenderCategoryList(categoryID)
+    else
+        self:RenderCategoryGrid(categoryID)
+    end
+end
+
+-- Persists the Category view preference and, if Category is currently
+-- the visible state, re-renders it immediately - no reload, no state
+-- transition, no anchor/header/footer change (§2, §11).
+function Shell:SetCategoryViewMode(mode)
+    local Mode = Constants.CATEGORY_VIEW_MODE
+    if mode ~= Mode.GRID and mode ~= Mode.LIST then
+        return
+    end
+    Pockets.SavedSettings.categoryViewMode = mode
+    if self.frame and self.state == self.STATE.CATEGORY then
+        self:RenderCategory(self.context.categoryID)
+    end
+end
+
+-- Grid: unchanged from before this pass (§4 "preserve exactly") - same
+-- pooled real item-button component All Items uses.
+function Shell:RenderCategoryGrid(categoryID)
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
@@ -650,6 +697,97 @@ function Shell:RenderCategory(categoryID)
     end
 
     content:SetHeight(math.max(plan.contentHeight, 1))
+end
+
+-- List: one row per aggregate item - [icon] [full name] [total qty] -
+-- same compact grammar as Menu rows (§5). The row itself IS the real
+-- item button (ItemButtonPool.Configure wires it, same as Grid), just
+-- resized/reparented so the whole row - not only the icon - is the
+-- interaction target (§8), with name/qty labels anchored onto it.
+local function CreateCategoryListRow(poolAnchor)
+    local row = Pockets.UI.ItemButtonPool:Acquire(poolAnchor)
+    row:SetHeight(L.CATEGORY_LIST_ROW_HEIGHT)
+
+    if not row.categoryListInitialized then
+        row.categoryListInitialized = true
+
+        -- The button's OWN icon/border regions default to filling the
+        -- whole button (fine at Grid's fixed 40x40) - re-anchored to a
+        -- small square on the left so widening the row (below) doesn't
+        -- stretch the item art across the whole row.
+        row.icon:ClearAllPoints()
+        row.icon:SetPoint("LEFT", row, "LEFT", L.MENU_ROW_PADDING, 0)
+        row.icon:SetSize(L.CATEGORY_LIST_ICON_SIZE, L.CATEGORY_LIST_ICON_SIZE)
+        if row.IconBorder then
+            row.IconBorder:ClearAllPoints()
+            row.IconBorder:SetAllPoints(row.icon)
+        end
+
+        row.name = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
+        row.name:SetPoint("LEFT", row.icon, "RIGHT", L.MENU_ROW_GAP, 0)
+        row.name:SetJustifyH("LEFT")
+        row.name:SetWordWrap(false)
+
+        row.qty = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
+        row.qty:SetPoint("RIGHT", row, "RIGHT", -L.MENU_ROW_PADDING, 0)
+        row.qty:SetWidth(L.MENU_ROW_COUNT_WIDTH)
+        row.qty:SetJustifyH("RIGHT")
+
+        row.name:SetPoint("RIGHT", row.qty, "LEFT", -L.MENU_ROW_GAP, 0)
+    end
+
+    return row
+end
+
+function Shell:RenderCategoryList(categoryID)
+    local shell = self.frame.shell
+    local content = shell.content
+
+    local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
+
+    -- Same conditional-scrollbar rule as Grid/Menu (§4/§10): fixed row
+    -- height makes this pure arithmetic, no FlowLayout call needed.
+    local viewportWidth = shell.scrollFrame:GetWidth()
+    local viewportHeight = shell.scrollFrame:GetHeight()
+    local contentHeight = #items * L.CATEGORY_LIST_ROW_HEIGHT
+    local needsScrollbar = contentHeight > viewportHeight
+    local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
+
+    content:SetWidth(rowWidth)
+    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+
+    for index, item in ipairs(items) do
+        local row = shell.categoryListRows[index]
+        if not row then
+            row = CreateCategoryListRow(shell.categoryListPoolAnchor)
+            shell.categoryListRows[index] = row
+        end
+
+        row:SetWidth(rowWidth)
+        row.name:SetText(item.name or item.itemLink or ("item:" .. tostring(item.itemID)))
+        local qualityColor = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
+        if qualityColor and item.quality > 1 then
+            row.name:SetTextColor(qualityColor.r, qualityColor.g, qualityColor.b)
+        else
+            PHUI.ApplyTextStyle(row.name, "primary")
+        end
+        row.qty:SetText(tostring(item.quantity))
+
+        Pockets.UI.ItemButtonPool:Configure(row, item)
+        -- Configure() shows the button's own built-in stack-count badge
+        -- (anchored to the button's own corner, meant for a 40x40 square
+        -- button) - redundant and badly placed on a wide row that
+        -- already has its own right-aligned qty column above.
+        if row.Count then
+            row.Count:Hide()
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * L.CATEGORY_LIST_ROW_HEIGHT)
+        row:Show()
+    end
+
+    content:SetHeight(math.max(contentHeight, 1))
 end
 
 --------------------------------------------------

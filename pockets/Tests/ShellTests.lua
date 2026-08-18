@@ -758,6 +758,252 @@ Pockets.Tests.TestRunner:Register("Shell: header title sits at the same fixed of
 end)
 
 --------------------------------------------------
+-- Category List/Grid view preference
+--------------------------------------------------
+
+local function WithCategoryViewMode(mode, fn)
+    local original = Pockets.SavedSettings.categoryViewMode
+    Pockets.SavedSettings.categoryViewMode = mode
+    local ok, err = pcall(fn)
+    Pockets.SavedSettings.categoryViewMode = original
+    if not ok then
+        error(err, 0)
+    end
+end
+
+Pockets.Tests.TestRunner:Register("CategoryView: default preference is GRID", function()
+    local ok = Pockets.Constants.DEFAULT_SETTINGS.categoryViewMode == Pockets.Constants.CATEGORY_VIEW_MODE.GRID
+    return ok, ok and "OK" or "expected the default Category view to be GRID"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: SetCategoryViewMode(LIST) persists", function()
+    local original = Pockets.SavedSettings.categoryViewMode
+    Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
+    local ok = Pockets.SavedSettings.categoryViewMode == Pockets.Constants.CATEGORY_VIEW_MODE.LIST
+    Pockets.SavedSettings.categoryViewMode = original
+    return ok, ok and "OK" or "expected LIST to persist into SavedSettings"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: SetCategoryViewMode(GRID) persists", function()
+    local original = Pockets.SavedSettings.categoryViewMode
+    Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
+    local ok = Pockets.SavedSettings.categoryViewMode == Pockets.Constants.CATEGORY_VIEW_MODE.GRID
+    Pockets.SavedSettings.categoryViewMode = original
+    return ok, ok and "OK" or "expected GRID to persist into SavedSettings"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: an invalid value is ignored, not persisted", function()
+    local original = Pockets.SavedSettings.categoryViewMode
+    Shell:SetCategoryViewMode("BOGUS")
+    local ok = Pockets.SavedSettings.categoryViewMode == original
+    Pockets.SavedSettings.categoryViewMode = original
+    return ok, ok and "OK" or "expected an invalid mode to be silently ignored"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: RenderCategory dispatches to the Grid renderer when mode=GRID", function()
+    local originalGrid = Shell.RenderCategoryGrid
+    local originalList = Shell.RenderCategoryList
+    local gridCalls, listCalls = 0, 0
+    Shell.RenderCategoryGrid = function(self, ...) gridCalls = gridCalls + 1; return originalGrid(self, ...) end
+    Shell.RenderCategoryList = function(self, ...) listCalls = listCalls + 1; return originalList(self, ...) end
+
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    end)
+
+    Shell.RenderCategoryGrid = originalGrid
+    Shell.RenderCategoryList = originalList
+    ResetToGlance()
+
+    local ok = gridCalls == 1 and listCalls == 0
+    return ok, ok and "OK" or string.format("expected exactly 1 grid call / 0 list calls, got %d/%d", gridCalls, listCalls)
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: RenderCategory dispatches to the List renderer when mode=LIST", function()
+    local originalGrid = Shell.RenderCategoryGrid
+    local originalList = Shell.RenderCategoryList
+    local gridCalls, listCalls = 0, 0
+    Shell.RenderCategoryGrid = function(self, ...) gridCalls = gridCalls + 1; return originalGrid(self, ...) end
+    Shell.RenderCategoryList = function(self, ...) listCalls = listCalls + 1; return originalList(self, ...) end
+
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    end)
+
+    Shell.RenderCategoryGrid = originalGrid
+    Shell.RenderCategoryList = originalList
+    ResetToGlance()
+
+    local ok = gridCalls == 0 and listCalls == 1
+    return ok, ok and "OK" or string.format("expected exactly 0 grid calls / 1 list call, got %d/%d", gridCalls, listCalls)
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: switching mode while Category is open re-renders immediately, no state change", function()
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+        local _, _, _, x0, y0 = Shell.frame:GetPoint()
+        local headerHeightBefore = Shell.frame.shell.header:GetHeight()
+        local footerHeightBefore = Shell.frame.shell.footer:GetHeight()
+
+        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
+
+        local stillCategory = Shell:GetState() == Shell.STATE.CATEGORY
+        local anyListRowVisible = false
+        for _, row in ipairs(Shell.frame.shell.categoryListRows) do
+            if row:IsShown() then anyListRowVisible = true end
+        end
+        local _, _, _, x1, y1 = Shell.frame:GetPoint()
+        local headerHeightAfter = Shell.frame.shell.header:GetHeight()
+        local footerHeightAfter = Shell.frame.shell.footer:GetHeight()
+
+        local ok = stillCategory and anyListRowVisible
+            and x0 == x1 and y0 == y1
+            and headerHeightBefore == headerHeightAfter
+            and footerHeightBefore == footerHeightAfter
+        if not ok then
+            error("switching to LIST moved state/anchor/header/footer or didn't render", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: List -> Grid cleanup leaves zero list rows visible", function()
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
+
+        local anyListRowVisible = false
+        for _, row in ipairs(Shell.frame.shell.categoryListRows) do
+            if row:IsShown() then anyListRowVisible = true end
+        end
+        if anyListRowVisible then
+            error("a List row was still visible after switching to Grid", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: Grid -> List cleanup leaves zero grid buttons active", function()
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
+
+        local gridPool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.shell.content)
+        if #gridPool.active ~= 0 then
+            error("a Grid item button was still active after switching to List", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: repeated Grid<->List toggling does not accumulate rows", function()
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        for _ = 1, 5 do
+            Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
+            Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
+        end
+        local itemCount = #Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.OTHER)
+        local rowCount = #Shell.frame.shell.categoryListRows
+        if rowCount > itemCount then
+            error(string.format("expected at most %d pooled List rows, got %d", itemCount, rowCount), 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: List row shows the same aggregate quantity Grid would", function()
+    local items = Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.OTHER)
+    if #items == 0 then
+        return true, "OK (no items in Other to compare)"
+    end
+
+    local ok = true
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        local row = Shell.frame.shell.categoryListRows[1]
+        ok = row and row.qty:GetText() == tostring(items[1].quantity)
+    end)
+    ResetToGlance()
+    return ok, ok and "OK" or "List row quantity did not match the shared aggregate total"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: List row is bound to the same itemID/bagID/slotID contract as Grid buttons", function()
+    local items = Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.OTHER)
+    if #items == 0 then
+        return true, "OK (no items in Other to check)"
+    end
+
+    local ok = true
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        local row = Shell.frame.shell.categoryListRows[1]
+        ok = row and row.itemID == items[1].itemID
+            and row.bagID == items[1].bagID and row.slotID == items[1].slotID
+    end)
+    ResetToGlance()
+    return ok, ok and "OK" or "List row was not bound to the resolver-backed bagID/slotID contract Configure() sets"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: List has no scrollbar when rows fit the viewport", function()
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+
+        local scrollFrame = Shell.frame.shell.scrollFrame
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local contentWidth = Shell.frame.shell.content:GetWidth()
+        local viewportWidth = scrollFrame:GetWidth()
+
+        if (scrollBar and scrollBar:IsShown()) or math.abs(contentWidth - viewportWidth) >= 0.01 then
+            error("scrollbar (or its gutter) present without List content overflowing", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryView: List shows a scrollbar and reclaims width when rows overflow", function()
+    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    local manyItems = {}
+    for i = 1, 200 do
+        manyItems[i] = { itemID = i, name = "Test Item " .. i, texture = 1, quantity = 1, bagID = 0, slotID = i }
+    end
+    Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
+
+    local ok
+    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+        local scrollFrame = Shell.frame.shell.scrollFrame
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local contentWidth = Shell.frame.shell.content:GetWidth()
+        local viewportWidth = scrollFrame:GetWidth()
+
+        ok = scrollBar and scrollBar:IsShown() and contentWidth < viewportWidth
+    end)
+
+    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
+    ResetToGlance()
+
+    return ok, ok and "OK" or "expected a scrollbar and reclaimed width once List rows overflow"
+end)
+
+--------------------------------------------------
 -- Render smoke tests
 --------------------------------------------------
 

@@ -80,6 +80,7 @@ function ItemButtonPool.ToButtonRecord(agg)
     return {
         itemID = agg.itemID,
         itemLink = agg.itemLink,
+        name = agg.name,
         texture = agg.texture,
         quality = agg.quality,
         quantity = agg.totalQuantity,
