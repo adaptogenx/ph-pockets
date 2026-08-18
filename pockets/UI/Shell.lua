@@ -722,6 +722,22 @@ local function CreateCategoryListRow(poolAnchor)
             row.IconBorder:ClearAllPoints()
             row.IconBorder:SetAllPoints(row.icon)
         end
+        -- ItemButtonTemplate's own slot-border art (NormalTexture) also
+        -- defaults to SetAllPoints(button) - left alone, it stretches
+        -- into a long repeating slot-frame graphic across the wide row.
+        -- List rows use plain Menu-style rows with no button chrome, so
+        -- it's just hidden rather than reanchored to nothing useful.
+        if row.SetNormalTexture then
+            row:SetNormalTexture(nil)
+        end
+        local pushedTexture = row.GetPushedTexture and row:GetPushedTexture()
+        if pushedTexture then
+            pushedTexture:SetTexture(nil)
+        end
+        -- HighlightTexture is left alone deliberately - it already
+        -- covers the full (now row-width) button via SetAllPoints,
+        -- giving a whole-row hover glow for free, matching Menu rows'
+        -- own hover highlight.
 
         row.name = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
         row.name:SetPoint("LEFT", row.icon, "RIGHT", L.MENU_ROW_GAP, 0)
