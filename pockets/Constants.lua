@@ -210,13 +210,11 @@ Constants.LAYOUT = {
     EXPANDED_CHROME_ALPHA = 0.96,
 }
 
--- Category List's max browsing height before a scrollbar takes over
--- (List max-height pass): exactly CATEGORY_LIST_MAX_VISIBLE_ROWS full
--- rows, not a raw pixel budget that happens to leave slack for a
--- non-integer row count.
-Constants.LAYOUT.CATEGORY_LIST_MAX_BODY_HEIGHT = Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS
-    * Constants.LAYOUT.LIST_ROW_HEIGHT
-    + Constants.LAYOUT.SHELL_PADDING * 2
+-- NOTE: Category List's max browsing height (CATEGORY_LIST_MAX_VISIBLE_ROWS
+-- * LIST_ROW_HEIGHT) is a CONTENT-height threshold, computed where it's
+-- used (Shell.lua's RenderCategoryList) via the same
+-- ResolveDynamicHeight() every dynamic-height renderer shares - not
+-- duplicated here as a separate derived bodyHeight constant.
 
 -- NOTE: Menu's body height is NOT a load-time constant - zero-count
 -- categories are hidden at render time (§10 of the row-unification

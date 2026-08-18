@@ -577,8 +577,14 @@ Pockets.Tests.TestRunner:Register("Shell: Menu body height is derived from the v
     Pockets.API.GetCategorySummary = originalGetSummary
     ResetToGlance()
 
-    -- 2 visible rows (zero-count "b" hidden) + header/footer/padding.
-    local expected = L.SHELL_HEADER_HEIGHT + math.max(2 * L.LIST_ROW_HEIGHT, L.SHELL_BODY_MIN_HEIGHT) + L.SHELL_FOOTER_HEIGHT
+    -- 2 visible rows (zero-count "b" hidden) + header/footer, with the
+    -- body padding the scrollFrame viewport is inset by on both top and
+    -- bottom (vertical sizing fix - a body height of exactly
+    -- contentHeight, with no padding added back, clips the last row).
+    local contentHeight = 2 * L.LIST_ROW_HEIGHT
+    local minContentHeight = math.max(L.SHELL_BODY_MIN_HEIGHT - L.SHELL_PADDING * 2, 0)
+    local bodyHeight = math.max(contentHeight, minContentHeight) + L.SHELL_PADDING * 2
+    local expected = L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
     local ok = height == expected
     return ok, ok and "OK" or string.format("expected height %s for 2 visible categories, got %s",
         tostring(expected), tostring(height))
@@ -793,7 +799,8 @@ Pockets.Tests.TestRunner:Register("CategoryList: body height caps at exactly MAX
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
         local L = Pockets.Constants.LAYOUT
-        local expected = L.SHELL_HEADER_HEIGHT + (L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT) + L.SHELL_FOOTER_HEIGHT
+        local maxBodyHeight = L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT + L.SHELL_PADDING * 2
+        local expected = L.SHELL_HEADER_HEIGHT + maxBodyHeight + L.SHELL_FOOTER_HEIGHT
         local height = Shell.frame:GetHeight()
         if height ~= expected then
             error(string.format("expected height %d, got %d", expected, height), 0)

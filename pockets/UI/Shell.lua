@@ -61,11 +61,36 @@ local function BodyViewportWidth()
     return L.SHELL_WIDTH - L.SHELL_PADDING * 2
 end
 
--- Dynamic body height (dynamic height pass): grows to fit actual content,
--- floored at a sensible minimum and capped at the bounded/scrollable
--- maximum - never just claims the max whether or not content needs it.
-local function ClampBodyHeight(contentHeight)
-    return math.min(math.max(contentHeight, L.SHELL_BODY_MIN_HEIGHT), L.SHELL_BODY_MAX_HEIGHT)
+-- SHELL_BODY_MIN_HEIGHT/MAX_HEIGHT are bodyHeight-shaped values (what
+-- ApplyDimensions/TotalHeightForBody expect - i.e. already including the
+-- SHELL_PADDING inset on both top and bottom of the scrollFrame
+-- viewport), NOT raw content height. A renderer's actual laid-out
+-- content (rows/items only) must be compared against - and, once
+-- clamped, converted back into - bodyHeight through that same
+-- 2*SHELL_PADDING offset, or the scrollFrame viewport ends up shorter
+-- than the content it was just sized to hold, clipping the last
+-- row/item behind the footer even though no scrollbar was judged
+-- necessary (vertical sizing/scrolling fix).
+local function MaxContentHeight()
+    return L.SHELL_BODY_MAX_HEIGHT - L.SHELL_PADDING * 2
+end
+
+local function MinContentHeight()
+    return math.max(L.SHELL_BODY_MIN_HEIGHT - L.SHELL_PADDING * 2, 0)
+end
+
+-- Clamps a CONTENT height (rows/items only) against an explicit max (or
+-- MaxContentHeight() by default - Category List passes its own
+-- row-count-based cap instead) and returns:
+--   usedContentHeight - the (possibly capped) content height to actually
+--     lay out/scroll within
+--   bodyHeight - what to pass to ApplyDimensions
+--   needsScrollbar - whether the real content overflowed the cap
+local function ResolveDynamicHeight(contentHeight, maxContentHeight)
+    maxContentHeight = maxContentHeight or MaxContentHeight()
+    local needsScrollbar = contentHeight > maxContentHeight
+    local usedContentHeight = needsScrollbar and maxContentHeight or math.max(contentHeight, MinContentHeight())
+    return usedContentHeight, usedContentHeight + L.SHELL_PADDING * 2, needsScrollbar
 end
 
 -- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
@@ -613,10 +638,10 @@ function Shell:RenderMenu()
 
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #visible * L.LIST_ROW_HEIGHT
-    local needsScrollbar = contentHeight > L.SHELL_BODY_MAX_HEIGHT
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
-    self:ApplyDimensions(ClampBodyHeight(contentHeight))
+    self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -702,14 +727,15 @@ function Shell:RenderCategoryGrid(categoryID)
     local viewportWidth = BodyViewportWidth()
 
     local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
-    local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
+    local needsScrollbar = plan.contentHeight > MaxContentHeight()
     local usableWidth = viewportWidth
     if needsScrollbar then
         usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
         plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
     end
 
-    self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
+    local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+    self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -810,9 +836,8 @@ function Shell:RenderCategoryList(categoryID)
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #items * L.LIST_ROW_HEIGHT
     local maxVisibleHeight = L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT
-    local needsScrollbar = contentHeight > maxVisibleHeight
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, maxVisibleHeight)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
-    local bodyHeight = needsScrollbar and maxVisibleHeight or math.max(contentHeight, L.SHELL_BODY_MIN_HEIGHT)
 
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
@@ -937,13 +962,14 @@ function Shell:RenderAll(query)
     if hasQuery then
         local items = BuildFlatSearchResults(query)
         local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = itemSize, gap = gap })
-        local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
+        local needsScrollbar = plan.contentHeight > MaxContentHeight()
         local usableWidth = viewportWidth
         if needsScrollbar then
             usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
             plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = itemSize, gap = gap })
         end
-        self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
+        local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+        self:ApplyDimensions(bodyHeight)
         content:SetWidth(usableWidth)
         SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
@@ -983,7 +1009,7 @@ function Shell:RenderAll(query)
         gap = gap,
         labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
     })
-    local needsScrollbar = plan.contentHeight > L.SHELL_BODY_MAX_HEIGHT
+    local needsScrollbar = plan.contentHeight > MaxContentHeight()
     local usableWidth = viewportWidth
     if needsScrollbar then
         usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
@@ -994,7 +1020,8 @@ function Shell:RenderAll(query)
             labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
         })
     end
-    self:ApplyDimensions(ClampBodyHeight(plan.contentHeight))
+    local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+    self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
     SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
