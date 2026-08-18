@@ -11,6 +11,36 @@ local _, Pockets = ...
 
 local BagAPI = Pockets.Adapters.BagAPI
 
+--------------------------------------------------
+-- IsAmmoFamily (Ammo detection debugging pass §7/§8): pure bitmask
+-- check, split out of IsAmmoBag specifically so this rule is testable
+-- without a live inventory API. Root cause of "Ammo capacity never
+-- appears": IsAmmoBag used to read GetItemInfo()'s 9th return value
+-- (itemEquipLoc, a STRING) and compare it to the number 2 - always
+-- false. Family comes from GetItemFamily(), a bitmask (Quiver=2,
+-- Ammo Pouch=4), not GetItemInfo().
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("BagAPI: IsAmmoFamily recognizes Quiver (family bit 2)", function()
+    local ok = BagAPI:IsAmmoFamily(2) == true
+    return ok, ok and "OK" or "expected family 2 (Quiver) to classify as ammo"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: IsAmmoFamily recognizes Ammo Pouch (family bit 4)", function()
+    local ok = BagAPI:IsAmmoFamily(4) == true
+    return ok, ok and "OK" or "expected family 4 (Ammo Pouch) to classify as ammo"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: IsAmmoFamily rejects a non-ammo bag family", function()
+    local ok = BagAPI:IsAmmoFamily(1) == false and BagAPI:IsAmmoFamily(8) == false
+    return ok, ok and "OK" or "expected non-ammo family bits to classify as not-ammo"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: IsAmmoFamily rejects nil (undetectable family)", function()
+    local ok = BagAPI:IsAmmoFamily(nil) == false
+    return ok, ok and "OK" or "expected nil family to classify conservatively as not-ammo"
+end)
+
 Pockets.Tests.TestRunner:Register("BagAPI: no quiver equipped - no ammo pool", function()
     local result = BagAPI:ClassifyCapacity({
         { isAmmo = false, slotCount = 16, usedSlots = 5 },

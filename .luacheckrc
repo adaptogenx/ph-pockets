@@ -74,6 +74,8 @@ globals = {
     -- Item / bag API (Classic container API)
     "GetItemInfo",
     "GetItemInfoInstant",
+    "GetItemFamily",
+    "bit",
     "GetItemCount",
     "GetContainerNumSlots",
     "GetContainerItemInfo",

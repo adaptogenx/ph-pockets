@@ -51,6 +51,23 @@ local function TotalHeightForBody(bodyHeight)
     return L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
 end
 
+-- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
+-- Blizzard scrollbar widget UIPanelScrollFrameTemplate creates as
+-- "<name>ScrollBar" - callers are responsible for sizing `content` to
+-- leave (or not leave) room for it. Never just disabled/left as an empty
+-- track - hidden entirely means zero layout width consumed.
+local function SetScrollBarShown(scrollFrame, shown)
+    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+    if not scrollBar then
+        return
+    end
+    if shown then
+        scrollBar:Show()
+    else
+        scrollBar:Hide()
+    end
+end
+
 --------------------------------------------------
 -- Pure predicates (unit-testable without a live frame)
 --------------------------------------------------
@@ -70,6 +87,10 @@ end
 -- Menu row widget (click-only category navigation - no hover-flyout)
 --------------------------------------------------
 
+-- Fixed conceptual columns ICON | LABEL | FLEX | COUNT | CHEVRON (§3,
+-- §11) - only the LABEL/FLEX region ever moves when rowWidth changes
+-- (SetWidth below), everything else is anchored from a fixed edge so a
+-- 3-digit count never shifts the label and the chevron never moves.
 local function CreateMenuRow(parent, rowWidth)
     local row = CreateFrame("Button", nil, parent)
     row:SetHeight(L.MENU_ROW_HEIGHT)
@@ -77,21 +98,32 @@ local function CreateMenuRow(parent, rowWidth)
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(L.MENU_ROW_ICON_SIZE, L.MENU_ROW_ICON_SIZE)
-    row.icon:SetPoint("LEFT", row, "LEFT", 2, 0)
-
-    row.label = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
-    row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-    row.label:SetPoint("RIGHT", row, "RIGHT", -(L.MENU_ROW_COUNT_WIDTH + 14), 0)
-    row.label:SetJustifyH("LEFT")
-    row.label:SetWordWrap(false)
+    row.icon:SetPoint("LEFT", row, "LEFT", L.MENU_ROW_PADDING, 0)
 
     row.count = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
-    row.count:SetPoint("RIGHT", row, "RIGHT", -14, 0)
+    row.count:SetPoint("RIGHT", row, "RIGHT", -(L.MENU_ROW_PADDING + L.MENU_ROW_CHEVRON_WIDTH + L.MENU_ROW_GAP), 0)
     row.count:SetWidth(L.MENU_ROW_COUNT_WIDTH)
     row.count:SetJustifyH("RIGHT")
 
-    row.chevron = PHUI.CreateLabel(row, "muted", "\226\128\186", PHUI.Fonts.SMALL) -- ">"
-    row.chevron:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    -- An unmistakable ">" navigation affordance, not the old ambiguous
+    -- small guillemet - visually subordinate to the count (muted color)
+    -- but sized to actually read as "this row goes deeper" (§2). Not its
+    -- own click target - the whole row's OnClick (set per-render below)
+    -- is what navigates; this is a label only.
+    row.chevron = row:CreateFontString(nil, "OVERLAY")
+    row.chevron:SetFont("Fonts\\FRIZQT__.TTF", 16, "")
+    local mutedColor = PHUI.Colors.TEXT_MUTED
+    row.chevron:SetTextColor(mutedColor[1], mutedColor[2], mutedColor[3], mutedColor[4] or 1)
+    row.chevron:SetText(">")
+    row.chevron:SetWidth(L.MENU_ROW_CHEVRON_WIDTH)
+    row.chevron:SetJustifyH("CENTER")
+    row.chevron:SetPoint("RIGHT", row, "RIGHT", -L.MENU_ROW_PADDING, 0)
+
+    row.label = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
+    row.label:SetPoint("LEFT", row.icon, "RIGHT", L.MENU_ROW_GAP, 0)
+    row.label:SetPoint("RIGHT", row.count, "LEFT", -L.MENU_ROW_GAP, 0)
+    row.label:SetJustifyH("LEFT")
+    row.label:SetWordWrap(false)
 
     row.highlight = row:CreateTexture(nil, "BACKGROUND")
     row.highlight:SetAllPoints(row)
@@ -153,19 +185,16 @@ function Shell:BuildShell()
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
     -- the control occupying a zone changes, the zone itself never moves.
     -- Anchored only to the shell's top edge (§8) - never repositioned by
-    -- state changes, only its contents are reconfigured.
-    local header = CreateFrame("Frame", nil, shell)
+    -- state changes, only its contents are reconfigured. Real PHUI
+    -- backdrop+border (§1 of the polish pass) instead of a flat texture -
+    -- slightly more opaque than the body so it reads as a distinct,
+    -- structurally-bordered chrome band rather than a strip laid over it.
+    local header = CreateFrame("Frame", nil, shell, "BackdropTemplate")
     header:SetPoint("TOPLEFT", shell, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", 0, 0)
     header:SetHeight(L.SHELL_HEADER_HEIGHT)
     shell.header = header
-
-    -- Slightly more opaque than the body (§9), drawn above the root
-    -- frame's own panel backdrop to read as a distinct chrome band.
-    header.bg = header:CreateTexture(nil, "BACKGROUND", nil, 1)
-    header.bg:SetAllPoints(header)
-    local chromeColor = PHUI.Colors.BG_PARCHMENT
-    header.bg:SetColorTexture(chromeColor[1], chromeColor[2], chromeColor[3], L.EXPANDED_CHROME_ALPHA)
+    PHUI.ApplyBackdrop(header, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
 
     header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
         tooltipText = "Back",
@@ -197,23 +226,16 @@ function Shell:BuildShell()
     end)
     header.searchBox:Hide()
 
-    header.divider = header:CreateTexture(nil, "ARTWORK")
-    header.divider:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
-    header.divider:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
-    header.divider:SetHeight(1)
-    local dividerColor = PHUI.Colors.DIVIDER
-    header.divider:SetColorTexture(dividerColor[1], dividerColor[2], dividerColor[3], dividerColor[4] or 1)
-
     -- Footer: anchored only to the shell's bottom edge (§8) - never moves
-    -- when the body resizes above it.
-    shell.footer = CreateFrame("Frame", nil, shell)
+    -- when the body resizes above it. Same real PHUI backdrop+border
+    -- treatment as the header (§1) - header/body/footer read as one
+    -- connected panel since their left/right/shared edges are coincident
+    -- with the root frame's own border, not offset from it.
+    shell.footer = CreateFrame("Frame", nil, shell, "BackdropTemplate")
     shell.footer:SetPoint("BOTTOMLEFT", shell, "BOTTOMLEFT", 0, 0)
     shell.footer:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", 0, 0)
     shell.footer:SetHeight(L.SHELL_FOOTER_HEIGHT)
-
-    shell.footer.bg = shell.footer:CreateTexture(nil, "BACKGROUND", nil, 1)
-    shell.footer.bg:SetAllPoints(shell.footer)
-    shell.footer.bg:SetColorTexture(chromeColor[1], chromeColor[2], chromeColor[3], L.EXPANDED_CHROME_ALPHA)
+    PHUI.ApplyBackdrop(shell.footer, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
 
     shell.footerBagsText = PHUI.CreateLabel(shell.footer, "primary", nil, PHUI.Fonts.SMALL)
     shell.footerBagsText:SetPoint("LEFT", shell.footer, "LEFT", L.SHELL_PADDING, 0)
@@ -230,12 +252,17 @@ function Shell:BuildShell()
     -- Shell:ApplyDimensions resizes the root frame (§8), so nothing here
     -- ever needs to be repositioned by hand per state. One scrolling
     -- viewport reused by Menu/Category/All (§3 "consistent body bounds").
-    shell.scrollFrame = CreateFrame("ScrollFrame", nil, shell, "UIPanelScrollFrameTemplate")
+    -- Named (not nil) so the real Blizzard scrollbar child can be looked
+    -- up by name and shown/hidden - the scrollFrame's own outer rect
+    -- never reserves gutter width; SetScrollBarShown/each RenderX
+    -- function decide `content`'s width per §4's conditional-scrollbar
+    -- rule instead.
+    shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell, "UIPanelScrollFrameTemplate")
     shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
-    shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + 20), L.SHELL_PADDING)
+    shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
 
     shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
-    shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2 - 20)
+    shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2)
     shell.content:SetHeight(1)
     shell.scrollFrame:SetScrollChild(shell.content)
 end
@@ -543,8 +570,21 @@ function Shell:RenderMenu()
     local shell = self.frame.shell
     local content = shell.content
 
-    local rowWidth = content:GetWidth()
+    -- Menu is content-driven (MENU_BODY_HEIGHT already sizes the
+    -- viewport to exactly fit every category row), so a scrollbar here
+    -- only means real overflow (e.g. screen clamping) - not the normal
+    -- case (§4 "only allow Menu scrolling if screen clamping creates a
+    -- real overflow situation").
     local summary = Pockets.API.GetCategorySummary()
+    local contentHeight = #summary * L.MENU_ROW_HEIGHT
+    local viewportWidth = shell.scrollFrame:GetWidth()
+    local viewportHeight = shell.scrollFrame:GetHeight()
+    local needsScrollbar = contentHeight > viewportHeight
+    local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
+
+    content:SetWidth(rowWidth)
+    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+
     local y = 0
     for index, entry in ipairs(summary) do
         local row = shell.menuRows[index]
@@ -557,6 +597,7 @@ function Shell:RenderMenu()
         row.icon:SetTexture(entry.icon)
         row.label:SetText(entry.label)
         row.count:SetText(tostring(entry.count))
+        row:SetWidth(rowWidth)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
         row:SetScript("OnClick", function()
@@ -567,7 +608,7 @@ function Shell:RenderMenu()
         y = y + L.MENU_ROW_HEIGHT
     end
 
-    content:SetHeight(math.max(y, 1))
+    content:SetHeight(math.max(contentHeight, 1))
 end
 
 --------------------------------------------------
@@ -582,12 +623,25 @@ function Shell:RenderCategory(categoryID)
     local pool = Pockets.UI.ItemButtonPool
 
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
-    local rowWidth = content:GetWidth()
-    local plan = FlowLayout:PlanFlat(#items, {
-        rowWidth = rowWidth,
-        itemSize = L.ITEM_BUTTON_SIZE,
-        gap = L.ITEM_BUTTON_GAP,
-    })
+
+    -- Conditional scrollbar (§4): FlowLayout:PlanFlat is a pure geometry
+    -- function (no widget creation), so it's cheap to try at the full
+    -- viewport width first and only redo it narrower - once - if that
+    -- would actually overflow. Real item buttons only ever get
+    -- created/positioned once, from whichever plan is final.
+    local viewportWidth = shell.scrollFrame:GetWidth()
+    local viewportHeight = shell.scrollFrame:GetHeight()
+
+    local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
+    local needsScrollbar = plan.contentHeight > viewportHeight
+    local usableWidth = viewportWidth
+    if needsScrollbar then
+        usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
+        plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
+    end
+
+    content:SetWidth(usableWidth)
+    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
     for _, placement in ipairs(plan.itemPlacements) do
         local button = pool:Acquire(content)
@@ -668,14 +722,29 @@ function Shell:RenderAll(query)
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
 
-    local rowWidth = content:GetWidth()
     local itemSize = L.ITEM_BUTTON_SIZE
     local gap = L.ITEM_BUTTON_GAP
     local hasQuery = query ~= nil and query ~= ""
 
+    -- Conditional scrollbar (§4): try the full viewport width first (both
+    -- FlowLayout functions are pure geometry, no widget creation), redo
+    -- once narrower only if that would actually overflow. Real widgets
+    -- only ever get created/positioned once, from the final plan.
+    local viewportWidth = shell.scrollFrame:GetWidth()
+    local viewportHeight = shell.scrollFrame:GetHeight()
+
     if hasQuery then
         local items = BuildFlatSearchResults(query)
-        local plan = FlowLayout:PlanFlat(#items, { rowWidth = rowWidth, itemSize = itemSize, gap = gap })
+        local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = itemSize, gap = gap })
+        local needsScrollbar = plan.contentHeight > viewportHeight
+        local usableWidth = viewportWidth
+        if needsScrollbar then
+            usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
+            plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = itemSize, gap = gap })
+        end
+        content:SetWidth(usableWidth)
+        SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+
         for _, placement in ipairs(plan.itemPlacements) do
             local button = pool:Acquire(content)
             button:ClearAllPoints()
@@ -707,11 +776,24 @@ function Shell:RenderAll(query)
     end
 
     local plan = FlowLayout:Plan(planCategories, {
-        rowWidth = rowWidth,
+        rowWidth = viewportWidth,
         itemSize = itemSize,
         gap = gap,
         labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
     })
+    local needsScrollbar = plan.contentHeight > viewportHeight
+    local usableWidth = viewportWidth
+    if needsScrollbar then
+        usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
+        plan = FlowLayout:Plan(planCategories, {
+            rowWidth = usableWidth,
+            itemSize = itemSize,
+            gap = gap,
+            labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
+        })
+    end
+    content:SetWidth(usableWidth)
+    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
 
     local buttonRecordsByCategoryID = {}
     for _, section in ipairs(sections) do

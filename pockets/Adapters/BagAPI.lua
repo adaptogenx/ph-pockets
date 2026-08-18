@@ -16,7 +16,11 @@ local BagAPI = Pockets.Adapters.BagAPI
 -- Ammo/soul/quiver bags are detected by bag family and reported separately.
 BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
 
-local CONTAINER_ITEM_FAMILY_AMMO = 2 -- BAG_FILTER_ASSIGNED family bit used by quivers/ammo pouches
+-- Container family bits (GetItemFamily's return value is a bitmask, not
+-- an enum) for the two specialized ammo-storage bag types Classic/TBC
+-- actually ship: Quiver (bit 0x2) and Ammo Pouch (bit 0x4). Either one
+-- creates an Ammo capacity pool.
+local AMMO_BAG_FAMILY_MASK = 2 + 4
 
 -- Returns the number of slots for a given bag ID, or 0 if the bag doesn't exist.
 function BagAPI:GetBagSlotCount(bagID)
@@ -80,9 +84,28 @@ function BagAPI:IsGeneralBag(bagID)
     return false
 end
 
--- Returns whether the given bagID is an ammo pouch/quiver, using the bag's
--- item family. Treats unknown/undetectable bag families conservatively as
--- non-general rather than ammo (TDD §22 Error Handling).
+-- Pure bitmask check, split out from IsAmmoBag so the actual detection
+-- rule is unit-testable without a live bag/inventory API (bug found here
+-- previously: IsAmmoBag was reading GetItemInfo()'s 9th return value -
+-- itemEquipLoc, a STRING like "INVTYPE_BAG" - and comparing it to the
+-- number 2, which can never be true. Bag family isn't part of
+-- GetItemInfo's return list at all; it comes from GetItemFamily()).
+function BagAPI:IsAmmoFamily(bagFamily)
+    if not bagFamily then
+        return false
+    end
+    if bit and bit.band then
+        return bit.band(bagFamily, AMMO_BAG_FAMILY_MASK) ~= 0
+    end
+    -- bit.band should always be present in the WoW Lua environment; this
+    -- is a defensive fallback, not the expected path.
+    return bagFamily == 2 or bagFamily == 4
+end
+
+-- Returns whether the given bagID is an ammo pouch/quiver, using the
+-- bag's item family (GetItemFamily - see IsAmmoFamily's note for the bug
+-- this replaced). Treats unknown/undetectable bag families conservatively
+-- as non-ammo rather than ammo (TDD §22 Error Handling).
 function BagAPI:IsAmmoBag(bagID)
     if bagID == 0 then
         return false -- backpack is never a specialized bag
@@ -98,13 +121,8 @@ function BagAPI:IsAmmoBag(bagID)
         return false
     end
 
-    local _, _, _, _, _, _, _, _, bagFamily = GetItemInfo(bagLink)
-    if not bagFamily then
-        return false
-    end
-
-    -- Bit 1 (value 2) is the ammo/quiver bag family in WoW Classic's item family bitmask.
-    return bagFamily == CONTAINER_ITEM_FAMILY_AMMO
+    local bagFamily = GetItemFamily and GetItemFamily(bagLink)
+    return self:IsAmmoFamily(bagFamily)
 end
 
 -- Enumerates every bag currently equipped (backpack + all four bag slots),

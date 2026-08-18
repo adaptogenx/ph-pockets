@@ -126,7 +126,11 @@ Constants.LAYOUT = {
     -- below from the fixed category count) while Category/All get a
     -- bounded, scrollable browsing viewport (SHELL_BODY_MAX_HEIGHT). The
     -- invariant is position stability, not identical frame height.
-    SHELL_WIDTH = 220,
+    -- Narrowed ~13% from the previous 220 (UI polish pass §3) - 192 is
+    -- the smallest width that still comfortably fits the worst-case
+    -- Menu row (icon + "Trade Goods"/"Consumables" + a 3-digit count +
+    -- chevron + padding) without clipping.
+    SHELL_WIDTH = 192,
     SHELL_PADDING = 8,
     SHELL_HEADER_HEIGHT = 26,
     SHELL_BODY_MAX_HEIGHT = 260,
@@ -136,9 +140,18 @@ Constants.LAYOUT = {
     SHELL_HEADER_SIDE_WIDTH = 20,
     SHELL_HEADER_RIGHT_WIDTH = 60,
 
+    -- Category row layout: fixed conceptual columns ICON | LABEL | FLEX |
+    -- COUNT | CHEVRON (§3, §11) - only LABEL/FLEX ever changes width.
     MENU_ROW_HEIGHT = 24,
     MENU_ROW_ICON_SIZE = 16,
-    MENU_ROW_COUNT_WIDTH = 34,
+    MENU_ROW_PADDING = 4,
+    MENU_ROW_GAP = 4,
+    MENU_ROW_COUNT_WIDTH = 26,
+    MENU_ROW_CHEVRON_WIDTH = 16,
+
+    -- Real Blizzard scrollbar + the gap PHUI leaves beside it - the width
+    -- reclaimed from the body when no scrollbar is needed (§4).
+    SCROLLBAR_RESERVE = 20,
 
     ITEM_PANEL_COLUMNS = 4,
     ITEM_BUTTON_SIZE = 40,

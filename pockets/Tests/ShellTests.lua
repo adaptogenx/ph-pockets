@@ -215,6 +215,113 @@ Pockets.Tests.TestRunner:Register("Shell: header action zones stay fixed - only 
 end)
 
 --------------------------------------------------
+-- UI polish pass: width, header/footer borders, chevron, item grid
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: expanded width is narrower than the pre-polish-pass 220", function()
+    local L = Pockets.Constants.LAYOUT
+    local ok = L.SHELL_WIDTH < 220 and L.SHELL_WIDTH >= 187 -- ~10-15% narrower, per §3
+    return ok, ok and "OK" or string.format("expected SHELL_WIDTH in [187,220), got %s", tostring(L.SHELL_WIDTH))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: header and footer use a real PHUI backdrop+border", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local header, footer = Shell.frame.shell.header, Shell.frame.shell.footer
+    local ok = header.GetBackdrop and header:GetBackdrop() ~= nil
+        and footer.GetBackdrop and footer:GetBackdrop() ~= nil
+    ResetToGlance()
+    return ok, ok and "OK" or "expected header/footer to carry a real backdrop, not a flat texture"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Menu row worst-case (long label + 3-digit count) fits without clipping", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local row = Shell.frame.shell.menuRows[1]
+    row.label:SetText("Consumables")
+    row.count:SetText("180")
+
+    local labelRight = row.label:GetRight()
+    local countLeft = row.count:GetLeft()
+    local chevronLeft = row.chevron:GetLeft()
+    local countRight = row.count:GetRight()
+
+    ResetToGlance()
+
+    local ok = labelRight and countLeft and labelRight <= countLeft
+        and chevronLeft and countRight and chevronLeft >= countRight
+    return ok, ok and "OK" or "worst-case Menu row label/count/chevron overlapped"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Menu chevron is a legible size, not the old tiny glyph", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local row = Shell.frame.shell.menuRows[1]
+    local _, fontSize = row.chevron:GetFont()
+    local text = row.chevron:GetText()
+    ResetToGlance()
+
+    local ok = text == ">" and fontSize and fontSize >= 14
+    return ok, ok and "OK" or string.format("expected '>' at >=14px, got text=%s size=%s", tostring(text), tostring(fontSize))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: category counts stay right-aligned regardless of digit count", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local row = Shell.frame.shell.menuRows[1]
+
+    row.count:SetText("1")
+    local rightWith1Digit = row.count:GetRight()
+    row.count:SetText("180")
+    local rightWith3Digits = row.count:GetRight()
+
+    ResetToGlance()
+
+    local ok = rightWith1Digit and rightWith3Digits and math.abs(rightWith1Digit - rightWith3Digits) < 0.01
+    return ok, ok and "OK" or "count's right edge shifted when digit count changed"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: no scrollbar when Category content fits the viewport", function()
+    Shell:SetState(Shell.STATE.MENU)
+    -- Junk is a low-count category in test/dev environments - well under
+    -- one viewport's worth of items.
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+
+    local scrollFrame = Shell.frame.shell.scrollFrame
+    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+    local contentWidth = Shell.frame.shell.content:GetWidth()
+    local viewportWidth = scrollFrame:GetWidth()
+
+    ResetToGlance()
+
+    local ok = (not scrollBar or not scrollBar:IsShown()) and math.abs(contentWidth - viewportWidth) < 0.01
+    return ok, ok and "OK" or "scrollbar (or its reserved gutter) was present without overflowing content"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width only when content actually overflows", function()
+    -- Force an overflow deterministically by aggregating far more items
+    -- than the viewport could ever fit, bypassing live inventory state.
+    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    local manyItems = {}
+    for i = 1, 200 do
+        manyItems[i] = { itemID = i, texture = 1, quantity = 1, bagID = 0, slotID = i }
+    end
+    Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
+
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+
+    local scrollFrame = Shell.frame.shell.scrollFrame
+    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+    local contentWidth = Shell.frame.shell.content:GetWidth()
+    local viewportWidth = scrollFrame:GetWidth()
+
+    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
+    ResetToGlance()
+
+    local ok = scrollBar and scrollBar:IsShown()
+        and contentWidth < viewportWidth
+        and math.abs((viewportWidth - contentWidth) - Pockets.Constants.LAYOUT.SCROLLBAR_RESERVE) < 0.01
+    return ok, ok and "OK" or "expected the scrollbar to appear and reclaim exactly SCROLLBAR_RESERVE width"
+end)
+
+--------------------------------------------------
 -- Hard anchor rule: TOPLEFT is the origin (UI layout pass §1, §18)
 --------------------------------------------------
 

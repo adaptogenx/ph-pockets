@@ -69,6 +69,28 @@ function Debug:DumpEstimator()
     print(COLOR_YELLOW .. "===================================" .. COLOR_RESET)
 end
 
+-- Per-equipped-bag diagnostic dump (Ammo detection debugging pass §7):
+-- itemID, name, GetItemFamily() bitmask, slot occupancy, and how Pockets
+-- classified the bag - so a mis-detection can be diagnosed from actual
+-- runtime values instead of guessed at.
+function Debug:DumpBags()
+    print(COLOR_YELLOW .. "=== Pockets Equipped Bags ===" .. COLOR_RESET)
+    local BagAPI = Pockets.Adapters.BagAPI
+    for _, bag in ipairs(BagAPI:GetEquippedBags()) do
+        local invSlot = ContainerIDToInventoryID and ContainerIDToInventoryID(bag.bagID)
+        local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
+        local bagName = bagLink and GetItemInfo(bagLink)
+        local bagFamily = bagLink and GetItemFamily and GetItemFamily(bagLink)
+        local used = BagAPI:CountUsedSlots(bag.bagID, bag.slotCount)
+        local isAmmo = BagAPI:IsAmmoBag(bag.bagID)
+        print(string.format(
+            "  bag %d: %s | family=%s | slots=%d/%d | classified=%s",
+            bag.bagID, tostring(bagName or "(backpack/none)"), tostring(bagFamily),
+            used, bag.slotCount, isAmmo and "AMMO" or "GENERAL"))
+    end
+    print(COLOR_YELLOW .. "==============================" .. COLOR_RESET)
+end
+
 function Debug:DumpEvents()
     print(COLOR_YELLOW .. "=== Pockets EventBus Subscribers ===" .. COLOR_RESET)
     for eventName, list in pairs(Pockets.Services.EventBus.subscribers) do
@@ -104,8 +126,10 @@ function Debug:HandleCommand(args)
         self:DumpEstimator()
     elseif subCmd == "events" then
         self:DumpEvents()
+    elseif subCmd == "bags" then
+        self:DumpBags()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags")
     end
 end
 
