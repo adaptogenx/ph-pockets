@@ -727,8 +727,12 @@ local function CreateCategoryListRow(poolAnchor)
         -- into a long repeating slot-frame graphic across the wide row.
         -- List rows use plain Menu-style rows with no button chrome, so
         -- it's just hidden rather than reanchored to nothing useful.
-        if row.SetNormalTexture then
-            row:SetNormalTexture(nil)
+        -- SetNormalTexture(nil) itself errors on this client ("Usage:
+        -- self:SetNormalTexture(asset)") - clear the texture OBJECT
+        -- instead, which does accept nil.
+        local normalTexture = row.GetNormalTexture and row:GetNormalTexture()
+        if normalTexture then
+            normalTexture:SetTexture(nil)
         end
         local pushedTexture = row.GetPushedTexture and row:GetPushedTexture()
         if pushedTexture then
