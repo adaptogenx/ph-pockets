@@ -40,6 +40,20 @@ function Layout:FormatETASuffix(seconds)
     return " \194\183 " .. eta
 end
 
+-- "13m" (or "<1m") - Glance's compact secondary value, no "to full"
+-- suffix (Glance compactness pass). Returns nil when there's no ETA to
+-- show, same contract as FormatETA.
+function Layout:FormatCompactETA(seconds)
+    if not seconds then
+        return nil
+    end
+    local minutes = math.floor(seconds / 60)
+    if minutes < 1 then
+        return "<1m"
+    end
+    return string.format("%dm", minutes)
+end
+
 function Layout:GetCapacityColor(utilization)
     local thresholds = Pockets.Constants.CAPACITY_COLOR_THRESHOLDS
     local colors = PHUI.Colors

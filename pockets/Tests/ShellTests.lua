@@ -254,6 +254,44 @@ Pockets.Tests.TestRunner:Register("Shell: expanding from Glance grows right/down
     return ok, ok and "OK" or "left/top edge shifted when Glance expanded into Menu"
 end)
 
+--------------------------------------------------
+-- Glance compactness pass
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: Glance size is within the compact target (120-150 x 48-60)", function()
+    ResetToGlance()
+    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
+    local ok = width >= 120 and width <= 150 and height >= 48 and height <= 60
+    return ok, ok and "OK" or string.format("expected 120-150 x 48-60, got %sx%s", tostring(width), tostring(height))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Glance no longer shows Ammo", function()
+    ResetToGlance()
+    local ok = Shell.frame.glance.ammoText == nil
+    return ok, ok and "OK" or "expected Glance to have no ammoText widget at all"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Glance ETA is compact (no 'to full' suffix)", function()
+    local estimator = Pockets.Services.CapacityEstimator
+    local originalGetState = estimator.GetState
+    local originalGetConfidence = estimator.GetConfidence
+    local originalGetETA = estimator.GetETA
+    estimator.GetState = function() return Pockets.Constants.ESTIMATOR_STATE.FILLING end
+    estimator.GetConfidence = function() return 1.0 end
+    estimator.GetETA = function() return 13 * 60 end
+
+    ResetToGlance()
+    local text = Shell.frame.glance.etaText:GetText()
+
+    estimator.GetState = originalGetState
+    estimator.GetConfidence = originalGetConfidence
+    estimator.GetETA = originalGetETA
+    ResetToGlance()
+
+    local ok = text == "13m"
+    return ok, ok and "OK" or string.format("expected compact '13m', got %s", tostring(text))
+end)
+
 Pockets.Tests.TestRunner:Register("Shell: PositionStrategy V1 anchor is TOPLEFT", function()
     local ok = Pockets.UI.PositionStrategy:GetRootAnchor() == "TOPLEFT"
     return ok, ok and "OK" or "expected the V1 position strategy to report TOPLEFT"

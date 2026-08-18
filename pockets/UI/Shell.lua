@@ -108,6 +108,11 @@ end
 -- Frame construction
 --------------------------------------------------
 
+-- Compact always-visible HUD: icon left, "59 / 76" / "13m" stacked to
+-- its right, both vertically centered against the icon (LEFT-anchoring
+-- textBlock to icon's RIGHT centers it automatically). No header, no
+-- Ammo (Glance compactness pass) - just the two numbers the frame exists
+-- to answer.
 function Shell:BuildGlance()
     local frame = self.frame
     local glance = CreateFrame("Frame", nil, frame)
@@ -116,19 +121,23 @@ function Shell:BuildGlance()
 
     glance.icon = glance:CreateTexture(nil, "ARTWORK")
     glance.icon:SetSize(L.GLANCE_ICON_SIZE, L.GLANCE_ICON_SIZE)
-    glance.icon:SetPoint("TOP", glance, "TOP", 0, -L.GLANCE_PADDING)
+    glance.icon:SetPoint("LEFT", glance, "LEFT", L.GLANCE_PADDING, 0)
     glance.icon:SetTexture(Constants.HUD_ICON)
     glance.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    glance.capacityText = PHUI.CreateLabel(glance, "primary", nil, PHUI.Fonts.LARGE)
-    glance.capacityText:SetPoint("TOP", glance.icon, "BOTTOM", 0, -L.GLANCE_ROW_GAP)
+    glance.textBlock = CreateFrame("Frame", nil, glance)
+    glance.textBlock:SetPoint("LEFT", glance.icon, "RIGHT", L.GLANCE_TEXT_GAP_X, 0)
+    glance.textBlock:SetSize(
+        L.GLANCE_WIDTH - L.GLANCE_PADDING * 2 - L.GLANCE_ICON_SIZE - L.GLANCE_TEXT_GAP_X,
+        L.GLANCE_ICON_SIZE)
 
-    glance.etaText = PHUI.CreateLabel(glance, "muted", nil, PHUI.Fonts.SMALL)
-    glance.etaText:SetPoint("TOP", glance.capacityText, "BOTTOM", 0, -2)
+    glance.capacityText = PHUI.CreateLabel(glance.textBlock, "primary", nil, PHUI.Fonts.NORMAL)
+    glance.capacityText:SetPoint("TOPLEFT", glance.textBlock, "TOPLEFT", 0, 0)
+    glance.capacityText:SetJustifyH("LEFT")
 
-    glance.ammoText = PHUI.CreateLabel(glance, "primary", nil, PHUI.Fonts.SMALL)
-    glance.ammoText:SetPoint("TOP", glance.etaText, "BOTTOM", 0, -L.GLANCE_ROW_GAP)
-    glance.ammoText:Hide()
+    glance.etaText = PHUI.CreateLabel(glance.textBlock, "muted", nil, PHUI.Fonts.SMALL)
+    glance.etaText:SetPoint("TOPLEFT", glance.capacityText, "BOTTOMLEFT", 0, -L.GLANCE_TEXT_GAP_Y)
+    glance.etaText:SetJustifyH("LEFT")
 end
 
 function Shell:BuildShell()
@@ -474,26 +483,14 @@ function Shell:RenderGlance()
         glance.etaText:SetText("Full")
     elseif estimatorState == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
         -- Prefer omission to a noisy/fabricated number (§2, §9).
-        glance.etaText:SetText(Layout:FormatETA(estimator:GetETA()) or "")
+        glance.etaText:SetText(Layout:FormatCompactETA(estimator:GetETA()) or "")
     else
         glance.etaText:SetText("")
     end
 
-    local ammoCapacity = Pockets.Services.InventoryState:GetAmmoCapacity()
-    local showAmmo = self:ShouldShowAmmoRow(ammoCapacity)
-    if showAmmo then
-        glance.ammoText:SetText(string.format("%d / %d", ammoCapacity.used, ammoCapacity.total))
-        glance.ammoText:Show()
-    else
-        glance.ammoText:Hide()
-    end
-
-    local height = L.GLANCE_PADDING * 2
-        + L.GLANCE_ICON_SIZE + L.GLANCE_ROW_GAP
-        + L.GLANCE_CAPACITY_ROW_HEIGHT
-        + L.GLANCE_ETA_ROW_HEIGHT
-        + (showAmmo and (L.GLANCE_ROW_GAP + L.GLANCE_AMMO_ROW_HEIGHT) or 0)
-    self.frame:SetSize(L.GLANCE_WIDTH, height)
+    -- Ammo intentionally omitted from Glance (Glance compactness pass) -
+    -- it stays available in Menu/Category/All's footer.
+    self.frame:SetSize(L.GLANCE_WIDTH, L.GLANCE_HEIGHT)
 end
 
 --------------------------------------------------

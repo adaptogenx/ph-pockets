@@ -108,14 +108,16 @@ Constants.CATEGORY_ICON = {
 -- Items shell (.plans/Pockets_Glance_UI.md). Only Glance is exempt from the
 -- stable width/header/footer contract shared by Menu/Category/All.
 Constants.LAYOUT = {
-    -- Glance: small, square-ish, exempt from the stable shell contract.
-    GLANCE_WIDTH = 140,
-    GLANCE_ICON_SIZE = 44,
-    GLANCE_PADDING = 12,
-    GLANCE_ROW_GAP = 3,
-    GLANCE_CAPACITY_ROW_HEIGHT = 20,
-    GLANCE_ETA_ROW_HEIGHT = 14,
-    GLANCE_AMMO_ROW_HEIGHT = 14,
+    -- Glance: minimal always-visible HUD, exempt from the stable shell
+    -- contract. Fixed size (no longer content-dependent - Ammo was
+    -- dropped from Glance entirely) so it stays as compact as possible:
+    -- icon + "59 / 76" on one row, compact "13m" ETA on the next.
+    GLANCE_WIDTH = 128,
+    GLANCE_HEIGHT = 52,
+    GLANCE_ICON_SIZE = 30,
+    GLANCE_PADDING = 8,
+    GLANCE_TEXT_GAP_X = 6,
+    GLANCE_TEXT_GAP_Y = 1,
 
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
