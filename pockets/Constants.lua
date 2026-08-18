@@ -138,10 +138,10 @@ Constants.LAYOUT = {
     -- shared - every expanded state's body grows to fit its actual
     -- visible content between SHELL_BODY_MIN_HEIGHT and
     -- SHELL_BODY_MAX_HEIGHT (a scrollbar only appears past the max;
-    -- Category List uses its own row-count-based cap instead - see
-    -- CATEGORY_LIST_MAX_VISIBLE_ROWS), rather than always claiming the
-    -- max whether or not the content needs it. The invariant is position
-    -- stability, not identical frame height.
+    -- Menu and Category List use their own shared row-count-based cap
+    -- instead - see MAX_VISIBLE_LIST_ROWS), rather than always claiming
+    -- the max whether or not the content needs it. The invariant is
+    -- position stability, not identical frame height.
     -- Wide enough that Category/All's item grid defaults to 5 columns
     -- (5*ITEM_BUTTON_SIZE + 4*ITEM_BUTTON_GAP = 216, plus a few px slack)
     -- when no scrollbar is showing - narrower values (192, and the
@@ -178,11 +178,16 @@ Constants.LAYOUT = {
     LIST_ROW_COUNT_WIDTH = 26,
     LIST_ROW_CHEVRON_WIDTH = 16,
 
-    -- Category List's own visible-row cap (List max-height pass) -
-    -- deliberately separate from Grid/All's SHELL_BODY_MAX_HEIGHT since
-    -- this is row-count-based, not a raw pixel cap. Implementation
-    -- constant, not a user preference yet.
-    CATEGORY_LIST_MAX_VISIBLE_ROWS = 8,
+    -- Shared list-row visible-row cap (height-management pass) - both
+    -- Menu and Category List grow naturally until this many complete
+    -- rows are showing, then cap and scroll. Deliberately row-count-based
+    -- rather than Grid/All's raw pixel budget (SHELL_BODY_MAX_HEIGHT), so
+    -- the cap always lands on a whole row, never a half-visible one.
+    -- Implementation constant, not a user preference yet. Lowered from
+    -- an earlier 8 to 6 specifically to stop Pockets from consuming too
+    -- much vertical space on smaller screens (dynamic screen-edge
+    -- positioning is explicitly out of scope for this pass).
+    MAX_VISIBLE_LIST_ROWS = 6,
 
     -- Real Blizzard scrollbar + the gap PHUI leaves beside it - the width
     -- reclaimed from the body when no scrollbar is needed (§4).
@@ -210,11 +215,12 @@ Constants.LAYOUT = {
     EXPANDED_CHROME_ALPHA = 0.96,
 }
 
--- NOTE: Category List's max browsing height (CATEGORY_LIST_MAX_VISIBLE_ROWS
--- * LIST_ROW_HEIGHT) is a CONTENT-height threshold, computed where it's
--- used (Shell.lua's RenderCategoryList) via the same
--- ResolveDynamicHeight() every dynamic-height renderer shares - not
--- duplicated here as a separate derived bodyHeight constant.
+-- NOTE: Menu's and Category List's max browsing height
+-- (MAX_VISIBLE_LIST_ROWS * LIST_ROW_HEIGHT) is a CONTENT-height
+-- threshold, computed where it's used (Shell.lua's RenderMenu/
+-- RenderCategoryList) via the same ResolveDynamicHeight() every
+-- dynamic-height renderer shares - not duplicated here as a separate
+-- derived bodyHeight constant.
 
 -- NOTE: Menu's body height is NOT a load-time constant - zero-count
 -- categories are hidden at render time (§10 of the row-unification

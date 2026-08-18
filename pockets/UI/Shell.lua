@@ -93,6 +93,16 @@ local function ResolveDynamicHeight(contentHeight, maxContentHeight)
     return usedContentHeight, usedContentHeight + L.SHELL_PADDING * 2, needsScrollbar
 end
 
+-- Menu and Category List's shared cap (height-management pass): both
+-- grow naturally until MAX_VISIBLE_LIST_ROWS complete rows are showing,
+-- then cap at exactly that many whole rows and scroll - never a raw
+-- pixel budget (MaxContentHeight/SHELL_BODY_MAX_HEIGHT) that could land
+-- mid-row. Grid/All are explicitly out of scope for this pass and keep
+-- using MaxContentHeight().
+local function MaxListContentHeight()
+    return L.MAX_VISIBLE_LIST_ROWS * L.LIST_ROW_HEIGHT
+end
+
 -- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
 -- Blizzard scrollbar widget UIPanelScrollFrameTemplate creates as
 -- "<name>ScrollBar" - callers are responsible for sizing `content` to
@@ -644,7 +654,7 @@ function Shell:RenderMenu()
 
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #visible * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight)
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight())
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)
@@ -832,17 +842,16 @@ function Shell:RenderCategoryList(categoryID)
 
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
 
-    -- List max-height pass: capped by row COUNT
-    -- (CATEGORY_LIST_MAX_VISIBLE_ROWS), not the generic Grid/All pixel
-    -- budget (SHELL_BODY_MAX_HEIGHT) - 8 whole rows should be visible
-    -- before a scrollbar appears, not however many happen to fit under an
-    -- unrelated pixel cap. Fixed row height makes this pure arithmetic,
-    -- no FlowLayout call needed. Width is a constant (dynamic height pass
-    -- - see RenderCategoryGrid's note).
+    -- Height-management pass: capped by row COUNT
+    -- (MAX_VISIBLE_LIST_ROWS, shared with Menu), not the generic
+    -- Grid/All pixel budget (SHELL_BODY_MAX_HEIGHT) - whole rows should
+    -- be visible before a scrollbar appears, never however many happen
+    -- to fit under an unrelated pixel cap. Fixed row height makes this
+    -- pure arithmetic, no FlowLayout call needed. Width is a constant
+    -- (dynamic height pass - see RenderCategoryGrid's note).
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #items * L.LIST_ROW_HEIGHT
-    local maxVisibleHeight = L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, maxVisibleHeight)
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight())
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)

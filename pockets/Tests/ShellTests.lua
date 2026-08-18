@@ -779,8 +779,23 @@ for _, n in ipairs({ 1, 3, 6 }) do
     end)
 end
 
-Pockets.Tests.TestRunner:Register("CategoryList: exactly 8 items (the cap) - still no scrollbar", function()
-    CheckListScrollState(Pockets.Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS, false)
+Pockets.Tests.TestRunner:Register("CategoryList: exactly MAX_VISIBLE_LIST_ROWS items (the cap) - still no scrollbar", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, false)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("CategoryList: MAX_VISIBLE_LIST_ROWS + 1 items - only whole rows visible in the viewport", function()
+    WithNItems(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        local L = Pockets.Constants.LAYOUT
+        local bodyHeight = L.MAX_VISIBLE_LIST_ROWS * L.LIST_ROW_HEIGHT + L.SHELL_PADDING * 2
+        local expected = L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
+        if Shell.frame:GetHeight() ~= expected then
+            error(string.format("expected capped height %d (whole rows only), got %d", expected, Shell.frame:GetHeight()), 0)
+        end
+    end)
+    ResetToGlance()
     return true, "OK"
 end)
 
@@ -813,8 +828,8 @@ Pockets.Tests.TestRunner:Register("CategoryList: rows are real frame descendants
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryList: 9 items - scrollbar appears", function()
-    CheckListScrollState(Pockets.Constants.LAYOUT.CATEGORY_LIST_MAX_VISIBLE_ROWS + 1, true)
+Pockets.Tests.TestRunner:Register("CategoryList: MAX_VISIBLE_LIST_ROWS + 1 items - scrollbar appears", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, true)
     return true, "OK"
 end)
 
@@ -828,7 +843,7 @@ Pockets.Tests.TestRunner:Register("CategoryList: body height caps at exactly MAX
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
         local L = Pockets.Constants.LAYOUT
-        local maxBodyHeight = L.CATEGORY_LIST_MAX_VISIBLE_ROWS * L.LIST_ROW_HEIGHT + L.SHELL_PADDING * 2
+        local maxBodyHeight = L.MAX_VISIBLE_LIST_ROWS * L.LIST_ROW_HEIGHT + L.SHELL_PADDING * 2
         local expected = L.SHELL_HEADER_HEIGHT + maxBodyHeight + L.SHELL_FOOTER_HEIGHT
         local height = Shell.frame:GetHeight()
         if height ~= expected then
@@ -839,7 +854,7 @@ Pockets.Tests.TestRunner:Register("CategoryList: body height caps at exactly MAX
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 to 8 items only extends the bottom edge (TOPLEFT fixed)", function()
+Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 items to the cap only extends the bottom edge (TOPLEFT fixed)", function()
     ResetToGlance()
     local _, _, _, x0, y0 = Shell.frame:GetPoint()
 
@@ -849,7 +864,7 @@ Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 to 8 items only 
     end)
     local _, _, _, x1, y1 = Shell.frame:GetPoint()
 
-    WithNItems(8, function()
+    WithNItems(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, function()
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     end)
     local _, _, _, x2, y2 = Shell.frame:GetPoint()
@@ -857,7 +872,132 @@ Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 to 8 items only 
     ResetToGlance()
 
     local ok = x0 == x1 and y0 == y1 and x1 == x2 and y1 == y2
-    return ok, ok and "OK" or "TOPLEFT moved while the List body grew from 3 to 8 rows"
+    return ok, ok and "OK" or "TOPLEFT moved while the List body grew from 3 rows to the cap"
+end)
+
+--------------------------------------------------
+-- Menu height-management pass: same shared row-count cap as Category List
+--------------------------------------------------
+
+local function WithNVisibleCategories(n, fn)
+    local originalGetSummary = Pockets.API.GetCategorySummary
+    local summary = {}
+    for i = 1, n do
+        summary[i] = { categoryID = "cat" .. i, label = "Cat " .. i, icon = 1, count = i }
+    end
+    Pockets.API.GetCategorySummary = function() return summary end
+
+    local ok, err = pcall(fn)
+
+    Pockets.API.GetCategorySummary = originalGetSummary
+    if not ok then
+        error(err, 0)
+    end
+end
+
+local function CheckMenuScrollState(n, expectScrollbar)
+    WithNVisibleCategories(n, function()
+        Shell:SetState(Shell.STATE.MENU)
+
+        local scrollFrame = Shell.frame.shell.scrollFrame
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local shown = scrollBar and scrollBar:IsShown() or false
+        local contentWidth = Shell.frame.shell.content:GetWidth()
+        local viewportWidth = scrollFrame:GetWidth()
+        local noGutter = math.abs(contentWidth - viewportWidth) < 0.01
+
+        if shown ~= expectScrollbar then
+            error(string.format("n=%d: expected scrollbar shown=%s, got %s", n, tostring(expectScrollbar), tostring(shown)), 0)
+        end
+        if (not expectScrollbar) and not noGutter then
+            error(string.format("n=%d: expected zero scrollbar gutter when hidden", n), 0)
+        end
+    end)
+    ResetToGlance()
+end
+
+for _, n in ipairs({ 1, 3 }) do
+    Pockets.Tests.TestRunner:Register(string.format("Menu: %d visible categor%s - no scrollbar", n, n == 1 and "y" or "ies"), function()
+        CheckMenuScrollState(n, false)
+        return true, "OK"
+    end)
+end
+
+Pockets.Tests.TestRunner:Register("Menu: exactly MAX_VISIBLE_LIST_ROWS categories (the cap) - still no scrollbar", function()
+    CheckMenuScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, false)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("Menu: MAX_VISIBLE_LIST_ROWS + 1 categories - scrollbar appears", function()
+    CheckMenuScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, true)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("Menu: MAX_VISIBLE_LIST_ROWS + 1 categories - only whole rows visible in the viewport", function()
+    WithNVisibleCategories(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, function()
+        Shell:SetState(Shell.STATE.MENU)
+        local L = Pockets.Constants.LAYOUT
+        local bodyHeight = L.MAX_VISIBLE_LIST_ROWS * L.LIST_ROW_HEIGHT + L.SHELL_PADDING * 2
+        local expected = L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
+        if Shell.frame:GetHeight() ~= expected then
+            error(string.format("expected capped height %d (whole rows only), got %d", expected, Shell.frame:GetHeight()), 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+-- Menu's taxonomy is fixed at 8 categories total (never truly "large"
+-- the way a Category List item count can be), but 8 still exceeds the
+-- 6-row cap, so a scrollbar is still expected here.
+Pockets.Tests.TestRunner:Register("Menu: full 8-category taxonomy exceeds the cap - scrollbar appears", function()
+    CheckMenuScrollState(#Pockets.Constants.CATEGORY_ORDER, true)
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("Menu: growing from 3 categories to the cap only extends the bottom edge (TOPLEFT fixed)", function()
+    ResetToGlance()
+    local _, _, _, x0, y0 = Shell.frame:GetPoint()
+
+    WithNVisibleCategories(3, function()
+        Shell:SetState(Shell.STATE.MENU)
+    end)
+    local _, _, _, x1, y1 = Shell.frame:GetPoint()
+
+    WithNVisibleCategories(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, function()
+        Shell:SetState(Shell.STATE.MENU)
+    end)
+    local _, _, _, x2, y2 = Shell.frame:GetPoint()
+
+    ResetToGlance()
+
+    local ok = x0 == x1 and y0 == y1 and x1 == x2 and y1 == y2
+    return ok, ok and "OK" or "TOPLEFT moved while Menu's body grew from 3 rows to the cap"
+end)
+
+-- §7 "Menu and Category List should now behave identically in terms of
+-- vertical sizing" - both cap at the SAME total frame height once each
+-- has more than MAX_VISIBLE_LIST_ROWS visible rows.
+Pockets.Tests.TestRunner:Register("Menu and Category List cap at the identical total height once over the row limit", function()
+    local overCap = Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 2
+
+    WithNVisibleCategories(overCap, function()
+        Shell:SetState(Shell.STATE.MENU)
+    end)
+    local menuHeight = Shell.frame:GetHeight()
+    ResetToGlance()
+
+    local listHeight
+    WithNItems(overCap, function()
+        Shell:SetState(Shell.STATE.MENU)
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        listHeight = Shell.frame:GetHeight()
+    end)
+    ResetToGlance()
+
+    local ok = menuHeight == listHeight
+    return ok, ok and "OK" or string.format("expected matching capped height, got menu=%s list=%s",
+        tostring(menuHeight), tostring(listHeight))
 end)
 
 -- Dynamic body height pass: Category/All no longer always claim
