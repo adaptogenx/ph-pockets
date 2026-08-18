@@ -252,6 +252,11 @@ function Shell:Initialize()
         self:StopMovingOrSizing()
         Shell.isDragging = false
         Shell:SavePosition()
+        -- Render() no-ops while isDragging is true (see Render's guard),
+        -- so any state change requested by the SAME click (WoW fires
+        -- OnDragStart/OnDragStop on every click, moving or not - see
+        -- OnClick's note below) never got drawn. Flush it now.
+        Shell:Render()
     end)
     -- Growing DOWN/RIGHT from a fixed TOPLEFT must never depend on the
     -- frame's SIZE - no OnSizeChanged handler here re-anchors anything.
@@ -262,6 +267,18 @@ function Shell:Initialize()
     -- Click is the only navigation mechanism (§1). Clicking Glance opens
     -- Menu; clicks inside Menu/Category/All are handled by their own
     -- child buttons/rows and never reach this handler.
+    --
+    -- WoW fires OnDragStart/OnDragStop on every mousedown/mouseup for any
+    -- frame registered via RegisterForDrag, even a stationary click with
+    -- zero movement - so this OnClick can run while StartMoving()'s
+    -- cursor-follow is technically still active for the same click.
+    -- SetState below would then resize the frame (Glance -> Menu) WHILE
+    -- WoW's drag system is mid-commit, which corrupts the position
+    -- StopMovingOrSizing() ends up saving (observed in practice: opening
+    -- jumped the frame, closing jumped it again by roughly double).
+    -- Render() defers itself while isDragging is true and OnDragStop
+    -- flushes it once the drag has fully settled, so no resize can ever
+    -- happen mid-move.
     frame:SetScript("OnClick", function()
         if Shell.state == Shell.STATE.GLANCE then
             Shell:SetState(Shell.STATE.MENU)
@@ -301,9 +318,21 @@ function Shell:RestorePosition()
     PositionStrategy:ApplyRootPosition(self.frame, Pockets.SavedSettings.hud)
 end
 
+-- OnDragStart/OnDragStop fire on every click (moving or not), so this
+-- runs far more often than an actual drag happens. Skip the write
+-- entirely when the position hasn't meaningfully changed, so a
+-- stationary click can never persist a fresh (and possibly slightly
+-- different, e.g. from float rounding) value over a perfectly good one.
+local NO_OP_MOVE_THRESHOLD = 0.5
 function Shell:SavePosition()
     local hud = Pockets.SavedSettings.hud
     local captured = PositionStrategy:CaptureSavedPosition(self.frame)
+
+    if math.abs(captured.x - (hud.x or 0)) < NO_OP_MOVE_THRESHOLD
+        and math.abs(captured.y - (hud.y or 0)) < NO_OP_MOVE_THRESHOLD then
+        return
+    end
+
     hud.point = captured.point
     hud.relativePoint = captured.relativePoint
     hud.x = captured.x
@@ -370,7 +399,22 @@ function Shell:ClearBody()
     shell.content:SetHeight(1)
 end
 
+-- Cheap and idempotent - every Render* function below only reads
+-- already-computed domain state (§14), so it's always safe to just call
+-- this again rather than trying to patch up a half-drawn state.
 function Shell:Render()
+    -- Fully deferred while a drag is in progress (§1/§2/§15): WoW's
+    -- StartMoving() is live-updating the frame's screen position from the
+    -- cursor for as long as isDragging is true, and ANY resize while
+    -- that's active (not just a stray SetPoint) can corrupt the final
+    -- position StopMovingOrSizing() commits - see OnClick's note in
+    -- Initialize for how a plain click can trigger this. self.state is
+    -- still updated by SetState even when deferred; OnDragStop flushes a
+    -- fresh Render() once the drag has fully settled.
+    if self.isDragging then
+        return
+    end
+
     local frame = self.frame
     local state = self.state
 
@@ -379,13 +423,7 @@ function Shell:Render()
     -- the one PositionStrategy-backed function before anything else runs.
     -- The rest of Render only ever calls SetSize afterward, so a state
     -- transition can resize the frame but can never drift its origin.
-    -- Skipped mid-drag: WoW's StartMoving() is already live-updating the
-    -- frame's anchor from the cursor, and a background data-change event
-    -- (bag update, ETA tick) calling Render while the player is
-    -- repositioning Pockets must not snap it back to the pre-drag spot.
-    if not self.isDragging then
-        self:RestorePosition()
-    end
+    self:RestorePosition()
 
     if state == self.STATE.GLANCE then
         frame.shell:Hide()

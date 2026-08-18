@@ -318,6 +318,33 @@ Pockets.Tests.TestRunner:Register("Shell: changing width/height via SetSize alon
     return ok, ok and "OK" or "SetSize alone moved the frame's TOPLEFT anchor"
 end)
 
+Pockets.Tests.TestRunner:Register("Shell: a SetState during a phantom drag is deferred, not resized mid-move", function()
+    -- The actual bug: WoW fires OnDragStart/OnDragStop on every click,
+    -- moving or not. A click that also changes state (Glance -> Menu)
+    -- must never resize the frame while isDragging is true - doing so
+    -- corrupted the position WoW's drag system committed on stop.
+    ResetToGlance()
+    local glanceWidth = Shell.frame:GetWidth()
+
+    Shell.isDragging = true
+    Shell:SetState(Shell.STATE.MENU) -- e.g. from a click's OnClick handler
+    local widthWhileDragging = Shell.frame:GetWidth()
+    local stateAlreadyUpdated = Shell:GetState() == Shell.STATE.MENU
+
+    -- OnDragStop's flush
+    Shell.isDragging = false
+    Shell:Render()
+    local widthAfterFlush = Shell.frame:GetWidth()
+
+    ResetToGlance()
+
+    local ok = widthWhileDragging == glanceWidth and stateAlreadyUpdated
+        and widthAfterFlush == Pockets.Constants.LAYOUT.SHELL_WIDTH
+    return ok, ok and "OK" or string.format(
+        "expected no resize while dragging (stayed %s) then Menu width after flush (got %s)",
+        tostring(widthWhileDragging), tostring(widthAfterFlush))
+end)
+
 Pockets.Tests.TestRunner:Register("Shell: Render skips re-anchoring while a drag is in progress", function()
     ResetToGlance()
     Shell:SetState(Shell.STATE.MENU)
@@ -443,6 +470,33 @@ Pockets.Tests.TestRunner:Register("Shell: removing Ammo from the footer does not
     ResetToGlance()
     local ok = bagsLeftBefore == bagsLeftAfter
     return ok, ok and "OK" or "Bags anchor moved when Ammo visibility changed"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SavePosition ignores a negligible (phantom-drag) position change", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.MENU)
+    local hud = Pockets.SavedSettings.hud
+    local originalX, originalY = hud.x, hud.y
+
+    -- Same spot, only float-rounding-scale noise - simulates a
+    -- zero-movement click-triggered OnDragStart/OnDragStop cycle.
+    Shell.frame:ClearAllPoints()
+    Shell.frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", originalX + 0.001, originalY - 0.001)
+    Shell:SavePosition()
+
+    local unchanged = hud.x == originalX and hud.y == originalY
+
+    -- A REAL move still gets saved.
+    Shell.frame:ClearAllPoints()
+    Shell.frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", originalX + 50, originalY - 50)
+    Shell:SavePosition()
+    local realMoveSaved = ApproxEqual(hud.x, originalX + 50) and ApproxEqual(hud.y, originalY - 50)
+
+    hud.x, hud.y = originalX, originalY
+    ResetToGlance()
+
+    local ok = unchanged and realMoveSaved
+    return ok, ok and "OK" or "SavePosition either persisted negligible noise or dropped a real move"
 end)
 
 --------------------------------------------------
