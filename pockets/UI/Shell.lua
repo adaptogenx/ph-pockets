@@ -105,10 +105,20 @@ end
 
 -- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
 -- Blizzard scrollbar widget UIPanelScrollFrameTemplate creates as
--- "<name>ScrollBar" - callers are responsible for sizing `content` to
--- leave (or not leave) room for it. Never just disabled/left as an empty
--- track - hidden entirely means zero layout width consumed.
-local function SetScrollBarShown(scrollFrame, shown)
+-- "<name>ScrollBar", AND re-anchors the scrollFrame's own right edge to
+-- match. UIPanelScrollFrameTemplate's scrollbar anchors itself just
+-- OUTSIDE the scrollFrame's own rect (not inside `content`) - narrowing
+-- only `content` while leaving the scrollFrame full-width left the real
+-- scrollbar widget rendering past the panel's right border entirely.
+-- Pulling the scrollFrame's own right edge in by SCROLLBAR_RESERVE when
+-- shown puts the native scrollbar back inside that reserved gap, where
+-- it visually belongs. Never just disabled/left as an empty track -
+-- hidden entirely means zero layout width consumed.
+local function SetScrollBarShown(shell, shown)
+    local scrollFrame = shell.scrollFrame
+    local extraInset = shown and L.SCROLLBAR_RESERVE or 0
+    scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + extraInset), L.SHELL_PADDING)
+
     local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
     if not scrollBar then
         return
@@ -659,7 +669,7 @@ function Shell:RenderMenu()
 
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
-    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+    SetScrollBarShown(shell, needsScrollbar)
 
     local y = 0
     for index, entry in ipairs(visible) do
@@ -753,7 +763,7 @@ function Shell:RenderCategoryGrid(categoryID)
     local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
-    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+    SetScrollBarShown(shell, needsScrollbar)
 
     for _, placement in ipairs(plan.itemPlacements) do
         local button = pool:Acquire(content)
@@ -856,7 +866,7 @@ function Shell:RenderCategoryList(categoryID)
 
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
-    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+    SetScrollBarShown(shell, needsScrollbar)
 
     for index, item in ipairs(items) do
         local row = shell.categoryListRows[index]
@@ -986,7 +996,7 @@ function Shell:RenderAll(query)
         local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
         self:ApplyDimensions(bodyHeight)
         content:SetWidth(usableWidth)
-        SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+        SetScrollBarShown(shell, needsScrollbar)
 
         for _, placement in ipairs(plan.itemPlacements) do
             local button = pool:Acquire(content)
@@ -1038,7 +1048,7 @@ function Shell:RenderAll(query)
     local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
-    SetScrollBarShown(shell.scrollFrame, needsScrollbar)
+    SetScrollBarShown(shell, needsScrollbar)
 
     local buttonRecordsByCategoryID = {}
     for _, section in ipairs(sections) do
