@@ -86,10 +86,17 @@ end
 --     lay out/scroll within
 --   bodyHeight - what to pass to ApplyDimensions
 --   needsScrollbar - whether the real content overflowed the cap
-local function ResolveDynamicHeight(contentHeight, maxContentHeight)
+-- minContentHeight defaults to MinContentHeight() (Grid/All's sensible
+-- floor for a near-empty view); Menu/Category List pass 0 instead - a
+-- real list row is never shorter than LIST_ROW_HEIGHT to begin with, so
+-- padding a 1-row category up toward an unrelated pixel floor just made
+-- it look disproportionately tall next to its own content (confirmed
+-- regression: a 1-item category rendered ~1.6 rows tall).
+local function ResolveDynamicHeight(contentHeight, maxContentHeight, minContentHeight)
     maxContentHeight = maxContentHeight or MaxContentHeight()
+    minContentHeight = minContentHeight or MinContentHeight()
     local needsScrollbar = contentHeight > maxContentHeight
-    local usedContentHeight = needsScrollbar and maxContentHeight or math.max(contentHeight, MinContentHeight())
+    local usedContentHeight = needsScrollbar and maxContentHeight or math.max(contentHeight, minContentHeight)
     return usedContentHeight, usedContentHeight + L.SHELL_PADDING * 2, needsScrollbar
 end
 
@@ -664,7 +671,7 @@ function Shell:RenderMenu()
 
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #visible * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight())
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)
@@ -861,7 +868,7 @@ function Shell:RenderCategoryList(categoryID)
     -- (dynamic height pass - see RenderCategoryGrid's note).
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #items * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight())
+    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)
