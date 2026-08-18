@@ -126,11 +126,13 @@ Constants.LAYOUT = {
     -- below from the fixed category count) while Category/All get a
     -- bounded, scrollable browsing viewport (SHELL_BODY_MAX_HEIGHT). The
     -- invariant is position stability, not identical frame height.
-    -- Narrowed ~13% from the previous 220 (UI polish pass §3) - 192 is
-    -- the smallest width that still comfortably fits the worst-case
-    -- Menu row (icon + "Trade Goods"/"Consumables" + a 3-digit count +
-    -- chevron + padding) without clipping.
-    SHELL_WIDTH = 192,
+    -- Wide enough that Category/All's item grid defaults to 5 columns
+    -- (5*ITEM_BUTTON_SIZE + 4*ITEM_BUTTON_GAP = 216, plus a few px slack)
+    -- when no scrollbar is showing - narrower values (192, and the
+    -- original 220) both left a visibly wasted trailing gap because only
+    -- 3-4 columns fit (item grid follow-up pass). Still comfortably fits
+    -- the worst-case Menu row too.
+    SHELL_WIDTH = 236,
     SHELL_PADDING = 8,
     SHELL_HEADER_HEIGHT = 26,
     SHELL_BODY_MAX_HEIGHT = 260,
@@ -153,7 +155,11 @@ Constants.LAYOUT = {
     -- reclaimed from the body when no scrollbar is needed (§4).
     SCROLLBAR_RESERVE = 20,
 
-    ITEM_PANEL_COLUMNS = 4,
+    -- Informational only - FlowLayout derives actual column count from
+    -- content width/ITEM_BUTTON_SIZE/ITEM_BUTTON_GAP dynamically, not
+    -- from this constant. Documents the width-driven default (no
+    -- scrollbar showing) so the two stay in sync when tuned.
+    ITEM_PANEL_COLUMNS = 5,
     ITEM_BUTTON_SIZE = 40,
     ITEM_BUTTON_GAP = 4,
 

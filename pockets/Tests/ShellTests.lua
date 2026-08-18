@@ -218,10 +218,17 @@ end)
 -- UI polish pass: width, header/footer borders, chevron, item grid
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("Shell: expanded width is narrower than the pre-polish-pass 220", function()
+-- Width follow-up: both the original 220 and the first polish pass's
+-- narrower 192 left a visibly wasted trailing gap in Category/All's item
+-- grid because only 3-4 columns fit. Width must be wide enough that the
+-- grid defaults to 5 columns with no scrollbar showing.
+Pockets.Tests.TestRunner:Register("Shell: expanded width fits 5 item-grid columns with no scrollbar reserved", function()
     local L = Pockets.Constants.LAYOUT
-    local ok = L.SHELL_WIDTH < 220 and L.SHELL_WIDTH >= 187 -- ~10-15% narrower, per §3
-    return ok, ok and "OK" or string.format("expected SHELL_WIDTH in [187,220), got %s", tostring(L.SHELL_WIDTH))
+    local usableNoScrollbar = L.SHELL_WIDTH - L.SHELL_PADDING * 2
+    local fiveColumnsWidth = 5 * L.ITEM_BUTTON_SIZE + 4 * L.ITEM_BUTTON_GAP
+    local ok = usableNoScrollbar >= fiveColumnsWidth
+    return ok, ok and "OK" or string.format(
+        "expected usable width (%s) >= 5-column width (%s)", tostring(usableNoScrollbar), tostring(fiveColumnsWidth))
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: header and footer use a real PHUI backdrop+border", function()
@@ -292,6 +299,18 @@ Pockets.Tests.TestRunner:Register("Shell: no scrollbar when Category content fit
 
     local ok = (not scrollBar or not scrollBar:IsShown()) and math.abs(contentWidth - viewportWidth) < 0.01
     return ok, ok and "OK" or "scrollbar (or its reserved gutter) was present without overflowing content"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: FlowLayout actually places 5 columns per row at the no-scrollbar usable width", function()
+    local L = Pockets.Constants.LAYOUT
+    local usableNoScrollbar = L.SHELL_WIDTH - L.SHELL_PADDING * 2
+    local plan = Pockets.UI.FlowLayout:PlanFlat(6, {
+        rowWidth = usableNoScrollbar, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP,
+    })
+    -- item 6 should wrap to row 2 (y differs from item 1) since 5 fit per row.
+    local ok = plan.itemPlacements[5].y == plan.itemPlacements[1].y
+        and plan.itemPlacements[6].y > plan.itemPlacements[1].y
+    return ok, ok and "OK" or "expected exactly 5 columns to fit per row before wrapping"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width only when content actually overflows", function()
