@@ -137,6 +137,26 @@ local function SetScrollBarShown(shell, shown)
     end
 end
 
+-- Sets the scrollbar's travel range from OUR own numbers instead of
+-- trusting the engine's OnScrollRangeChanged recalculation (fired off
+-- content:SetHeight/scrollFrame resize) to land before the player can
+-- interact - on this client that recalculation can lag a frame behind,
+-- letting the thumb travel one row past the real end of content ("space
+-- below the last list item when scrolled to bottom" bug). Call AFTER
+-- content:SetHeight() so contentHeight/usedContentHeight are final.
+local function SyncScrollRange(shell, contentHeight, usedContentHeight)
+    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
+    if not scrollBar then
+        return
+    end
+    local maxScroll = math.max(contentHeight - usedContentHeight, 0)
+    scrollBar:SetMinMaxValues(0, maxScroll)
+    if scrollBar:GetValue() > maxScroll then
+        scrollBar:SetValue(maxScroll)
+    end
+    shell.scrollFrame:SetVerticalScroll(scrollBar:GetValue())
+end
+
 --------------------------------------------------
 -- Pure predicates (unit-testable without a live frame)
 --------------------------------------------------
@@ -671,7 +691,7 @@ function Shell:RenderMenu()
 
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #visible * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
+    local usedContentHeight, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)
@@ -702,6 +722,7 @@ function Shell:RenderMenu()
     end
 
     content:SetHeight(math.max(contentHeight, 1))
+    SyncScrollRange(shell, contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
@@ -868,7 +889,7 @@ function Shell:RenderCategoryList(categoryID)
     -- (dynamic height pass - see RenderCategoryGrid's note).
     local viewportWidth = BodyViewportWidth()
     local contentHeight = #items * L.LIST_ROW_HEIGHT
-    local _, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
+    local usedContentHeight, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
     local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
 
     self:ApplyDimensions(bodyHeight)
@@ -907,6 +928,7 @@ function Shell:RenderCategoryList(categoryID)
     end
 
     content:SetHeight(math.max(contentHeight, 1))
+    SyncScrollRange(shell, contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
