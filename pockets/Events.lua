@@ -20,7 +20,10 @@ local BAG_UPDATE_EVENTS = {
 }
 
 local DEBOUNCE_SECONDS = 0.2
+local INCOMPLETE_RETRY_SECONDS = 0.5
+local INCOMPLETE_RETRY_MAX = 10
 local pendingRefreshTimer = nil
+local incompleteRetries = 0
 
 -- Always a fresh table copy, never a direct reference to
 -- Constants.DEFAULT_SETTINGS.hud - Shell:SavePosition() mutates
@@ -120,7 +123,18 @@ local function ScheduleRefresh(reason)
     end
     pendingRefreshTimer = C_Timer.NewTimer(DEBOUNCE_SECONDS, function()
         pendingRefreshTimer = nil
-        Pockets.Services.InventoryState:Refresh(reason)
+        local applied = Pockets.Services.InventoryState:Refresh(reason)
+        if applied == false then
+            if incompleteRetries < INCOMPLETE_RETRY_MAX then
+                incompleteRetries = incompleteRetries + 1
+                pendingRefreshTimer = C_Timer.NewTimer(INCOMPLETE_RETRY_SECONDS, function()
+                    pendingRefreshTimer = nil
+                    ScheduleRefresh("retry_incomplete_scan")
+                end)
+            end
+        else
+            incompleteRetries = 0
+        end
     end)
 end
 
@@ -143,6 +157,8 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("BAG_UPDATE")
 mainFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
+mainFrame:RegisterEvent("MAIL_CLOSED")
+mainFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
 mainFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 

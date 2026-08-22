@@ -87,7 +87,14 @@ end
 -- capacity/estimator state, and publishes domain events. `reason` is a
 -- free-form string used for debug logging only.
 function InventoryState:Refresh(reason)
-    local rawSlots = Pockets.Adapters.BagAPI:ScanAllBags()
+    local rawSlots, incomplete = Pockets.Adapters.BagAPI:ScanAllBags()
+    -- Mail/AH (and similar) can make GetContainerNumSlots return 0 for
+    -- bags that are still equipped. Applying that snapshot would collapse
+    -- Glance from the real 66/76 down to whichever bag still answered
+    -- (e.g. 10/20). Keep the last complete snapshot and let Events retry.
+    if incomplete and self.generalCapacity and (self.generalCapacity.total or 0) > 0 then
+        return false
+    end
 
     local newItems = {}
     local itemsByID = {}
@@ -116,6 +123,7 @@ function InventoryState:Refresh(reason)
 
     EventBus:Publish(Constants.DOMAIN_EVENT.INVENTORY_CHANGED, { reason = reason })
     EventBus:Publish(Constants.DOMAIN_EVENT.CAPACITY_CHANGED, self.generalCapacity)
+    return true
 end
 
 function InventoryState:BuildCapacityResult(counts)

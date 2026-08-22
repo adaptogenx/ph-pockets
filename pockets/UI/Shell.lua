@@ -121,20 +121,32 @@ end
 -- shown puts the native scrollbar back inside that reserved gap, where
 -- it visually belongs. Never just disabled/left as an empty track -
 -- hidden entirely means zero layout width consumed.
-local function SetScrollBarShown(shell, shown)
-    local scrollFrame = shell.scrollFrame
-    local extraInset = shown and L.SCROLLBAR_RESERVE or 0
-    scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + extraInset), L.SHELL_PADDING)
-
-    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+--
+-- UIPanelScrollFrameTemplate's OnScrollRangeChanged re-Shows the bar
+-- whenever it thinks yrange > 0 (and can lag a frame behind our Hide),
+-- which left a no-overflow list with the native widget sitting outside
+-- the panel. We record the intended visibility and re-assert it after
+-- every range change; SetPoint stays out of that path so the hook cannot
+-- recurse.
+local function ApplyScrollBarVisibility(shell)
+    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
     if not scrollBar then
         return
     end
-    if shown then
+    if shell.scrollBarShown then
         scrollBar:Show()
     else
         scrollBar:Hide()
     end
+end
+
+local function SetScrollBarShown(shell, shown)
+    shell.scrollBarShown = shown and true or false
+
+    local scrollFrame = shell.scrollFrame
+    local extraInset = shell.scrollBarShown and L.SCROLLBAR_RESERVE or 0
+    scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + extraInset), L.SHELL_PADDING)
+    ApplyScrollBarVisibility(shell)
 end
 
 -- Sets the scrollbar's travel range from OUR own numbers instead of
@@ -155,6 +167,9 @@ local function SyncScrollRange(shell, contentHeight, usedContentHeight)
         scrollBar:SetValue(maxScroll)
     end
     shell.scrollFrame:SetVerticalScroll(scrollBar:GetValue())
+    -- SetMinMaxValues can trigger OnScrollRangeChanged, which would
+    -- otherwise re-Show a bar we just decided to hide.
+    ApplyScrollBarVisibility(shell)
 end
 
 --------------------------------------------------
@@ -347,6 +362,16 @@ function Shell:BuildShell()
     shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell, "UIPanelScrollFrameTemplate")
     shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
     shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
+    -- Without this, OnScrollRangeChanged leaves the bar visible at
+    -- yrange 0; with it, Blizzard hides the bar when there is nothing
+    -- to scroll. Combined with ApplyScrollBarVisibility so a stale
+    -- non-zero range cannot push the widget back outside the panel.
+    shell.scrollFrame.scrollBarHideable = true
+    shell.scrollBarShown = false
+    ApplyScrollBarVisibility(shell)
+    shell.scrollFrame:HookScript("OnScrollRangeChanged", function()
+        ApplyScrollBarVisibility(shell)
+    end)
 
     shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
     shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2)
@@ -723,6 +748,11 @@ function Shell:RenderMenu()
 
     content:SetHeight(math.max(contentHeight, 1))
     SyncScrollRange(shell, contentHeight, usedContentHeight)
+    -- OnScrollRangeChanged (from SetHeight/SetMinMaxValues) can copy the
+    -- scrollFrame's pre-inset width back onto the scroll child. Re-assert
+    -- the reclaimed width and bar visibility after that has run.
+    content:SetWidth(rowWidth)
+    SetScrollBarShown(shell, needsScrollbar)
 end
 
 --------------------------------------------------
@@ -802,6 +832,7 @@ function Shell:RenderCategoryGrid(categoryID)
     end
 
     content:SetHeight(math.max(plan.contentHeight, 1))
+    ApplyScrollBarVisibility(shell)
 end
 
 -- List: one row per aggregate item - [icon] [full name] [total qty] -
@@ -929,6 +960,11 @@ function Shell:RenderCategoryList(categoryID)
 
     content:SetHeight(math.max(contentHeight, 1))
     SyncScrollRange(shell, contentHeight, usedContentHeight)
+    -- OnScrollRangeChanged (from SetHeight/SetMinMaxValues) can copy the
+    -- scrollFrame's pre-inset width back onto the scroll child. Re-assert
+    -- the reclaimed width and bar visibility after that has run.
+    content:SetWidth(rowWidth)
+    SetScrollBarShown(shell, needsScrollbar)
 end
 
 --------------------------------------------------
@@ -1035,6 +1071,7 @@ function Shell:RenderAll(query)
             button:Show()
         end
         content:SetHeight(math.max(plan.contentHeight, 1))
+        ApplyScrollBarVisibility(shell)
         return
     end
 
@@ -1102,6 +1139,7 @@ function Shell:RenderAll(query)
     end
 
     content:SetHeight(math.max(plan.contentHeight, 1))
+    ApplyScrollBarVisibility(shell)
 end
 
 --------------------------------------------------

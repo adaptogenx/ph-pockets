@@ -47,14 +47,25 @@ end
 function PositionStrategy:CaptureSavedPosition(frame)
     local anchor = self:GetRootAnchor()
 
-    local frameScale = frame:GetEffectiveScale()
-    local parentScale = UIParent:GetEffectiveScale()
+    local frameScale = frame:GetEffectiveScale() or 1
+    local parentScale = UIParent:GetEffectiveScale() or 1
+
+    -- GetLeft/GetTop are nil until the frame has a size and a completed
+    -- layout pass (WoW does not report screen edges for a 0x0 unlaid-out
+    -- frame). Fall back to the explicit SetPoint offsets so a capture
+    -- during first-show/test setup never throws.
+    local left, top = frame:GetLeft(), frame:GetTop()
+    local parentLeft, parentTop = UIParent:GetLeft(), UIParent:GetTop()
+    if not left or not top or not parentLeft or not parentTop then
+        local _, _, _, x, y = frame:GetPoint()
+        return { point = anchor, relativePoint = anchor, x = x or 0, y = y or 0 }
+    end
 
     -- Absolute screen-pixel position of both TOPLEFT corners.
-    local screenLeft = frame:GetLeft() * frameScale
-    local screenTop = frame:GetTop() * frameScale
-    local parentScreenLeft = UIParent:GetLeft() * parentScale
-    local parentScreenTop = UIParent:GetTop() * parentScale
+    local screenLeft = left * frameScale
+    local screenTop = top * frameScale
+    local parentScreenLeft = parentLeft * parentScale
+    local parentScreenTop = parentTop * parentScale
 
     -- Back into UIParent's own coordinate space - the units SetPoint
     -- expects for offsets against a UIParent-relative anchor. A frame

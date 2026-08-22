@@ -316,12 +316,19 @@ end)
 Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width only when content actually overflows", function()
     -- Force an overflow deterministically by aggregating far more items
     -- than the viewport could ever fit, bypassing live inventory state.
+    -- Compare content against the layout constant, not live
+    -- scrollFrame:GetWidth(): SetScrollBarShown also insets the
+    -- scrollFrame by SCROLLBAR_RESERVE so the native widget sits in that
+    -- gap, and a flushed layout makes the two widths equal.
+    local L = Pockets.Constants.LAYOUT
     local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
+    local originalMode = Pockets.SavedSettings.categoryViewMode
     local manyItems = {}
     for i = 1, 200 do
         manyItems[i] = { itemID = i, texture = 1, quantity = 1, bagID = 0, slotID = i }
     end
     Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
+    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.GRID
 
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
@@ -329,15 +336,19 @@ Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width o
     local scrollFrame = Shell.frame.shell.scrollFrame
     local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
     local contentWidth = Shell.frame.shell.content:GetWidth()
-    local viewportWidth = scrollFrame:GetWidth()
+    local fullWidth = L.SHELL_WIDTH - L.SHELL_PADDING * 2
+    local expectedContentWidth = fullWidth - L.SCROLLBAR_RESERVE
 
     Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
+    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = scrollBar and scrollBar:IsShown()
-        and contentWidth < viewportWidth
-        and math.abs((viewportWidth - contentWidth) - Pockets.Constants.LAYOUT.SCROLLBAR_RESERVE) < 0.01
-    return ok, ok and "OK" or "expected the scrollbar to appear and reclaim exactly SCROLLBAR_RESERVE width"
+        and math.abs(contentWidth - expectedContentWidth) < 0.01
+    return ok, ok and "OK" or string.format(
+        "expected scrollbar shown and content width %s (full %s minus reserve %s); got shown=%s content=%s",
+        tostring(expectedContentWidth), tostring(fullWidth), tostring(L.SCROLLBAR_RESERVE),
+        tostring(scrollBar and scrollBar:IsShown()), tostring(contentWidth))
 end)
 
 --------------------------------------------------
@@ -1451,23 +1462,31 @@ Pockets.Tests.TestRunner:Register("CategoryView: List shows a scrollbar and recl
     end
     Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
 
-    local ok
+    local ok, failMessage
     WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
 
-        local scrollFrame = Shell.frame.shell.scrollFrame
-        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local L = Pockets.Constants.LAYOUT
+        local scrollBar = _G[Shell.frame.shell.scrollFrame:GetName() .. "ScrollBar"]
         local contentWidth = Shell.frame.shell.content:GetWidth()
-        local viewportWidth = scrollFrame:GetWidth()
+        local fullWidth = L.SHELL_WIDTH - L.SHELL_PADDING * 2
+        local expectedContentWidth = fullWidth - L.SCROLLBAR_RESERVE
+        local shown = scrollBar and scrollBar:IsShown() and true or false
 
-        ok = scrollBar and scrollBar:IsShown() and contentWidth < viewportWidth
+        ok = shown and math.abs(contentWidth - expectedContentWidth) < 0.01
+        if not ok then
+            failMessage = string.format(
+                "expected scrollbar shown and content width %s (full %s minus reserve %s); got shown=%s content=%s",
+                tostring(expectedContentWidth), tostring(fullWidth), tostring(L.SCROLLBAR_RESERVE),
+                tostring(shown), tostring(contentWidth))
+        end
     end)
 
     Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
     ResetToGlance()
 
-    return ok, ok and "OK" or "expected a scrollbar and reclaimed width once List rows overflow"
+    return ok, ok and "OK" or (failMessage or "expected a scrollbar and content narrowed by SCROLLBAR_RESERVE once List rows overflow")
 end)
 
 --------------------------------------------------

@@ -21,13 +21,22 @@ local function ApproxEqual(a, b)
     return math.abs(a - b) < EPSILON
 end
 
+-- GetLeft/GetTop stay nil until the frame has a size (and is shown).
+-- CaptureSavedPosition's screen-space path needs a laid-out rect.
+local function MakeLaidOutFrame()
+    local frame = CreateFrame("Frame", nil, UIParent)
+    frame:SetSize(32, 32)
+    frame:Show()
+    return frame
+end
+
 Pockets.Tests.TestRunner:Register("PositionStrategy: V1 anchor is TOPLEFT", function()
     local ok = PositionStrategy:GetRootAnchor() == "TOPLEFT"
     return ok, ok and "OK" or "expected V1 to report a fixed TOPLEFT anchor"
 end)
 
 Pockets.Tests.TestRunner:Register("PositionStrategy: ApplyRootPosition anchors TOPLEFT-to-TOPLEFT at the saved offset", function()
-    local frame = CreateFrame("Frame", nil, UIParent)
+    local frame = MakeLaidOutFrame()
     PositionStrategy:ApplyRootPosition(frame, { x = 42, y = -17 })
 
     local point, relativeTo, relativePoint, x, y = frame:GetPoint()
@@ -39,7 +48,7 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: ApplyRootPosition anchors T
 end)
 
 Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition round-trips through ApplyRootPosition unchanged", function()
-    local frame = CreateFrame("Frame", nil, UIParent)
+    local frame = MakeLaidOutFrame()
     PositionStrategy:ApplyRootPosition(frame, { x = 10, y = -20 })
 
     local captured = PositionStrategy:CaptureSavedPosition(frame)
@@ -58,10 +67,10 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition is cor
     -- UIParent) at zero offset, landing at the exact same on-screen spot
     -- TOPLEFT/UIParent/TOPLEFT(30,-40) would - proving capture is derived
     -- from absolute position, not naively trusted off GetPoint()'s fields.
-    local reference = CreateFrame("Frame", nil, UIParent)
+    local reference = MakeLaidOutFrame()
     PositionStrategy:ApplyRootPosition(reference, { x = 30, y = -40 })
 
-    local frame = CreateFrame("Frame", nil, UIParent)
+    local frame = MakeLaidOutFrame()
     frame:SetPoint("TOPLEFT", reference, "TOPLEFT", 0, 0)
 
     local captured = PositionStrategy:CaptureSavedPosition(frame)
@@ -73,7 +82,7 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: CaptureSavedPosition is cor
 end)
 
 Pockets.Tests.TestRunner:Register("PositionStrategy: resizing a positioned frame does not change its captured anchor", function()
-    local frame = CreateFrame("Frame", nil, UIParent)
+    local frame = MakeLaidOutFrame()
     PositionStrategy:ApplyRootPosition(frame, { x = 5, y = -5 })
     frame:SetSize(140, 90)
     local before = PositionStrategy:CaptureSavedPosition(frame)

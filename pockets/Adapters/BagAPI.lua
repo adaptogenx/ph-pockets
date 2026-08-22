@@ -16,6 +16,11 @@ local BagAPI = Pockets.Adapters.BagAPI
 -- Ammo/soul/quiver bags are detected by bag family and reported separately.
 BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
 
+-- Last positive GetContainerNumSlots per bagID. Mail/AH scans can report
+-- 0 for bags that are still equipped; we keep the known size so Glance
+-- cannot collapse from e.g. 66/76 down to a single remaining bag.
+BagAPI.lastSlotCount = BagAPI.lastSlotCount or {}
+
 -- Container family bits (GetItemFamily's return value is a bitmask, not
 -- an enum) for the two specialized ammo-storage bag types Classic/TBC
 -- actually ship: Quiver (bit 0x2) and Ammo Pouch (bit 0x4). Either one
@@ -23,11 +28,54 @@ BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
 local AMMO_BAG_FAMILY_MASK = 2 + 4
 
 -- Returns the number of slots for a given bag ID, or 0 if the bag doesn't exist.
+-- Prefers the larger of C_Container and the legacy API: during mailbox/
+-- auction-house interaction one of the two can briefly report 0 for bags
+-- that are still equipped.
 function BagAPI:GetBagSlotCount(bagID)
+    local modern = 0
     if C_Container and C_Container.GetContainerNumSlots then
-        return C_Container.GetContainerNumSlots(bagID) or 0
+        modern = C_Container.GetContainerNumSlots(bagID) or 0
     end
-    return GetContainerNumSlots(bagID) or 0
+    local legacy = 0
+    if GetContainerNumSlots then
+        legacy = GetContainerNumSlots(bagID) or 0
+    end
+    if modern > legacy then
+        return modern
+    end
+    return legacy
+end
+
+-- True if this bag slot currently has a bag item equipped (backpack always).
+function BagAPI:HasEquippedBag(bagID)
+    if bagID == 0 then
+        return true
+    end
+    local invSlot = ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)
+    if not invSlot then
+        return false
+    end
+    local bagLink = GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
+    return bagLink ~= nil
+end
+
+-- Pure: pick a slot count when the live API reports 0 for an equipped bag.
+-- Unequipped bags drop to 0 (and forget any cache). Equipped bags with a
+-- cached size keep that size. Equipped bags with no live count and no
+-- cache are incomplete (caller should not clobber a known-good snapshot).
+function BagAPI.ResolveSlotCount(apiCount, cachedCount, isEquipped)
+    apiCount = apiCount or 0
+    cachedCount = cachedCount or 0
+    if not isEquipped then
+        return 0, false
+    end
+    if apiCount > 0 then
+        return apiCount, false
+    end
+    if cachedCount > 0 then
+        return cachedCount, false
+    end
+    return 0, true
 end
 
 -- Returns a normalized slot info table, or nil if the slot is empty.
@@ -126,23 +174,40 @@ function BagAPI:IsAmmoBag(bagID)
 end
 
 -- Enumerates every bag currently equipped (backpack + all four bag slots),
--- returning { bagID = ..., slotCount = ... } for non-empty bags.
+-- returning { bagID = ..., slotCount = ... } for bags with a known size.
+-- Second return is true when at least one equipped bag has no live slot
+-- count and no cached size - InventoryState should skip applying that
+-- partial scan over a known-good snapshot.
 function BagAPI:GetEquippedBags()
     local bags = {}
+    local incomplete = false
     for bagID = 0, 4 do
-        local slotCount = self:GetBagSlotCount(bagID)
-        if slotCount and slotCount > 0 then
+        local apiCount = self:GetBagSlotCount(bagID)
+        local equipped = self:HasEquippedBag(bagID)
+        local slotCount, bagIncomplete = self.ResolveSlotCount(
+            apiCount, self.lastSlotCount[bagID], equipped)
+
+        if not equipped then
+            self.lastSlotCount[bagID] = nil
+        elseif apiCount > 0 then
+            self.lastSlotCount[bagID] = apiCount
+        end
+
+        if bagIncomplete then
+            incomplete = true
+        elseif slotCount > 0 then
             table.insert(bags, { bagID = bagID, slotCount = slotCount })
         end
     end
-    return bags
+    return bags, incomplete
 end
 
 -- Takes a full scan snapshot of all equipped bags.
 -- Returns an array of { bagID, slotIndex, itemID, itemLink, quantity, quality, isLocked, texture, capacityClass }.
 function BagAPI:ScanAllBags()
     local snapshot = {}
-    for _, bag in ipairs(self:GetEquippedBags()) do
+    local bags, incomplete = self:GetEquippedBags()
+    for _, bag in ipairs(bags) do
         local capacityClass = self:IsAmmoBag(bag.bagID)
             and Pockets.Constants.CAPACITY_CLASS.AMMO
             or Pockets.Constants.CAPACITY_CLASS.GENERAL
@@ -157,7 +222,7 @@ function BagAPI:ScanAllBags()
             end
         end
     end
-    return snapshot
+    return snapshot, incomplete
 end
 
 -- Pure aggregation step, split out from GetCapacityCounts so the

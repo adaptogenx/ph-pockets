@@ -97,3 +97,51 @@ Pockets.Tests.TestRunner:Register("BagAPI: quiver slots are excluded from GENERA
     local ok = result.general.total == 20 and result.general.used == 10
     return ok, ok and "OK" or "quiver slots leaked into GENERAL capacity"
 end)
+
+--------------------------------------------------
+-- ResolveSlotCount: mail/AH can report 0 slots for bags still equipped
+-- (Glance collapsed 66/76 -> 10/20). Live counts win; cache holds the
+-- last known size while equipped; unequipped bags drop to 0.
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("BagAPI: ResolveSlotCount prefers a live slot count", function()
+    local count, incomplete = BagAPI.ResolveSlotCount(16, 20, true)
+    local ok = count == 16 and incomplete == false
+    return ok, ok and "OK" or "expected the live API count to win over the cache"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: ResolveSlotCount keeps cached size when live count is 0 for an equipped bag", function()
+    local count, incomplete = BagAPI.ResolveSlotCount(0, 16, true)
+    local ok = count == 16 and incomplete == false
+    return ok, ok and "OK" or "expected the cached size to hold while the bag is still equipped"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: ResolveSlotCount drops an unequipped bag even if a cache remains", function()
+    local count, incomplete = BagAPI.ResolveSlotCount(0, 20, false)
+    local ok = count == 0 and incomplete == false
+    return ok, ok and "OK" or "expected an unequipped bag to contribute 0 slots"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: ResolveSlotCount marks equipped bags with no live count and no cache as incomplete", function()
+    local count, incomplete = BagAPI.ResolveSlotCount(0, 0, true)
+    local ok = count == 0 and incomplete == true
+    return ok, ok and "OK" or "expected an equipped-but-unreadable bag to flag the scan incomplete"
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: ClassifyCapacity of a single remaining bag matches the 10/20 Glance collapse", function()
+    -- Documents the bug: if GetEquippedBags drops every bag whose live
+    -- slot count is 0, capacity becomes whatever one bag still answered.
+    local collapsed = BagAPI:ClassifyCapacity({
+        { isAmmo = false, slotCount = 20, usedSlots = 10 },
+    })
+    local full = BagAPI:ClassifyCapacity({
+        { isAmmo = false, slotCount = 16, usedSlots = 12 },
+        { isAmmo = false, slotCount = 16, usedSlots = 16 },
+        { isAmmo = false, slotCount = 16, usedSlots = 16 },
+        { isAmmo = false, slotCount = 8, usedSlots = 8 },
+        { isAmmo = false, slotCount = 20, usedSlots = 14 },
+    })
+    local ok = collapsed.general.used == 10 and collapsed.general.total == 20
+        and full.general.used == 66 and full.general.total == 76
+    return ok, ok and "OK" or "expected the 10/20 vs 66/76 split the Glance bug reported"
+end)
