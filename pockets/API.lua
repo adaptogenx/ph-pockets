@@ -42,6 +42,12 @@ end
 -- full-inventory grid's "one icon per itemID" rule. When still carried,
 -- the displayed quantity is the true current total (GetCarriedQuantity),
 -- not just whatever one physical stack happens to report.
+--
+-- v1 only presents still-carried acquisitions (UI_SPEC §9). There is no
+-- consume-specific WoW event - crafting/vendoring/mailing just produce a
+-- negative quantity delta on the next bag scan. The history queue keeps
+-- those entries; this resolver omits them so a spent reagent cannot sit
+-- in Recent as a ghost.
 local function GetResolvedRecentItems()
     local out = {}
     local seen = {}
@@ -62,17 +68,6 @@ local function GetResolvedRecentItems()
                     bagID = live.bagID,
                     slotID = live.slotID,
                     interactive = true,
-                })
-            else
-                local meta = Pockets.Adapters.ItemAPI:GetItemMetadata(entry.itemID, entry.itemLink)
-                table.insert(out, {
-                    itemID = entry.itemID,
-                    itemLink = entry.itemLink,
-                    name = meta and meta.name,
-                    quantity = entry.quantity,
-                    texture = meta and meta.texture,
-                    quality = meta and meta.quality,
-                    interactive = false, -- no longer carried; never a fake action (UI_SPEC §9)
                 })
             end
         end
@@ -114,7 +109,7 @@ function API.GetCategorySummary()
     for _, categoryID in ipairs(Pockets.Constants.CATEGORY_ORDER) do
         local count
         if categoryID == Pockets.Constants.CATEGORY.RECENT then
-            count = #Pockets.Services.RecentItems:GetRecent(Pockets.Constants.RECENT_DISPLAY_LIMIT)
+            count = #GetResolvedRecentItems()
         else
             count = 0
             for _, item in ipairs(Pockets.Services.InventoryState:GetItemsByCategory(categoryID)) do

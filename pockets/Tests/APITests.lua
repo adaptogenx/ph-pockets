@@ -21,8 +21,11 @@ Pockets.Tests.TestRunner:Register("InventoryState: FindLiveRecordByItemID return
     return found == nil, found == nil and "OK" or "expected nil for uncarried itemID"
 end)
 
-Pockets.Tests.TestRunner:Register("API: recent category count is entry count, not quantity sum", function()
-    InventoryState.items = {}
+Pockets.Tests.TestRunner:Register("API: recent category count is still-carried entry count, not quantity sum", function()
+    InventoryState.items = {
+        ["0:1"] = { key = "0:1", bagID = 0, slotID = 1, itemID = 1, quantity = 20 },
+        ["0:2"] = { key = "0:2", bagID = 0, slotID = 2, itemID = 2, quantity = 5 },
+    }
     RecentItems:Clear()
     RecentItems:Record({ itemID = 1, quantity = 20, timestamp = 1 })
     RecentItems:Record({ itemID = 2, quantity = 5, timestamp = 2 })
@@ -40,14 +43,25 @@ Pockets.Tests.TestRunner:Register("API: recent category count is entry count, no
         ok and "OK" or string.format("expected recent count 2, got %s", tostring(recentEntry and recentEntry.count))
 end)
 
-Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) marks uncarried entries non-interactive", function()
+Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) omits uncarried entries", function()
     InventoryState.items = {}
     RecentItems:Clear()
     RecentItems:Record({ itemID = 42, quantity = 1, timestamp = 1, itemLink = "item:42" })
 
     local items = Pockets.API.GetCategoryItems(Pockets.Constants.CATEGORY.RECENT)
-    local ok = #items == 1 and items[1].interactive == false
-    return ok, ok and "OK" or "expected uncarried recent entry to be interactive=false"
+    local ok = #items == 0
+    return ok, ok and "OK" or "expected a consumed/uncarried recent entry to be omitted from the Recent view"
+end)
+
+Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) keeps carried entries when a sibling acquisition was consumed", function()
+    InventoryState.items = { ["0:2"] = { key = "0:2", bagID = 0, slotID = 2, itemID = 88, quantity = 4 } }
+    RecentItems:Clear()
+    RecentItems:Record({ itemID = 42, quantity = 1, timestamp = 1 })
+    RecentItems:Record({ itemID = 88, quantity = 4, timestamp = 2 })
+
+    local items = Pockets.API.GetCategoryItems(Pockets.Constants.CATEGORY.RECENT)
+    local ok = #items == 1 and items[1].itemID == 88 and items[1].interactive ~= false
+    return ok, ok and "OK" or "expected only the still-carried recent entry to remain"
 end)
 
 Pockets.Tests.TestRunner:Register("API: GetCategoryItems(recent) resolves carried entries to live bag/slot", function()
