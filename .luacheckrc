@@ -112,6 +112,7 @@ globals = {
     "SetItemButtonDesaturated",
     "SetItemButtonCount",
     "ITEM_QUALITY_COLORS",
+    "SecureActionButton_OnClick",
 
     -- Misc WoW API/constants referenced by adapters
     "ContainerIDToInventoryID",

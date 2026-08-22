@@ -8,7 +8,10 @@
     Configure() is the single place that wires a pooled button to a live
     bag+slot: left-click/drag/split/tooltip go through Adapters/BagAPI,
     and right-click use is bound via SecureActionButtonTemplate attributes
-    (type2=item) so Blizzard's protected-action rules allow it. Security
+    (type2=item) so Blizzard's protected-action rules allow it. Do not wrap
+    or replace OnClick - that taints the handler. Equipping armor can still
+    succeed from tainted code; using a consumable cannot. Insecure
+    pickup/modified-clicks belong on PreClick. Security
     stays on these pooled buttons - the Pockets root frame is not secure.
     Shared by every body Shell renders (Category grid, All Items flow) so
     both stay in sync (UI_SPEC §10 "share item rendering/pooling code").
@@ -141,10 +144,10 @@ local function ResolveInteractionStack(button)
     return nil, nil, nil
 end
 
--- Insecure click path: pickup, split-stack, and Blizzard modified-click
--- (chat-link etc). Right-click use is intentionally not handled here -
--- UseContainerItem is a protected action and must go through the
--- SecureActionButtonTemplate attributes set in Configure().
+-- Insecure click path (wired on PreClick): pickup, split-stack, and
+-- Blizzard modified-click (chat-link etc). Right-click use is not
+-- handled here - UseContainerItem must run from the untainted
+-- SecureActionButtonTemplate OnClick using attributes from Configure().
 function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     if not self.interactive then
         return
@@ -173,27 +176,22 @@ function ItemButtonPool.HandleInsecureClick(self, mouseButton)
 end
 
 -- Scripts are wired once at create time. Re-SetScript during Configure
--- would fail in combat on a protected SecureActionButton, and would
--- also replace SecureActionButtonTemplate's OnClick if done naively.
+-- would fail in combat on a protected SecureActionButton. OnClick is
+-- left as SecureActionButtonTemplate's Blizzard handler so item use
+-- runs untainted; wrapping it is what made armor equip while potions
+-- were blocked (SECURE_ACTIONS.item: EquipItemByName vs UseContainerItem).
 local function WireItemButtonScripts(button)
     if button.pocketsScriptsWired then
         return
     end
     button.pocketsScriptsWired = true
 
-    -- Capture the template's secure handler before replacing OnClick;
-    -- calling it for unmodified right-click is what actually uses the
-    -- item. We cannot leave SetScript("OnClick") as a full replacement
-    -- without this, or the secure action never runs.
-    local secureOnClick = button:GetScript("OnClick")
-
-    button:SetScript("OnClick", function(self, mouseButton, down)
-        local modified = IsModifiedClick and IsModifiedClick()
-        if mouseButton == "RightButton" and self.interactive and not modified then
-            if secureOnClick then
-                secureOnClick(self, mouseButton, down)
+    button:SetScript("PreClick", function(self, mouseButton)
+        if mouseButton == "RightButton" then
+            local modified = IsModifiedClick and IsModifiedClick()
+            if self.interactive and not modified then
+                return
             end
-            return
         end
         ItemButtonPool.HandleInsecureClick(self, mouseButton)
     end)
@@ -247,7 +245,7 @@ local function CreateItemButton(parent)
         "Button",
         nil,
         parent,
-        "ItemButtonTemplate,SecureActionButtonTemplate,BackdropTemplate"
+        "ItemButtonTemplate,BackdropTemplate,SecureActionButtonTemplate"
     )
     button:SetSize(SIZE, SIZE)
     button:RegisterForClicks("AnyUp")

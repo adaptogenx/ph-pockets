@@ -38,6 +38,18 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: pooled buttons are protected 
     return ok, ok and "OK" or "expected pooled item buttons to be protected (SecureActionButtonTemplate)"
 end)
 
+Pockets.Tests.TestRunner:Register("ItemButtonPool: keeps Blizzard SecureActionButton OnClick (consumable use)", function()
+    if not SecureActionButton_OnClick then
+        return true, "SKIP: SecureActionButton_OnClick is not present"
+    end
+    local button = ItemButtonPool:Acquire(UIParent)
+    local onClick = button:GetScript("OnClick")
+    local preClick = button:GetScript("PreClick")
+    ItemButtonPool:ReleaseAll(UIParent)
+    local ok = onClick == SecureActionButton_OnClick and preClick ~= nil
+    return ok, ok and "OK" or "expected untainted SecureActionButton_OnClick plus a PreClick insecure handler"
+end)
+
 Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure binds right-click use to the physical bag slot", function()
     if Pockets.Adapters.CombatAPI:IsInCombat() then
         return true, "SKIP: secure attributes cannot be written during combat"
