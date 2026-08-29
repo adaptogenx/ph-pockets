@@ -118,19 +118,36 @@ Constants.CATEGORY_ICON = {
 Constants.LAYOUT = {
     -- Glance: minimal always-visible HUD, exempt from the stable shell
     -- contract. Fixed size (no longer content-dependent - Ammo was
-    -- dropped from Glance entirely) so it stays as compact as possible:
-    -- icon + "59 / 76" on one row, compact "13m" ETA on the next.
-    -- GLANCE_WIDTH is DERIVED (below), not hand-picked - it's the true
-    -- minimum that fits the icon and text column with no slack, so
-    -- Glance can never be wider than it needs to be.
-    GLANCE_HEIGHT = 52,
+    -- dropped from Glance entirely) so it stays as compact as possible.
+    -- True square (Fix_TODO #3): bag icon top-left, search icon top-right,
+    -- "59 / 76" / compact "13m" ETA centered below as a two-line column.
+    -- GLANCE_SIZE is DERIVED (below), not hand-picked - it's the true
+    -- minimum that fits the icon row and text column with no slack on
+    -- whichever axis needs more room.
     GLANCE_ICON_SIZE = 30,
     GLANCE_PADDING = 6,
-    GLANCE_TEXT_GAP_X = 4,
+    -- Vertical gap between the icon row and the text column below it.
+    GLANCE_ICON_TEXT_GAP = 4,
     GLANCE_TEXT_GAP_Y = 1,
     -- Just enough for the worst realistic capacity string ("199 / 200")
     -- at GameFontNormal - the ETA line ("13m") never needs more.
     GLANCE_TEXT_BLOCK_WIDTH = 62,
+    -- Hand-picked line heights for the two stacked text rows (same
+    -- approach as SEARCH_FEEDBACK_LINE_HEIGHT below - a fixed pixel
+    -- value, not a runtime font query) so GLANCE_SIZE can be derived at
+    -- load time.
+    GLANCE_CAPACITY_LINE_HEIGHT = 14,
+    GLANCE_ETA_LINE_HEIGHT = 10,
+    -- Quick Search entry point (Glance Quick Search pass) - small icon
+    -- button, top-right corner of the icon row, sized to read as a
+    -- glyph rather than a full chrome button.
+    GLANCE_SEARCH_ICON_SIZE = 16,
+    -- Nominal gap between the bag icon and the search icon, used only in
+    -- GLANCE_SIZE's derivation below - in practice the two sit much
+    -- farther apart than this (pinned to opposite corners of a width
+    -- driven by the text column), this just keeps the derivation correct
+    -- if the text column ever shrinks below the icon row's own minimum.
+    GLANCE_ICON_SEARCH_GAP = 4,
 
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
@@ -158,10 +175,15 @@ Constants.LAYOUT = {
     SHELL_BODY_MIN_HEIGHT = 64,
     SHELL_BODY_MAX_HEIGHT = 260,
     SHELL_FOOTER_HEIGHT = 22,
-    -- Fixed left (back) and right (+/search) header action-zone widths -
-    -- the control occupying a zone may change, the zone itself never moves.
+    -- Fixed left (back), contextual-action (+/search), and close (X)
+    -- header zone widths - the control occupying a zone may change, the
+    -- zone itself never moves (top-bar/close pass). X is always reserved
+    -- at the far right, with the contextual action immediately left of it,
+    -- so the title's right edge never shifts between expanded states.
     SHELL_HEADER_SIDE_WIDTH = 20,
     SHELL_HEADER_RIGHT_WIDTH = 60,
+    SHELL_HEADER_CLOSE_WIDTH = 20,
+    SHELL_HEADER_ACTION_GAP = 4,
 
     -- Shared Pockets list-row visual geometry (row unification pass) -
     -- Category List is the visual source of truth; Menu category rows
@@ -213,6 +235,17 @@ Constants.LAYOUT = {
     GLANCE_ALPHA = 0.85,
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,
+
+    -- Glance Quick Search (SEARCH state) - deliberately NOT the
+    -- scrollable Menu/Category/All body: no footer, no scrollbar, capped
+    -- at SEARCH_MAX_RESULT_ROWS rows, height derived purely from whatever
+    -- is currently shown (input row, result rows, or feedback text).
+    SEARCH_INPUT_HEIGHT = 20,
+    SEARCH_ICON_SIZE = 14,
+    SEARCH_ROW_GAP = 4,
+    SEARCH_FEEDBACK_LINE_HEIGHT = 16,
+    SEARCH_FEEDBACK_LINE_GAP = 2,
+    SEARCH_MAX_RESULT_ROWS = 2,
 }
 
 -- NOTE: Menu's and Category List's max browsing height
@@ -229,13 +262,27 @@ Constants.LAYOUT = {
 -- Shell.lua's RenderMenu, which computes and applies it per-render the
 -- same way Category/All already do.
 
--- Glance's width is the true minimum that fits [padding][icon][gap]
--- [text column][padding] with zero slack - never hand-picked, so it can
--- never be wider than it needs to be (Glance minimum-width pass).
-Constants.LAYOUT.GLANCE_WIDTH = Constants.LAYOUT.GLANCE_PADDING * 2
+-- Glance's square size is the true minimum that fits its content on
+-- whichever axis needs more room - never hand-picked, so it can't be
+-- bigger than it needs to be on the constrained axis (Fix_TODO #3:
+-- "true square, not square-ish"). Three candidates: the icon+search top
+-- row, the text column below it, and the full vertical stack height -
+-- the largest wins. The text column is the binding constraint with
+-- today's values, so the icon+search row (now shown again) fits inside
+-- it for free without growing Glance back into a rectangle.
+local glanceIconRowWidth = Constants.LAYOUT.GLANCE_PADDING * 2
     + Constants.LAYOUT.GLANCE_ICON_SIZE
-    + Constants.LAYOUT.GLANCE_TEXT_GAP_X
+    + Constants.LAYOUT.GLANCE_ICON_SEARCH_GAP
+    + Constants.LAYOUT.GLANCE_SEARCH_ICON_SIZE
+local glanceTextRowWidth = Constants.LAYOUT.GLANCE_PADDING * 2
     + Constants.LAYOUT.GLANCE_TEXT_BLOCK_WIDTH
+local glanceContentHeight = Constants.LAYOUT.GLANCE_PADDING * 2
+    + Constants.LAYOUT.GLANCE_ICON_SIZE
+    + Constants.LAYOUT.GLANCE_ICON_TEXT_GAP
+    + Constants.LAYOUT.GLANCE_CAPACITY_LINE_HEIGHT
+    + Constants.LAYOUT.GLANCE_TEXT_GAP_Y
+    + Constants.LAYOUT.GLANCE_ETA_LINE_HEIGHT
+Constants.LAYOUT.GLANCE_SIZE = math.max(glanceIconRowWidth, glanceTextRowWidth, glanceContentHeight)
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)
 Constants.DOMAIN_EVENT = {

@@ -99,20 +99,36 @@ Pockets.Tests.TestRunner:Register("Shell: Category -> All -> Menu (Category's + 
     return ok, ok and "OK" or "expected Category's + to land directly on ALL"
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: Escape hierarchy - Category/All -> Menu -> Glance -> no-op", function()
+Pockets.Tests.TestRunner:Register("Shell: one Escape from Category goes straight to Glance, not Menu", function()
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.EQUIPMENT })
     Shell:HandleEscape()
-    local step1 = Shell:GetState() == Shell.STATE.MENU
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or string.format(
+        "expected a single Escape from Category to land on GLANCE directly, got %s", tostring(Shell:GetState()))
+end)
 
+Pockets.Tests.TestRunner:Register("Shell: one Escape from All goes straight to Glance, not Menu", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.ALL)
     Shell:HandleEscape()
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or string.format(
+        "expected a single Escape from All to land on GLANCE directly, got %s", tostring(Shell:GetState()))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: one Escape from Menu goes to Glance and is a no-op from Glance", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:HandleEscape()
+    local step1 = Shell:GetState() == Shell.STATE.GLANCE
+
+    Shell:HandleEscape() -- no-op at Glance (frame doesn't even see it - see keyboard-capture test)
     local step2 = Shell:GetState() == Shell.STATE.GLANCE
 
-    Shell:HandleEscape() -- no-op at Glance
-    local step3 = Shell:GetState() == Shell.STATE.GLANCE
-
-    local ok = step1 and step2 and step3
-    return ok, ok and "OK" or "escape hierarchy did not step Category -> Menu -> Glance -> no-op"
+    local ok = step1 and step2
+    return ok, ok and "OK" or "expected Menu -> Escape -> Glance, then a no-op"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: Shift-B (ToggleAllItems) jumps directly to All from any state", function()
@@ -395,24 +411,33 @@ end)
 -- Glance compactness pass
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("Shell: Glance height is within the compact target (48-60)", function()
+-- Fix_TODO #3: Glance must be a TRUE square (width == height exactly),
+-- not the old "square-ish" wide rectangle.
+Pockets.Tests.TestRunner:Register("Shell: Glance is a true square (width == height)", function()
     ResetToGlance()
-    local height = Shell.frame:GetHeight()
-    local ok = height >= 48 and height <= 60
-    return ok, ok and "OK" or string.format("expected height 48-60, got %s", tostring(height))
+    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
+    local ok = width == height
+    return ok, ok and "OK" or string.format("expected width == height, got %s x %s", tostring(width), tostring(height))
 end)
 
--- Glance minimum-width pass: GLANCE_WIDTH must be DERIVED from its
--- actual content (padding+icon+gap+text column), never a hand-picked
--- number with slack - this is what "minimum width possible" means and
--- what keeps it from silently regressing wider later.
-Pockets.Tests.TestRunner:Register("Shell: Glance width is the derived minimum, not hand-picked slack", function()
+-- Glance minimum-size pass: GLANCE_SIZE must be DERIVED from its actual
+-- content (icon+search row, text column, full vertical stack), never a
+-- hand-picked number with slack - this is what "minimum size possible"
+-- means and what keeps it from silently regressing bigger later. The
+-- search icon (re-enabled alongside the square pass, Fix_TODO #4) is
+-- included in the icon-row candidate below.
+Pockets.Tests.TestRunner:Register("Shell: Glance size is the derived minimum, not hand-picked slack", function()
     local L = Pockets.Constants.LAYOUT
-    local expected = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_TEXT_GAP_X + L.GLANCE_TEXT_BLOCK_WIDTH
+    local iconRowWidth = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_SEARCH_GAP + L.GLANCE_SEARCH_ICON_SIZE
+    local textRowWidth = L.GLANCE_PADDING * 2 + L.GLANCE_TEXT_BLOCK_WIDTH
+    local contentHeight = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_TEXT_GAP
+        + L.GLANCE_CAPACITY_LINE_HEIGHT + L.GLANCE_TEXT_GAP_Y + L.GLANCE_ETA_LINE_HEIGHT
+    local expected = math.max(iconRowWidth, textRowWidth, contentHeight)
     ResetToGlance()
-    local width = Shell.frame:GetWidth()
-    local ok = width == L.GLANCE_WIDTH and width == expected
-    return ok, ok and "OK" or string.format("expected derived width %s, got %s", tostring(expected), tostring(width))
+    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
+    local ok = width == L.GLANCE_SIZE and width == expected and height == expected
+    return ok, ok and "OK" or string.format(
+        "expected derived size %s, got %s x %s", tostring(expected), tostring(width), tostring(height))
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: Glance no longer shows Ammo", function()
@@ -1191,7 +1216,86 @@ Pockets.Tests.TestRunner:Register("Shell: clicking All's back button navigates t
     return ok, ok and "OK" or "expected MENU after clicking All's back button"
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: back button and Escape use the same navigation method (GoBack)", function()
+--------------------------------------------------
+-- Top bar / close (X) pass: consistent header geometry, X dismisses
+-- straight to Glance from every expanded state
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: X is shown and sits at the same far-right position in Menu, Category, and All", function()
+    local header = Shell.frame.shell.header
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuShown, menuRight = header.closeButton:IsShown(), header.closeButton:GetRight()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local catShown, catRight = header.closeButton:IsShown(), header.closeButton:GetRight()
+
+    Shell:SetState(Shell.STATE.ALL)
+    local allShown, allRight = header.closeButton:IsShown(), header.closeButton:GetRight()
+
+    ResetToGlance()
+
+    local ok = menuShown and catShown and allShown
+        and menuRight and catRight and allRight
+        and math.abs(menuRight - catRight) < 0.01 and math.abs(catRight - allRight) < 0.01
+    return ok, ok and "OK" or "X was hidden or shifted position between Menu/Category/All"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: title's right edge stays fixed across Menu/Category/All regardless of contextual control", function()
+    local header = Shell.frame.shell.header
+
+    Shell:SetState(Shell.STATE.MENU)
+    local menuTitleRight = header.titleText:GetRight()
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+    local catTitleRight = header.titleText:GetRight()
+
+    Shell:SetState(Shell.STATE.ALL)
+    local allTitleRight = header.titleText:GetRight()
+
+    ResetToGlance()
+
+    local ok = menuTitleRight and catTitleRight and allTitleRight
+        and math.abs(menuTitleRight - catTitleRight) < 0.01 and math.abs(catTitleRight - allTitleRight) < 0.01
+    return ok, ok and "OK" or "title's right edge shifted between Menu (+) / Category (+) / All (search)"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking X from Menu navigates straight to Glance", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell.frame.shell.header.closeButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or "expected GLANCE after clicking Menu's X"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking X from Category navigates straight to Glance, not Menu", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.EQUIPMENT })
+    Shell.frame.shell.header.closeButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or "expected GLANCE (not MENU) after clicking Category's X"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking X from All navigates straight to Glance, not Menu", function()
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.ALL)
+    Shell.frame.shell.header.closeButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+    ResetToGlance()
+    return ok, ok and "OK" or "expected GLANCE (not MENU) after clicking All's X"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Glance does not intercept Escape (keyboard capture disabled)", function()
+    ResetToGlance()
+    local ok = not Shell.frame:IsKeyboardEnabled()
+    return ok, ok and "OK" or "expected Glance to leave keyboard capture disabled so Escape is not intercepted"
+end)
+
+-- Back = navigate up (routes through GoBack/ESCAPE_PARENT, one level at a
+-- time); X/Escape = dismiss Pockets (jump straight to Glance, bypassing
+-- GoBack entirely) - top-bar/close pass's semantic distinction.
+Pockets.Tests.TestRunner:Register("Shell: Back routes through GoBack; X and Escape bypass it and dismiss straight to Glance", function()
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
 
@@ -1202,20 +1306,29 @@ Pockets.Tests.TestRunner:Register("Shell: back button and Escape use the same na
         return originalGoBack(self, ...)
     end
 
-    Shell.frame.shell.header.backButton:Click()
+    Shell.frame.shell.header.backButton:Click() -- Category -> Menu, via GoBack
     local afterBackClick = calls
+    local backLandedOnMenu = Shell:GetState() == Shell.STATE.MENU
 
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
-    Shell:HandleEscape()
+    Shell.frame.shell.header.closeButton:Click() -- Category -> Glance directly, NOT through GoBack
+    local afterCloseClick = calls
+    local closeLandedOnGlance = Shell:GetState() == Shell.STATE.GLANCE
+
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+    Shell:HandleEscape() -- Category -> Glance directly, NOT through GoBack
     local afterEscape = calls
+    local escapeLandedOnGlance = Shell:GetState() == Shell.STATE.GLANCE
 
     Shell.GoBack = originalGoBack
     ResetToGlance()
 
-    local ok = afterBackClick == 1 and afterEscape == 2
+    local ok = afterBackClick == 1 and backLandedOnMenu
+        and afterCloseClick == afterBackClick and closeLandedOnGlance
+        and afterEscape == afterBackClick and escapeLandedOnGlance
     return ok, ok and "OK" or string.format(
-        "expected the back button and Escape to both route through GoBack exactly once each, got %d/%d",
-        afterBackClick, afterEscape - afterBackClick)
+        "expected only Back to call GoBack (got %d calls after back, %d after close, %d after escape)",
+        afterBackClick, afterCloseClick, afterEscape)
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: header title sits at the same fixed offset in Menu, Category, and All (§6)", function()
@@ -1536,4 +1649,291 @@ Pockets.Tests.TestRunner:Register("Legacy: hovering the Glance frame does not ch
     end
     local ok = Shell:GetState() == Shell.STATE.GLANCE
     return ok, ok and "OK" or "hovering Glance changed navigation state"
+end)
+
+--------------------------------------------------
+-- Glance Quick Search (SEARCH state) - Glance -> Search -> interact ->
+-- Glance. NOT inventory browsing (product intent) - separate, lightweight
+-- from All Items' own search box/behavior, which is untouched.
+--------------------------------------------------
+
+-- fn returns (ok, message), same contract TestRunner:Register expects -
+-- WithAllAggregatedItems just guarantees the stub is restored either way
+-- and passes that (ok, message) straight through.
+local function WithAllAggregatedItems(items, fn)
+    local original = Pockets.API.GetAllAggregatedItems
+    Pockets.API.GetAllAggregatedItems = function() return items end
+    local callOK, ok, message = pcall(fn)
+    Pockets.API.GetAllAggregatedItems = original
+    if not callOK then
+        return false, "ERROR: " .. tostring(ok)
+    end
+    return ok, message
+end
+
+Pockets.Tests.TestRunner:Register("Shell: Glance's search icon is visible and clickable", function()
+    ResetToGlance()
+    local ok = Shell.frame.glance.searchButton:IsShown()
+    return ok, ok and "OK" or "expected the Glance search icon to be visible (Fix_TODO #4, re-enabled alongside the square Glance pass)"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: clicking Glance's search icon enters SEARCH, not Menu/All Items", function()
+    ResetToGlance()
+    Shell.frame.glance.searchButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.SEARCH
+    ResetToGlance()
+    return ok, ok and "OK" or string.format("expected SEARCH after clicking the Glance search icon, got %s", tostring(Shell:GetState()))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: entering SEARCH from Glance preserves the exact same TOPLEFT anchor", function()
+    ResetToGlance()
+    local _, _, _, glanceX, glanceY = Shell.frame:GetPoint()
+
+    Shell:SetState(Shell.STATE.SEARCH)
+    local _, _, _, searchX, searchY = Shell.frame:GetPoint()
+
+    ResetToGlance()
+    local ok = glanceX == searchX and glanceY == searchY
+    return ok, ok and "OK" or string.format(
+        "TOPLEFT drifted entering SEARCH: glance=(%s,%s) search=(%s,%s)",
+        tostring(glanceX), tostring(glanceY), tostring(searchX), tostring(searchY))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: entering SEARCH uses the same shared width as Menu/Category/All", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok = Shell.frame:GetWidth() == Pockets.Constants.LAYOUT.SHELL_WIDTH
+    ResetToGlance()
+    return ok, ok and "OK" or "expected SEARCH to share SHELL_WIDTH with Menu/Category/All"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: entering SEARCH focuses the EditBox immediately", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok = Shell.frame.shell.searchPanel.editBox:HasFocus()
+    ResetToGlance()
+    return ok, ok and "OK" or "expected the Quick Search EditBox to have focus right after entering SEARCH"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH has no footer and no scrollbar", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local shell = Shell.frame.shell
+    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
+    local ok = not shell.footer:IsShown() and not (scrollBar and scrollBar:IsShown())
+    ResetToGlance()
+    return ok, ok and "OK" or "expected SEARCH to show neither the footer nor a scrollbar"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH with 0 matches shows 'No items found' and no result rows", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems(
+        { { itemID = 1, name = "Linen Cloth", quantity = 1, bagID = 0, slotID = 1 } }, function()
+            Shell.frame.shell.searchPanel.editBox:SetText("silk")
+            local panel = Shell.frame.shell.searchPanel
+            local anyRowShown = false
+            for _, row in ipairs(Shell.frame.shell.searchRows) do
+                if row:IsShown() then anyRowShown = true end
+            end
+            local result = panel.feedbackPrimary:IsShown() and panel.feedbackPrimary:GetText() == "No items found"
+                and not anyRowShown
+            return result, result and "OK" or "expected 'No items found' feedback with no rows for a non-matching query"
+        end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH with 1 match shows exactly one result row", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Linen Cloth", quantity = 12, bagID = 0, slotID = 1 },
+        { itemID = 2, name = "Wool Cloth", quantity = 3, bagID = 0, slotID = 2 },
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("linen")
+        local rows = Shell.frame.shell.searchRows
+        local shownCount = 0
+        for _, row in ipairs(rows) do
+            if row:IsShown() then shownCount = shownCount + 1 end
+        end
+        local panel = Shell.frame.shell.searchPanel
+        local result = shownCount == 1 and rows[1].name:GetText() == "Linen Cloth" and rows[1].qty:GetText() == "12"
+            and not panel.feedbackPrimary:IsShown()
+        return result, result and "OK" or string.format("expected exactly 1 result row for 'linen', got %d shown", shownCount)
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH with 2 matches shows exactly two result rows", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Major Mana Potion", quantity = 5, bagID = 0, slotID = 1 },
+        { itemID = 2, name = "Minor Mana Potion", quantity = 2, bagID = 0, slotID = 2 },
+        { itemID = 3, name = "Linen Cloth", quantity = 1, bagID = 0, slotID = 3 },
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        local rows = Shell.frame.shell.searchRows
+        local shownCount = 0
+        for _, row in ipairs(rows) do
+            if row:IsShown() then shownCount = shownCount + 1 end
+        end
+        local result = shownCount == 2
+        return result, result and "OK" or string.format("expected exactly 2 result rows for 'mana', got %d shown", shownCount)
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH with 3+ matches hides all result rows and shows the match count", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Mana Potion", quantity = 1, bagID = 0, slotID = 1 },
+        { itemID = 2, name = "Mana Biscuit", quantity = 1, bagID = 0, slotID = 2 },
+        { itemID = 3, name = "Mana Ruby", quantity = 1, bagID = 0, slotID = 3 },
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        local rows = Shell.frame.shell.searchRows
+        local anyRowShown = false
+        for _, row in ipairs(rows) do
+            if row:IsShown() then anyRowShown = true end
+        end
+        local panel = Shell.frame.shell.searchPanel
+        local result = not anyRowShown and panel.feedbackPrimary:IsShown()
+            and panel.feedbackPrimary:GetText() == "3 items found"
+            and panel.feedbackSecondary:IsShown() and panel.feedbackSecondary:GetText() == "Keep typing..."
+        return result, result and "OK" or string.format(
+            "expected 3+ matches to hide rows and show '3 items found' / 'Keep typing...', got primary=%s secondary=%s anyRowShown=%s",
+            tostring(panel.feedbackPrimary:GetText()), tostring(panel.feedbackSecondary:GetText()), tostring(anyRowShown))
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH ranks exact > prefix > substring in the two-row display", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Major Mana Potion", quantity = 1, bagID = 0, slotID = 1 }, -- substring
+        { itemID = 2, name = "Mana", quantity = 1, bagID = 0, slotID = 2 },               -- exact
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        local rows = Shell.frame.shell.searchRows
+        local result = rows[1].name:GetText() == "Mana" and rows[2].name:GetText() == "Major Mana Potion"
+        return result, result and "OK" or "expected exact match ('Mana') to rank ahead of the substring match"
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH result rows are real ItemButtonPool secure buttons bound to bag/slot", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Linen Cloth", quantity = 12, bagID = 0, slotID = 1 },
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("linen")
+        local row = Shell.frame.shell.searchRows[1]
+        local result = row.itemID == 1 and row.bagID == 0 and row.slotID == 1
+            and row.interactive == true and row.GetAttribute and row:GetAttribute("type2") == "item"
+        return result, result and "OK" or "expected the search result row to be a real, interactive secure item button"
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: changing the SEARCH query updates results immediately", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Linen Cloth", quantity = 1, bagID = 0, slotID = 1 },
+        { itemID = 2, name = "Wool Cloth", quantity = 1, bagID = 0, slotID = 2 },
+    }, function()
+        local panel = Shell.frame.shell.searchPanel
+        local rows = Shell.frame.shell.searchRows
+
+        panel.editBox:SetText("linen")
+        local afterLinen = rows[1]:IsShown() and rows[1].name:GetText() == "Linen Cloth"
+
+        panel.editBox:SetText("cloth") -- broadens to 2 matches
+        local shownAfterCloth = 0
+        for _, row in ipairs(rows) do
+            if row:IsShown() then shownAfterCloth = shownAfterCloth + 1 end
+        end
+
+        panel.editBox:SetText("") -- clearing goes back to the blank/no-persistent-height state
+        local anyShownAfterClear = false
+        for _, row in ipairs(rows) do
+            if row:IsShown() then anyShownAfterClear = true end
+        end
+
+        local result = afterLinen and shownAfterCloth == 2 and not anyShownAfterClear
+            and not panel.feedbackPrimary:IsShown()
+        return result, result and "OK" or string.format(
+            "expected live updates: linen=%s clothShown=%d clearedAnyShown=%s",
+            tostring(afterLinen), shownAfterCloth, tostring(anyShownAfterClear))
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH clearing the query does not persist an empty body height", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local blankHeight = Shell.frame:GetHeight()
+    local ok, message = WithAllAggregatedItems({
+        { itemID = 1, name = "Mana Potion", quantity = 1, bagID = 0, slotID = 1 },
+        { itemID = 2, name = "Mana Biscuit", quantity = 1, bagID = 0, slotID = 2 },
+        { itemID = 3, name = "Mana Ruby", quantity = 1, bagID = 0, slotID = 3 },
+    }, function()
+        Shell.frame.shell.searchPanel.editBox:SetText("mana") -- grows the frame (3+ feedback)
+        local grownHeight = Shell.frame:GetHeight()
+        Shell.frame.shell.searchPanel.editBox:SetText("") -- clears back down
+        local clearedHeight = Shell.frame:GetHeight()
+        local result = grownHeight > blankHeight and clearedHeight == blankHeight
+        return result, result and "OK" or string.format(
+            "expected height to grow then return to the blank height (%s), got grown=%s cleared=%s",
+            tostring(blankHeight), tostring(grownHeight), tostring(clearedHeight))
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: SEARCH header is [ < ] Search [ X ], back/X/Escape all return to Glance", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local header = Shell.frame.shell.header
+    local titleOK = header.titleText:GetText() == "Search"
+    local backShown = header.backButton:IsShown()
+    local closeShown = header.closeButton:IsShown()
+
+    header.backButton:Click()
+    local backLandedGlance = Shell:GetState() == Shell.STATE.GLANCE
+
+    Shell:SetState(Shell.STATE.SEARCH)
+    header.closeButton:Click()
+    local closeLandedGlance = Shell:GetState() == Shell.STATE.GLANCE
+
+    Shell:SetState(Shell.STATE.SEARCH)
+    Shell:HandleEscape()
+    local escapeLandedGlance = Shell:GetState() == Shell.STATE.GLANCE
+
+    ResetToGlance()
+    local ok = titleOK and backShown and closeShown and backLandedGlance and closeLandedGlance and escapeLandedGlance
+    return ok, ok and "OK" or string.format(
+        "title=%s back=%s close=%s backOK=%s closeOK=%s escOK=%s",
+        tostring(header.titleText:GetText()), tostring(backShown), tostring(closeShown),
+        tostring(backLandedGlance), tostring(closeLandedGlance), tostring(escapeLandedGlance))
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: entering SEARCH never opens Menu or All Items", function()
+    ResetToGlance()
+    Shell.frame.glance.searchButton:Click()
+    local ok = Shell:GetState() ~= Shell.STATE.MENU and Shell:GetState() ~= Shell.STATE.ALL
+        and Shell:GetState() == Shell.STATE.SEARCH
+    ResetToGlance()
+    return ok, ok and "OK" or string.format("expected SEARCH only, got %s", tostring(Shell:GetState()))
 end)

@@ -6,7 +6,7 @@ Do not mix Adaptive Screen Sizing into this pass (see `.plans/Adaptive_Screen_si
 1. Alphabetical ordering of items
 ==================================================
 
-Status: broken. Category/All item lists iterate `pairs()` / first-seen bag order, so names jump around.
+Status: fixed. Category/All item lists now sort A-Z at `API.GetAggregatedCategoryItems`.
 
 Fix:
 - Sort aggregated items A–Z by item name (case-insensitive) in Category List, Category Grid, and All Items grouped sections.
@@ -22,7 +22,7 @@ Touch:
 2. Unique recent items
 ==================================================
 
-Status: broken. Display already dedupes by `itemID` (`API.GetResolvedRecentItems`), but `RecentItems:Record` still prepends a new history row per acquisition.
+Status: fixed. `RecentItems:Record` now dedupes by `itemID` at insertion, bumping the existing entry to newest instead of adding a second row.
 
 Effect: fishing 20 of the same fish fills `RECENT_ITEMS_MAX` with that one id, then the other unique recents fall off the queue. After display-time dedupe the Recent category is just that fish.
 
@@ -41,12 +41,7 @@ Touch:
 3. Glance is not a square
 ==================================================
 
-Status: broken. Glance is a wide rectangle.
-
-Current derived size:
-
-    GLANCE_WIDTH  = 6+30+4+62+6 = 108
-    GLANCE_HEIGHT = 52
+Status: fixed. Glance is now a true square: bag icon top-left, search icon top-right, capacity/ETA text column centered below. `GLANCE_SIZE` (74 with current values) is derived as the max of the icon+search row width, the text column width, and the full vertical stack height - replaces the old separate `GLANCE_WIDTH`/`GLANCE_HEIGHT`.
 
 The compactness pass optimized for a horizontal `[icon][capacity/ETA]` row. The Glance plan asked for a small square surface.
 
@@ -66,32 +61,19 @@ Touch:
 4. Search icon / easy search on Glance
 ==================================================
 
-Status: missing. Search exists only in All Items header (`header.searchBox`). PRD §3.7 forbids a persistent search *box* on the compact HUD, not a click-to-search affordance.
+Status: fixed, enabled. Implemented as Glance Quick Search (dedicated `Shell.STATE.SEARCH`) instead of "jump to All Items search" - Glance's search icon replaces Glance in place with a compact, non-browsing search surface (0/1-2/3+ result thresholds, ranked exact/prefix/substring matching, max 2 rows, no footer/scrollbar). Reuses `CreateCategoryListRow`/`ItemButtonPool` for real secure item rows. Back/X/Escape all return to Glance.
 
-Fix:
-- Put a small search icon on Glance (not a persistent EditBox on the HUD).
-- Clicking it goes All Items and focuses the existing search field.
-- Main Glance click (icon / capacity) still opens Menu.
-- Click, not hover, so combat does not block it.
-- Keep Glance square (#3). Do not grow a search field onto the HUD.
-
-Spec:
-- Update `Pockets_PRD.md` §3.7 and `UI_RULES.md` so Glance may expose a search *icon* that jumps to All Items search. Still no persistent HUD search box.
+Shipped together with the square-Glance pass (#3) rather than as a separate follow-up: the icon+search row (top of the square) fits inside the width the text column below it already demands, so re-enabling the button cost no extra size. `glance.searchButton` is shown again in `Shell:BuildGlance`, anchored top-right; `GLANCE_SIZE`'s derivation includes the icon+search row as one of its width candidates.
 
 Touch:
-- `pockets/UI/Shell.lua`
-- `pockets/Tests/ShellTests.lua`
-- `Pockets_PRD.md`, `UI_RULES.md`
+- `pockets/UI/Shell.lua`, `pockets/UI/Search.lua`, `pockets/API.lua`, `pockets/Constants.lua`
+- `pockets/Tests/ShellTests.lua`, `pockets/Tests/SearchTests.lua`, `pockets/Tests/APITests.lua`
 
 ==================================================
 5. Close (X) on list views → Glance
 ==================================================
 
-Status: missing. Expanded states only have hierarchical Back (`<`) and Escape:
-
-    Category / All → Menu → Glance
-
-There is no one-click collapse to Glance. `PHUI.CreateCloseButton` already exists and is unused by Shell.
+Status: fixed. Header now has a fixed [< ][Title][context][X] geometry across Menu/Category/All. X (`PHUI.CreateCloseButton`) always dismisses straight to Glance; Back stays hierarchical; Escape now dismisses straight to Glance in one step instead of walking the hierarchy.
 
 Fix:
 - Show an X/close control on Menu, Category, and All Items (every expanded list view).

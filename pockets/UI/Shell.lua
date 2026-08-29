@@ -34,13 +34,21 @@ Shell.STATE = {
     MENU = "MENU",
     CATEGORY = "CATEGORY",
     ALL = "ALL",
+    -- Glance Quick Search: Glance -> Search -> interact -> Glance. NOT
+    -- inventory browsing - deliberately excluded from MENU/CATEGORY/ALL's
+    -- shared footer/scrollbar body contract (see RenderSearch).
+    SEARCH = "SEARCH",
 }
 
--- Escape hierarchy (§4): CATEGORY/ALL -> MENU -> GLANCE -> no-op.
+-- Back (`<`) hierarchy (§4): CATEGORY/ALL -> MENU -> GLANCE, SEARCH ->
+-- GLANCE. Escape does NOT use this map (top-bar/close pass) - Escape/X
+-- dismiss straight to GLANCE from any expanded state; only the Back
+-- button walks it stepwise.
 local ESCAPE_PARENT = {
     [Shell.STATE.CATEGORY] = Shell.STATE.MENU,
     [Shell.STATE.ALL] = Shell.STATE.MENU,
     [Shell.STATE.MENU] = Shell.STATE.GLANCE,
+    [Shell.STATE.SEARCH] = Shell.STATE.GLANCE,
 }
 
 -- Root total height for a given body height (UI layout pass §6): every
@@ -48,7 +56,14 @@ local ESCAPE_PARENT = {
 -- content (visible category count for Menu, laid-out items for
 -- Category/All) - the shared invariant is TOPLEFT/width/header/footer
 -- stability, not identical total height.
-local function TotalHeightForBody(bodyHeight)
+-- includeFooter defaults to true (Menu/Category/All's shared contract).
+-- SEARCH passes false - Quick Search has "No footer" by design (product
+-- intent: it is not another inventory-browsing surface), so its total
+-- height must not reserve footer space that will never be shown.
+local function TotalHeightForBody(bodyHeight, includeFooter)
+    if includeFooter == false then
+        return L.SHELL_HEADER_HEIGHT + bodyHeight
+    end
     return L.SHELL_HEADER_HEIGHT + bodyHeight + L.SHELL_FOOTER_HEIGHT
 end
 
@@ -243,11 +258,12 @@ end
 -- Frame construction
 --------------------------------------------------
 
--- Compact always-visible HUD: icon left, "59 / 76" / "13m" stacked to
--- its right, both vertically centered against the icon (LEFT-anchoring
--- textBlock to icon's RIGHT centers it automatically). No header, no
--- Ammo (Glance compactness pass) - just the two numbers the frame exists
--- to answer.
+-- Compact always-visible HUD, true square (Fix_TODO #3): bag icon top-left
+-- and search icon top-right share one row, "59 / 76" / "13m" stack in a
+-- centered text column below (TOP-anchoring both to glance's own TOP
+-- centers the column across the full square width, independent of the
+-- icon row). No header, no Ammo (Glance compactness pass) - just the two
+-- numbers the frame exists to answer, plus the Quick Search entry point.
 function Shell:BuildGlance()
     local frame = self.frame
     local glance = CreateFrame("Frame", nil, frame)
@@ -256,21 +272,36 @@ function Shell:BuildGlance()
 
     glance.icon = glance:CreateTexture(nil, "ARTWORK")
     glance.icon:SetSize(L.GLANCE_ICON_SIZE, L.GLANCE_ICON_SIZE)
-    glance.icon:SetPoint("LEFT", glance, "LEFT", L.GLANCE_PADDING, 0)
+    glance.icon:SetPoint("TOPLEFT", glance, "TOPLEFT", L.GLANCE_PADDING, -L.GLANCE_PADDING)
     glance.icon:SetTexture(Constants.HUD_ICON)
     glance.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     glance.textBlock = CreateFrame("Frame", nil, glance)
-    glance.textBlock:SetPoint("LEFT", glance.icon, "RIGHT", L.GLANCE_TEXT_GAP_X, 0)
-    glance.textBlock:SetSize(L.GLANCE_TEXT_BLOCK_WIDTH, L.GLANCE_ICON_SIZE)
+    glance.textBlock:SetPoint("TOP", glance, "TOP", 0,
+        -(L.GLANCE_PADDING + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_TEXT_GAP))
+    glance.textBlock:SetSize(L.GLANCE_TEXT_BLOCK_WIDTH,
+        L.GLANCE_CAPACITY_LINE_HEIGHT + L.GLANCE_TEXT_GAP_Y + L.GLANCE_ETA_LINE_HEIGHT)
 
     glance.capacityText = PHUI.CreateLabel(glance.textBlock, "primary", nil, PHUI.Fonts.NORMAL)
     glance.capacityText:SetPoint("TOPLEFT", glance.textBlock, "TOPLEFT", 0, 0)
-    glance.capacityText:SetJustifyH("LEFT")
+    glance.capacityText:SetJustifyH("CENTER")
 
     glance.etaText = PHUI.CreateLabel(glance.textBlock, "muted", nil, PHUI.Fonts.SMALL)
     glance.etaText:SetPoint("TOPLEFT", glance.capacityText, "BOTTOMLEFT", 0, -L.GLANCE_TEXT_GAP_Y)
-    glance.etaText:SetJustifyH("LEFT")
+    glance.etaText:SetJustifyH("CENTER")
+
+    -- Quick Search entry point (Glance Quick Search pass): the ONLY way
+    -- into SEARCH. Click replaces Glance in place - never opens Menu/All
+    -- Items or another window (see SetState(Shell.STATE.SEARCH)). Sits in
+    -- the icon row's top-right corner - the square's width is driven by
+    -- the text column below, so this fits without stretching Glance back
+    -- into a rectangle (Fix_TODO #4).
+    glance.searchButton = PHUI.CreateIconButton(glance, L.GLANCE_SEARCH_ICON_SIZE,
+        "Interface\\Common\\UI-Searchbox-Icon", {
+            tooltipText = "Quick Search",
+            onClick = function() Shell:SetState(Shell.STATE.SEARCH) end,
+        })
+    glance.searchButton:SetPoint("TOPRIGHT", glance, "TOPRIGHT", -L.GLANCE_PADDING, -L.GLANCE_PADDING)
 end
 
 function Shell:BuildShell()
@@ -310,18 +341,31 @@ function Shell:BuildShell()
     header.titleText:SetJustifyH("LEFT")
     header.titleText:SetWordWrap(false)
 
+    -- X is always fixed at the far-right edge of every expanded state
+    -- (top-bar/close pass §"TOP BAR") - dismisses Pockets straight to
+    -- Glance, never through the Back/Escape hierarchy. Built and anchored
+    -- once here, never hidden/recreated per state, so its position can
+    -- never shift between Menu/Category/All.
+    header.closeButton = PHUI.CreateCloseButton(header, {
+        size = L.SHELL_HEADER_CLOSE_WIDTH,
+        onClick = function() Shell:SetState(Shell.STATE.GLANCE) end,
+    })
+    header.closeButton:SetPoint("RIGHT", header, "RIGHT", -L.SHELL_PADDING, 0)
+
+    -- Contextual action (+ / search) sits immediately LEFT of the
+    -- always-present X, never in the far-right slot itself.
     header.plusButton = PHUI.CreateIconButton(header, 20, nil, {
         tooltipText = "All Items",
         onClick = function() Shell:SetState(Shell.STATE.ALL) end,
     })
-    header.plusButton:SetPoint("RIGHT", header, "RIGHT", -L.SHELL_PADDING, 0)
+    header.plusButton:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
     header.plusButton.glyph = PHUI.CreateLabel(header.plusButton, "primary", "+", PHUI.Fonts.SMALL)
     header.plusButton.glyph:SetPoint("CENTER", 0, 0)
 
     header.searchBox = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
     header.searchBox:SetHeight(18)
     header.searchBox:SetWidth(L.SHELL_HEADER_RIGHT_WIDTH - 6)
-    header.searchBox:SetPoint("RIGHT", header, "RIGHT", -L.SHELL_PADDING, 0)
+    header.searchBox:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
     header.searchBox:SetAutoFocus(false)
     header.searchBox:SetScript("OnTextChanged", function(box)
         Shell:RenderAll(box:GetText())
@@ -391,6 +435,57 @@ function Shell:BuildShell()
     -- past the panel and even the footer once a category had more items
     -- than fit the visible viewport.
     shell.categoryListPoolAnchor = CreateFrame("Frame", nil, shell.content)
+
+    -- SEARCH body (Glance Quick Search pass) - deliberately NOT the
+    -- scrollFrame/content above: no footer, no scrollbar, capped at
+    -- SEARCH_MAX_RESULT_ROWS rows, so it gets its own small non-scrolling
+    -- panel anchored the same way scrollFrame is (under header, inset by
+    -- SHELL_PADDING) but sized purely from its own content each render.
+    shell.searchPanel = CreateFrame("Frame", nil, shell)
+    shell.searchPanel:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
+    shell.searchPanel:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -L.SHELL_PADDING, -L.SHELL_PADDING)
+    shell.searchPanel:Hide()
+
+    shell.searchPanel.icon = shell.searchPanel:CreateTexture(nil, "ARTWORK")
+    shell.searchPanel.icon:SetSize(L.SEARCH_ICON_SIZE, L.SEARCH_ICON_SIZE)
+    shell.searchPanel.icon:SetPoint("TOPLEFT", shell.searchPanel, "TOPLEFT", 0, 0)
+    shell.searchPanel.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+
+    shell.searchPanel.editBox = CreateFrame("EditBox", nil, shell.searchPanel, "InputBoxTemplate")
+    shell.searchPanel.editBox:SetHeight(L.SEARCH_INPUT_HEIGHT)
+    shell.searchPanel.editBox:SetPoint("LEFT", shell.searchPanel.icon, "RIGHT", L.SHELL_HEADER_ACTION_GAP, 0)
+    shell.searchPanel.editBox:SetPoint("RIGHT", shell.searchPanel, "RIGHT", 0, 0)
+    shell.searchPanel.editBox:SetAutoFocus(false)
+    -- Cached/aggregated data only (product intent "PERFORMANCE") - every
+    -- keystroke re-renders from API.GetAllAggregatedItems(), never a bag
+    -- rescan or categorization pass.
+    shell.searchPanel.editBox:SetScript("OnTextChanged", function()
+        Shell:RenderSearch()
+    end)
+    shell.searchPanel.editBox:SetScript("OnEscapePressed", function(box)
+        box:ClearFocus()
+        Shell:HandleEscape()
+    end)
+
+    -- 0-match / 3+-match feedback (mutually exclusive with the result
+    -- rows below - RenderSearch shows exactly one of the three).
+    shell.searchPanel.feedbackPrimary = PHUI.CreateLabel(shell.searchPanel, "primary", nil, PHUI.Fonts.NORMAL)
+    shell.searchPanel.feedbackPrimary:SetPoint(
+        "TOP", shell.searchPanel, "TOP", 0, -(L.SEARCH_INPUT_HEIGHT + L.SEARCH_ROW_GAP))
+    shell.searchPanel.feedbackPrimary:Hide()
+
+    shell.searchPanel.feedbackSecondary = PHUI.CreateLabel(shell.searchPanel, "muted", "Keep typing...", PHUI.Fonts.SMALL)
+    shell.searchPanel.feedbackSecondary:SetPoint(
+        "TOP", shell.searchPanel.feedbackPrimary, "BOTTOM", 0, -L.SEARCH_FEEDBACK_LINE_GAP)
+    shell.searchPanel.feedbackSecondary:Hide()
+
+    -- Result rows reuse the exact same List row / ItemButtonPool
+    -- component Category List uses (CreateCategoryListRow) - real secure
+    -- item buttons, not a second interaction implementation. Own pool key
+    -- (not shell.content/categoryListPoolAnchor) since these never need
+    -- ScrollFrame clipping (capped at SEARCH_MAX_RESULT_ROWS, no scroll).
+    shell.searchPoolAnchor = CreateFrame("Frame", nil, shell.searchPanel)
+    shell.searchRows = {}
 end
 
 function Shell:Initialize()
@@ -447,9 +542,12 @@ function Shell:Initialize()
         end
     end)
 
-    -- Escape hierarchy (§4). Keyboard capture is only enabled outside
-    -- GLANCE (see SetState) so Escape never fights other UI while
-    -- collapsed, and any other key just propagates through untouched.
+    -- Escape dismisses straight to Glance (HandleEscape), never stepping
+    -- backward through the hierarchy. Keyboard capture is only enabled
+    -- outside GLANCE (see Render) so Escape never fights other UI while
+    -- collapsed, and any other key just propagates through untouched. Not
+    -- calling SetPropagateKeyboardInput(true) for ESCAPE consumes the key
+    -- so it never also opens the WoW Game Menu.
     frame:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
             Shell:HandleEscape()
@@ -512,9 +610,27 @@ end
 -- Cheap: never rescans bags, never recreates the root frame - every
 -- Render* function below only reads already-computed domain state (§14).
 function Shell:SetState(state, context)
+    local previousState = self.state
+    local enteringSearch = state == self.STATE.SEARCH and previousState ~= self.STATE.SEARCH
+
+    -- Cleared BEFORE Render() (not after) so the very first RenderSearch
+    -- this transition triggers already reflects a blank query - Quick
+    -- Search always starts fresh from Glance, never carrying over a
+    -- previous session's leftover text/results.
+    if enteringSearch and self.frame then
+        self.frame.shell.searchPanel.editBox:SetText("")
+    end
+
     self.state = state
     self.context = context or {}
     self:Render()
+
+    -- Focus only on the Glance -> Search transition itself, never on a
+    -- re-render while already in SEARCH (typing/data-change renders would
+    -- otherwise steal focus/cursor position away from the player).
+    if enteringSearch then
+        self.frame.shell.searchPanel.editBox:SetFocus()
+    end
 end
 
 function Shell:GoBack()
@@ -524,8 +640,14 @@ function Shell:GoBack()
     end
 end
 
+-- Escape = dismiss Pockets, not "navigate up" (top-bar/close pass
+-- "Important semantic distinction"): one Escape from ANY expanded state
+-- goes straight to Glance, same as clicking X, never stepping backward
+-- through Category -> Menu -> Glance the way GoBack/Back does. A no-op
+-- from Glance is handled upstream - keyboard capture is only enabled
+-- outside GLANCE (see Render), so Pockets never even sees this key there.
 function Shell:HandleEscape()
-    self:GoBack()
+    self:SetState(self.STATE.GLANCE)
 end
 
 function Shell:OnDataChanged()
@@ -537,8 +659,8 @@ end
 -- Resizes the root frame only - never touches its anchor (§1/§2/§15).
 -- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
 -- right/down from that fixed point.
-function Shell:ApplyDimensions(bodyHeight)
-    self.frame:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight))
+function Shell:ApplyDimensions(bodyHeight, includeFooter)
+    self.frame:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
 end
 
 -- Explicit body-clear lifecycle step (§7): hides every kind of body
@@ -566,6 +688,14 @@ function Shell:ClearBody()
     Pockets.UI.ItemButtonPool:ReleaseAll(shell.content)
     shell.scrollFrame:SetVerticalScroll(0)
     shell.content:SetHeight(1)
+
+    -- Search rows are long-lived (same reasoning as categoryListRows
+    -- above), and searchPanel itself must not linger visible behind
+    -- Menu/Category/All when leaving SEARCH.
+    shell.searchPanel:Hide()
+    for _, row in ipairs(shell.searchRows) do
+        row:Hide()
+    end
 end
 
 -- Cheap and idempotent - every Render* function below only reads
@@ -619,9 +749,19 @@ function Shell:Render()
         self:RenderCategory(self.context.categoryID)
     elseif state == self.STATE.ALL then
         self:RenderAll(frame.shell.header.searchBox:GetText())
+    elseif state == self.STATE.SEARCH then
+        self:RenderSearch()
     end
 
-    self:ConfigureFooter()
+    -- "No footer" is Quick Search's own explicit layout rule (product
+    -- intent - it must never look like another inventory-browsing
+    -- surface); every other expanded state keeps the shared footer.
+    if state == self.STATE.SEARCH then
+        frame.shell.footer:Hide()
+    else
+        frame.shell.footer:Show()
+        self:ConfigureFooter()
+    end
 end
 
 --------------------------------------------------
@@ -650,7 +790,7 @@ function Shell:RenderGlance()
 
     -- Ammo intentionally omitted from Glance (Glance compactness pass) -
     -- it stays available in Menu/Category/All's footer.
-    self.frame:SetSize(L.GLANCE_WIDTH, L.GLANCE_HEIGHT)
+    self.frame:SetSize(L.GLANCE_SIZE, L.GLANCE_SIZE)
 end
 
 --------------------------------------------------
@@ -665,19 +805,29 @@ end
 -- the offset is a constant on principle regardless.
 local TITLE_LEFT_OFFSET = L.SHELL_PADDING + L.SHELL_HEADER_SIDE_WIDTH + 4
 
+-- Reserves BOTH the contextual-action zone AND the always-present X zone,
+-- regardless of which contextual control (if any) is actually shown -
+-- the title must never move based on which contextual controls exist
+-- (top-bar/close pass §"TOP BAR").
+local TITLE_RIGHT_OFFSET = L.SHELL_PADDING + L.SHELL_HEADER_CLOSE_WIDTH + L.SHELL_HEADER_ACTION_GAP
+    + L.SHELL_HEADER_RIGHT_WIDTH
+
 -- Reconfigures the ONE header (left/title/right zones never move, only
 -- what occupies them does - §4, §6). The back button is a single
 -- reused widget whose onClick (Shell:GoBack, wired once in BuildShell)
 -- already resolves MENU -> GLANCE, CATEGORY -> MENU, and ALL -> MENU via
--- the same ESCAPE_PARENT map Escape uses (§5 "same navigation method").
+-- the same ESCAPE_PARENT map GoBack uses. X (close), by contrast, always
+-- dismisses straight to Glance (Shell:SetState(GLANCE), wired once in
+-- BuildShell) - Back = navigate up, X/Escape = dismiss Pockets.
 function Shell:ConfigureHeader()
     local header = self.frame.shell.header
     local state = self.state
 
     header.backButton:Show()
+    header.closeButton:Show()
     header.titleText:ClearAllPoints()
     header.titleText:SetPoint("LEFT", header, "LEFT", TITLE_LEFT_OFFSET, 0)
-    header.titleText:SetPoint("RIGHT", header, "RIGHT", -(L.SHELL_HEADER_RIGHT_WIDTH + L.SHELL_PADDING), 0)
+    header.titleText:SetPoint("RIGHT", header, "RIGHT", -TITLE_RIGHT_OFFSET, 0)
 
     if state == self.STATE.MENU then
         header.titleText:SetText("Pockets")
@@ -691,6 +841,14 @@ function Shell:ConfigureHeader()
         header.titleText:SetText("All")
         header.plusButton:Hide() -- already in All Items - its slot becomes Search (§3)
         header.searchBox:Show()
+    elseif state == self.STATE.SEARCH then
+        -- No contextual action here (Glance Quick Search pass) - just
+        -- [ < ] Search [ X ]. header.searchBox is All Items' OWN search
+        -- field, not this one; Quick Search has its own dedicated
+        -- EditBox in searchPanel (see RenderSearch).
+        header.titleText:SetText("Search")
+        header.plusButton:Hide()
+        header.searchBox:Hide()
     end
 end
 
@@ -965,6 +1123,98 @@ function Shell:RenderCategoryList(categoryID)
     -- the reclaimed width and bar visibility after that has run.
     content:SetWidth(rowWidth)
     SetScrollBarShown(shell, needsScrollbar)
+end
+
+--------------------------------------------------
+-- SEARCH (Glance Quick Search) - Glance -> Search -> interact -> Glance.
+-- Deliberately NOT inventory browsing: no footer, no scrollbar, at most
+-- SEARCH_MAX_RESULT_ROWS rows ever shown; 3+ matches collapses to compact
+-- centered feedback instead of ever becoming a second item grid. Result
+-- rows reuse CreateCategoryListRow/ItemButtonPool - the same real secure
+-- item buttons Category List uses - so tooltip/click/drag/split/quantity
+-- all work identically with no second interaction implementation.
+--------------------------------------------------
+
+function Shell:RenderSearch()
+    local shell = self.frame.shell
+    local panel = shell.searchPanel
+    panel:Show()
+
+    local rowWidth = BodyViewportWidth()
+    panel:SetWidth(rowWidth)
+
+    local query = panel.editBox:GetText()
+    local matches, totalCount
+    if query == "" then
+        matches, totalCount = {}, 0
+    else
+        -- Cached/aggregated snapshot only (product intent "PERFORMANCE") -
+        -- never a bag rescan or categorization pass on keystroke.
+        matches, totalCount = Pockets.UI.Search:RankedItemMatches(Pockets.API.GetAllAggregatedItems(), query)
+    end
+
+    for _, row in ipairs(shell.searchRows) do
+        row:Hide()
+    end
+    panel.feedbackPrimary:Hide()
+    panel.feedbackSecondary:Hide()
+
+    local extraHeight
+    if query == "" then
+        -- Blank field: no rows, no feedback (product intent "No
+        -- persistent empty body height").
+        extraHeight = 0
+    elseif totalCount == 0 then
+        panel.feedbackPrimary:SetText("No items found")
+        panel.feedbackPrimary:Show()
+        extraHeight = L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+    elseif totalCount <= L.SEARCH_MAX_RESULT_ROWS then
+        for index, item in ipairs(matches) do
+            local row = shell.searchRows[index]
+            if not row then
+                row = CreateCategoryListRow(shell.searchPoolAnchor)
+                shell.searchRows[index] = row
+            end
+
+            row:SetWidth(rowWidth)
+            row.name:SetText(item.name or item.itemLink or ("item:" .. tostring(item.itemID)))
+            local qualityColor = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
+            if qualityColor and item.quality > 1 then
+                row.name:SetTextColor(qualityColor.r, qualityColor.g, qualityColor.b)
+            else
+                PHUI.ApplyTextStyle(row.name, "primary")
+            end
+            row.qty:SetText(tostring(item.quantity))
+
+            Pockets.UI.ItemButtonPool:Configure(row, item)
+            -- Same reasoning as RenderCategoryList: the button's own
+            -- corner count badge is redundant next to the row's qty
+            -- column.
+            if row.Count then
+                row.Count:Hide()
+            end
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", panel, "TOPLEFT", 0,
+                -(L.SEARCH_INPUT_HEIGHT + L.SEARCH_ROW_GAP + (index - 1) * L.LIST_ROW_HEIGHT))
+            row:Show()
+        end
+        extraHeight = L.SEARCH_ROW_GAP + totalCount * L.LIST_ROW_HEIGHT
+    else
+        -- 3+ matches: deliberately restrictive (product intent) - a
+        -- match count nudging the player to narrow the query, never
+        -- another item grid.
+        panel.feedbackPrimary:SetText(string.format("%d items found", totalCount))
+        panel.feedbackSecondary:SetText("Keep typing...")
+        panel.feedbackPrimary:Show()
+        panel.feedbackSecondary:Show()
+        extraHeight = L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+            + L.SEARCH_FEEDBACK_LINE_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+    end
+
+    local contentHeight = L.SEARCH_INPUT_HEIGHT + extraHeight
+    panel:SetHeight(contentHeight)
+    self:ApplyDimensions(contentHeight + L.SHELL_PADDING * 2, false)
 end
 
 --------------------------------------------------
