@@ -7,9 +7,18 @@
 #   3. No stale pH_/GoldPH_ namespace references leaked into Pockets code.
 #   4. No direct bag API access outside Adapters/BagAPI.lua.
 #   5. No OnUpdate handlers in Core/ (domain state must stay event-driven).
-#   6. No stray print() calls outside Debug.lua.
+#   6. No stray print() calls outside Debug.lua/Events.lua/Tests/TestRunner.lua.
+#
+# Pass --verbose to also print the informational TODO/FIXME report.
 
 set -u
+
+VERBOSE=0
+for arg in "$@"; do
+    if [ "$arg" = "--verbose" ]; then
+        VERBOSE=1
+    fi
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -108,19 +117,31 @@ else
 fi
 
 # --- Check 6: stray print() outside Debug.lua ---
-STRAY_PRINT=$(grep -rn '\bprint(' "$ADDON_DIR" --include='*.lua' 2>/dev/null | grep -v 'Debug.lua' || true)
+# Events.lua (slash-command help/output) and Tests/TestRunner.lua (/pockets
+# test run results) are established, intentional chat-output call sites,
+# same category as Debug.lua - not "stray" debug scaffolding, so they're
+# excluded the same way. A genuinely new stray print() anywhere else still
+# fails this check.
+STRAY_PRINT=$(grep -rn '\bprint(' "$ADDON_DIR" --include='*.lua' 2>/dev/null \
+    | grep -v 'Debug.lua' \
+    | grep -v 'Events.lua' \
+    | grep -v 'Tests/TestRunner.lua' || true)
 if [ -n "$STRAY_PRINT" ]; then
-    echo -e "${YELLOW}⚠ print() found outside Debug.lua (review before release):${NC}"
+    echo -e "${YELLOW}⚠ print() found outside Debug.lua/Events.lua/Tests/TestRunner.lua (review before release):${NC}"
     echo "$STRAY_PRINT"
 else
-    pass "No stray print() calls outside Debug.lua"
+    pass "No stray print() calls outside known chat-output call sites"
 fi
 
-# --- Informational: TODO/FIXME report ---
-TODOS=$(grep -rn 'TODO\|FIXME' "$ADDON_DIR" --include='*.lua' 2>/dev/null || true)
-if [ -n "$TODOS" ]; then
-    echo -e "${YELLOW}ℹ TODO/FIXME markers present:${NC}"
-    echo "$TODOS"
+# --- Informational: TODO/FIXME report (only with --verbose - these are
+# tracked in .plans/Fix_TODO.md and planned follow-up work, not build
+# blockers, so they'd otherwise clutter every release run) ---
+if [ "$VERBOSE" -eq 1 ]; then
+    TODOS=$(grep -rn 'TODO\|FIXME' "$ADDON_DIR" --include='*.lua' 2>/dev/null || true)
+    if [ -n "$TODOS" ]; then
+        echo -e "${YELLOW}ℹ TODO/FIXME markers present:${NC}"
+        echo "$TODOS"
+    fi
 fi
 
 if [ "$FAIL" -ne 0 ]; then
