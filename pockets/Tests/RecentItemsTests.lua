@@ -37,6 +37,39 @@ Pockets.Tests.TestRunner:Register("RecentItems: bounded history queue", function
     return ok, ok and "OK" or string.format("expected bounded to %d, got %d", max, count)
 end)
 
+Pockets.Tests.TestRunner:Register("RecentItems: re-acquiring an already-recent item bumps it to newest, not a second row", function()
+    RecentItems:Clear()
+    RecentItems:Record({ itemID = 1, quantity = 1, timestamp = 1 })
+    RecentItems:Record({ itemID = 2, quantity = 1, timestamp = 2 })
+    RecentItems:Record({ itemID = 1, quantity = 1, timestamp = 3 })
+
+    local recent = RecentItems:GetRecent(10)
+    local ok = #recent == 2 and recent[1].itemID == 1 and recent[2].itemID == 2
+    return ok, ok and "OK" or string.format(
+        "expected 2 unique entries with itemID 1 bumped to newest, got %d entries", #recent)
+end)
+
+Pockets.Tests.TestRunner:Register("RecentItems: repeated pickups of one item do not evict other unique recents", function()
+    RecentItems:Clear()
+    local max = Pockets.Constants.RECENT_ITEMS_MAX
+    RecentItems:Record({ itemID = 999, quantity = 1, timestamp = 0 }) -- one unique item, recorded first
+    for i = 1, max + 20 do
+        RecentItems:Record({ itemID = 1, quantity = 1, timestamp = i }) -- same item, fished repeatedly
+    end
+
+    local recent = RecentItems:GetRecent(max + 20)
+    local found999 = false
+    for _, entry in ipairs(recent) do
+        if entry.itemID == 999 then
+            found999 = true
+        end
+    end
+    local ok = #recent == 2 and found999
+    return ok, ok and "OK" or string.format(
+        "expected the unique itemID 999 to survive repeated pickups of another item, got %d entries (found999=%s)",
+        #recent, tostring(found999))
+end)
+
 Pockets.Tests.TestRunner:Register("RecentItems: rejects zero/negative quantity", function()
     RecentItems:Clear()
     RecentItems:Record({ itemID = 9, quantity = 0, timestamp = 1 })

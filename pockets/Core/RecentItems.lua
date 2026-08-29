@@ -18,9 +18,22 @@ RecentItems.revision = RecentItems.revision or 0
 local MAX_ENTRIES = Pockets.Constants.RECENT_ITEMS_MAX
 
 -- delta: { itemID, quantity, timestamp, itemLink }
+--
+-- Unique-by-itemID (Fix_TODO.md #2): re-acquiring an already-recent item
+-- bumps it to newest instead of adding a second row. Without this, farming
+-- many stacks of one item (e.g. fishing) fills MAX_ENTRIES with that one
+-- itemID and evicts every other unique recent before the display-time
+-- dedupe in API.GetCategoryItems ever runs.
 function RecentItems:Record(delta)
     if not delta or not delta.itemID or not delta.quantity or delta.quantity <= 0 then
         return
+    end
+
+    for i, entry in ipairs(self.entries) do
+        if entry.itemID == delta.itemID then
+            table.remove(self.entries, i)
+            break
+        end
     end
 
     table.insert(self.entries, 1, {

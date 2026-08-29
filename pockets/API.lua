@@ -86,17 +86,57 @@ function API.GetCategoryItems(categoryID)
     return Pockets.Services.InventoryState:GetItemsByCategory(categoryID)
 end
 
+-- Sort key for A-Z item ordering (.plans/Fix_TODO.md #1): case-insensitive by name,
+-- with items missing a resolved name (ItemAPI still pending) sorted last
+-- via their "item:<id>" fallback rather than as empty strings.
+local function ItemSortKey(item)
+    return item.name and item.name:lower() or ("item:" .. tostring(item.itemID))
+end
+
+local function SortItemsByName(items)
+    table.sort(items, function(a, b)
+        local aHasName, bHasName = a.name ~= nil, b.name ~= nil
+        if aHasName ~= bHasName then
+            return aHasName
+        end
+        return ItemSortKey(a) < ItemSortKey(b)
+    end)
+    return items
+end
+
 -- Same as GetCategoryItems, but collapsed to one entry per itemID
 -- (InventoryState:AggregateRecords + ItemButtonPool.ToButtonRecord) -
 -- an item spread across many bag slots renders as a single button with
 -- a summed count everywhere Pockets shows an item grid (UI_SPEC §7/§10).
--- Recent is already itemID-deduped/button-shaped by GetCategoryItems, so
--- no further aggregation is needed there.
+-- Recent is already itemID-deduped/button-shaped by GetCategoryItems, and
+-- stays newest-first (recency is the point of that view), so it skips both
+-- aggregation and the A-Z sort applied to every other category.
 function API.GetAggregatedCategoryItems(categoryID)
     if categoryID == Pockets.Constants.CATEGORY.RECENT then
         return API.GetCategoryItems(categoryID)
     end
     local aggregates = Pockets.Services.InventoryState:AggregateRecords(API.GetCategoryItems(categoryID))
+    local out = {}
+    for _, agg in ipairs(aggregates) do
+        table.insert(out, Pockets.UI.ItemButtonPool.ToButtonRecord(agg))
+    end
+    return SortItemsByName(out)
+end
+
+-- Every currently carried item collapsed to one entry per itemID, across
+-- ALL categories at once (Glance Quick Search pass) - unlike
+-- GetAggregatedCategoryItems, this is not scoped to a category and never
+-- goes through Recent's history/dedupe path, so an item shows up exactly
+-- once regardless of whether it was also recently acquired. Reads
+-- InventoryState's already-scanned/aggregated snapshot only - no bag
+-- rescan, safe to call on every Quick Search keystroke.
+function API.GetAllAggregatedItems()
+    local InventoryState = Pockets.Services.InventoryState
+    local records = {}
+    for _, record in pairs(InventoryState:GetItems()) do
+        table.insert(records, record)
+    end
+    local aggregates = InventoryState:AggregateRecords(records)
     local out = {}
     for _, agg in ipairs(aggregates) do
         table.insert(out, Pockets.UI.ItemButtonPool.ToButtonRecord(agg))

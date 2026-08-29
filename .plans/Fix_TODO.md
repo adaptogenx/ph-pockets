@@ -89,7 +89,33 @@ Touch:
 - `pockets/Tests/ShellTests.lua` (X on every expanded state; Category/All X lands on Glance, not Menu)
 
 ==================================================
-6. Suggested implementation order
+6. Items from the mail do not count as Recent
+==================================================
+
+Status: not started. Bug, not a policy - mail pickups should hit Recent
+the same as any other positive-total-delta acquisition.
+
+Effect: taking an item out of the mailbox does not add it to Recent.
+Suspect something about how mail delivers items to bags doesn't trigger
+(or survive) `InventoryState:Refresh()`'s diff, so the positive delta
+`RecentItems:Record` relies on never fires for mail.
+
+Fix:
+- Repro: send/receive an item via mail, open bags, confirm it's missing
+  from Recent.
+- Find why the mail acquisition path doesn't produce the same
+  aggregate-total delta a loot/vendor/trade acquisition does (event not
+  firing/registered, refresh timing vs. mail window, etc.).
+- Make mail acquisitions flow through the normal `RecentItems:Record`
+  path - no mail-specific special-casing in `RecentItems` itself.
+
+Touch:
+- `pockets/Core/InventoryState.lua` (event registration / refresh timing)
+- `pockets/Core/RecentItems.lua`
+- `pockets/Tests/RecentItemsTests.lua`
+
+==================================================
+7. Suggested implementation order
 ==================================================
 
 1. Unique recents (core, no layout risk)
@@ -99,7 +125,7 @@ Touch:
 5. Close X on list views (header chrome; independent of Glance square except shared header-zone math)
 
 ==================================================
-7. Out of scope
+8. Out of scope
 ==================================================
 
 - Adaptive viewport / growth direction
