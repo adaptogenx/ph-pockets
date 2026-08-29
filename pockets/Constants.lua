@@ -125,7 +125,13 @@ Constants.LAYOUT = {
     -- minimum that fits the icon row and text column with no slack on
     -- whichever axis needs more room.
     GLANCE_ICON_SIZE = 30,
-    GLANCE_PADDING = 6,
+    -- Must match PHUI.Spacing.PADDING (Shared/PHUI.lua) - pH's own main
+    -- HUD frame (ph/UI_HUD.lua's PADDING) uses the same 12px inset on all
+    -- sides, and Pockets' Glance is the equivalent main-HUD-level frame,
+    -- not one of pH's smaller inner sub-panels (those use PANEL_PADDING =
+    -- 8, which is what SHELL_PADDING below already mirrors). Was
+    -- incorrectly 6 - visibly cramped next to pH's real HUD padding.
+    GLANCE_PADDING = 12,
     -- Vertical gap between the icon row and the text column below it.
     GLANCE_ICON_TEXT_GAP = 4,
     GLANCE_TEXT_GAP_Y = 1,
@@ -166,6 +172,9 @@ Constants.LAYOUT = {
     -- 3-4 columns fit (item grid follow-up pass). Still comfortably fits
     -- the worst-case Menu row too.
     SHELL_WIDTH = 236,
+    -- Matches PHUI.Spacing.PANEL_PADDING (Shared/PHUI.lua) - Menu/Category/
+    -- All are pH's smaller inner-sub-panel style, not the main HUD frame
+    -- (that's Glance, which uses PHUI.Spacing.PADDING - see GLANCE_PADDING).
     SHELL_PADDING = 8,
     SHELL_HEADER_HEIGHT = 26,
     -- Sensible floor for Category/All's dynamic body height (dynamic
