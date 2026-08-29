@@ -77,7 +77,7 @@ function Debug:DumpBags()
     print(COLOR_YELLOW .. "=== Pockets Equipped Bags ===" .. COLOR_RESET)
     local BagAPI = Pockets.Adapters.BagAPI
     for _, bag in ipairs(BagAPI:GetEquippedBags()) do
-        local invSlot = ContainerIDToInventoryID and ContainerIDToInventoryID(bag.bagID)
+        local invSlot = BagAPI:ContainerIDToInventoryID(bag.bagID)
         local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
         local bagName = bagLink and GetItemInfo(bagLink)
         local bagFamily = bagLink and GetItemFamily and GetItemFamily(bagLink)

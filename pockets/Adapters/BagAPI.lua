@@ -46,12 +46,29 @@ function BagAPI:GetBagSlotCount(bagID)
     return legacy
 end
 
+-- Resolves a container bagID to its equipped inventory slot ID. Prefers
+-- C_Container (the bare global was removed on this client - every other
+-- installed addon on this machine, e.g. ItemRack/Syndicator/BagBrother,
+-- only ever calls C_Container.ContainerIDToInventoryID). Checking the
+-- bare global first left it nil for every non-backpack bag, which made
+-- HasEquippedBag/IsAmmoBag silently treat bags 1-4 as never equipped -
+-- Glance permanently undercounted capacity to just the backpack.
+function BagAPI:ContainerIDToInventoryID(bagID)
+    if C_Container and C_Container.ContainerIDToInventoryID then
+        return C_Container.ContainerIDToInventoryID(bagID)
+    end
+    if ContainerIDToInventoryID then
+        return ContainerIDToInventoryID(bagID)
+    end
+    return nil
+end
+
 -- True if this bag slot currently has a bag item equipped (backpack always).
 function BagAPI:HasEquippedBag(bagID)
     if bagID == 0 then
         return true
     end
-    local invSlot = ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)
+    local invSlot = self:ContainerIDToInventoryID(bagID)
     if not invSlot then
         return false
     end
@@ -159,7 +176,7 @@ function BagAPI:IsAmmoBag(bagID)
         return false -- backpack is never a specialized bag
     end
 
-    local invSlot = ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)
+    local invSlot = self:ContainerIDToInventoryID(bagID)
     if not invSlot then
         return false
     end

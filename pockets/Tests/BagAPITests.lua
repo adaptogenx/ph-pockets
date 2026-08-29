@@ -99,6 +99,50 @@ Pockets.Tests.TestRunner:Register("BagAPI: quiver slots are excluded from GENERA
 end)
 
 --------------------------------------------------
+-- ContainerIDToInventoryID / HasEquippedBag: on this client (Classic
+-- Anniversary) the bare global ContainerIDToInventoryID does not exist -
+-- every other real addon installed alongside Pockets only ever calls
+-- C_Container.ContainerIDToInventoryID. Checking the bare global first
+-- (and treating a miss as "not equipped") silently dropped bags 1-4 from
+-- every capacity scan forever, undercounting Glance to just the backpack.
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("BagAPI: ContainerIDToInventoryID prefers C_Container over the bare global", function()
+    local originalC_Container = _G.C_Container
+    local originalGlobal = _G.ContainerIDToInventoryID
+
+    _G.C_Container = { ContainerIDToInventoryID = function() return 20 end }
+    _G.ContainerIDToInventoryID = nil
+
+    local invSlot = BagAPI:ContainerIDToInventoryID(1)
+
+    _G.C_Container = originalC_Container
+    _G.ContainerIDToInventoryID = originalGlobal
+
+    local ok = invSlot == 20
+    return ok, ok and "OK" or string.format("expected 20 from C_Container, got %s", tostring(invSlot))
+end)
+
+Pockets.Tests.TestRunner:Register("BagAPI: HasEquippedBag detects a non-backpack bag via C_Container-only client", function()
+    local originalC_Container = _G.C_Container
+    local originalGlobal = _G.ContainerIDToInventoryID
+    local originalGetLink = _G.GetInventoryItemLink
+
+    -- Simulates this exact client: no bare ContainerIDToInventoryID global.
+    _G.C_Container = { ContainerIDToInventoryID = function() return 20 end }
+    _G.ContainerIDToInventoryID = nil
+    _G.GetInventoryItemLink = function() return "item:12345" end
+
+    local equipped = BagAPI:HasEquippedBag(1)
+
+    _G.C_Container = originalC_Container
+    _G.ContainerIDToInventoryID = originalGlobal
+    _G.GetInventoryItemLink = originalGetLink
+
+    return equipped, equipped and "OK" or "expected bag 1 to register as equipped via C_Container"
+end)
+
+--------------------------------------------------
 -- ResolveSlotCount: mail/AH can report 0 slots for bags still equipped
 -- (Glance collapsed 66/76 -> 10/20). Live counts win; cache holds the
 -- last known size while equipped; unequipped bags drop to 0.
