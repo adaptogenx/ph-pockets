@@ -64,6 +64,38 @@ Pockets.Tests.TestRunner:Register("InventoryState: bag-full ETA sampling uses GE
     return ok, ok and "OK" or "estimator sample did not match GENERAL capacity (ammo may have leaked in)"
 end)
 
+-- Regression: at login, self.generalCapacity is still nil when the very
+-- first Refresh() runs, so a guard keyed on "only skip if we already had
+-- a good snapshot" does nothing here - an incomplete first scan (bags
+-- still registering right after ADDON_LOADED) got committed as if it
+-- were the real total, and nothing ever corrected it afterward since a
+-- scan that matches itself reads as complete forever after.
+Pockets.Tests.TestRunner:Register("InventoryState: incomplete first scan at login is never committed, even with no prior snapshot", function()
+    local BagAPI = Pockets.Adapters.BagAPI
+    local originalScan = BagAPI.ScanAllBags
+    local originalCounts = BagAPI.GetCapacityCounts
+
+    InventoryState.generalCapacity = nil
+    InventoryState.ammoCapacity = nil
+
+    -- Simulates bags 1-4 not yet reporting equipped right after
+    -- ADDON_LOADED: backpack alone would look like the whole inventory.
+    BagAPI.ScanAllBags = function() return {}, true end
+    BagAPI.GetCapacityCounts = function()
+        return { general = { used = 0, total = 16 }, ammo = { used = 0, total = 0 } }
+    end
+
+    local applied = InventoryState:Refresh("initial_load")
+
+    BagAPI.ScanAllBags = originalScan
+    BagAPI.GetCapacityCounts = originalCounts
+
+    local ok = applied == false and InventoryState.generalCapacity == nil
+    return ok, ok and "OK" or string.format(
+        "expected incomplete first scan to be rejected (applied=%s, generalCapacity=%s)",
+        tostring(applied), tostring(InventoryState.generalCapacity))
+end)
+
 Pockets.Tests.TestRunner:Register("InventoryState: AggregateRecords collapses split stacks into one itemID entry", function()
     local records = {
         { itemID = 100, itemLink = "item:100", name = "Netherweave Cloth", texture = 1, quality = 1,

@@ -91,8 +91,13 @@ function InventoryState:Refresh(reason)
     -- Mail/AH (and similar) can make GetContainerNumSlots return 0 for
     -- bags that are still equipped. Applying that snapshot would collapse
     -- Glance from the real 66/76 down to whichever bag still answered
-    -- (e.g. 10/20). Keep the last complete snapshot and let Events retry.
-    if incomplete and self.generalCapacity and (self.generalCapacity.total or 0) > 0 then
+    -- (e.g. 10/20). Never commit an incomplete scan - not even the very
+    -- first one at login, before self.generalCapacity exists at all.
+    -- Equipped-bag detection (GetInventoryItemLink) can still be settling
+    -- right after ADDON_LOADED; committing that partial scan as "the"
+    -- total left it permanently wrong since a self-matching scan reads as
+    -- complete forever after. Let Events retry until a real scan lands.
+    if incomplete then
         return false
     end
 
