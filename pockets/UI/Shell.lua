@@ -28,6 +28,7 @@ local Constants = Pockets.Constants
 local L = Constants.LAYOUT
 local FlowLayout = Pockets.UI.FlowLayout
 local PositionStrategy = Pockets.UI.PositionStrategy
+local PHUI = Pockets.UI.PHUI
 
 Shell.STATE = {
     GLANCE = "GLANCE",
@@ -258,50 +259,80 @@ end
 -- Frame construction
 --------------------------------------------------
 
--- Compact always-visible HUD, true square (Fix_TODO #3): bag icon top-left
--- and search icon top-right share one row, "59 / 76" / "13m" stack in a
--- centered text column below (TOP-anchoring both to glance's own TOP
--- centers the column across the full square width, independent of the
--- icon row). No header, no Ammo (Glance compactness pass) - just the two
--- numbers the frame exists to answer, plus the Quick Search entry point.
+-- Compact metric-list HUD (Glance redesign pass) - NOT a centered status
+-- card, NOT forced square. Structure, top to bottom: header ("pockets" +
+-- Search), Bag/Gold/Ammo metric rows (Ammo optional, always last, built
+-- via one shared MetricRow component), Recent Items strip. Every frame
+-- below gets BOTH width and height set explicitly at creation (via the
+-- component opts) - a frame anchored by a single point with only one
+-- dimension known can resolve to a fully indeterminate position, which
+-- is exactly what silently blanked every earlier version of this HUD.
 function Shell:BuildGlance()
     local frame = self.frame
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
     frame.glance = glance
 
-    glance.icon = glance:CreateTexture(nil, "ARTWORK")
-    glance.icon:SetSize(L.GLANCE_ICON_SIZE, L.GLANCE_ICON_SIZE)
-    glance.icon:SetPoint("TOPLEFT", glance, "TOPLEFT", L.GLANCE_PADDING, -L.GLANCE_PADDING)
-    glance.icon:SetTexture(Constants.HUD_ICON)
-    glance.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local contentWidth = L.GLANCE_WIDTH - L.GLANCE_PADDING * 2
 
-    glance.textBlock = CreateFrame("Frame", nil, glance)
-    glance.textBlock:SetPoint("TOP", glance, "TOP", 0,
-        -(L.GLANCE_PADDING + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_TEXT_GAP))
-    glance.textBlock:SetSize(L.GLANCE_TEXT_BLOCK_WIDTH,
-        L.GLANCE_CAPACITY_LINE_HEIGHT + L.GLANCE_TEXT_GAP_Y + L.GLANCE_ETA_LINE_HEIGHT)
+    -- Header (HEADER spec): "pockets" left-aligned, Search right-aligned
+    -- and sized like a metric icon, not an oversized button. Search
+    -- click behavior is unchanged - the ONLY way into SEARCH.
+    glance.header = Pockets.UI.Header:Create(glance, {
+        width = contentWidth,
+        height = L.GLANCE_HEADER_HEIGHT,
+        title = "pockets",
+        iconSize = L.GLANCE_SEARCH_ICON_SIZE,
+        iconTexture = "Interface\\Common\\UI-Searchbox-Icon",
+        tooltipText = "Quick Search",
+        onIconClick = function() Shell:SetState(Shell.STATE.SEARCH) end,
+    })
+    glance.header:SetPoint("TOPLEFT", glance, "TOPLEFT", L.GLANCE_PADDING, -L.GLANCE_PADDING)
 
-    glance.capacityText = PHUI.CreateLabel(glance.textBlock, "primary", nil, PHUI.Fonts.NORMAL)
-    glance.capacityText:SetPoint("TOPLEFT", glance.textBlock, "TOPLEFT", 0, 0)
-    glance.capacityText:SetJustifyH("CENTER")
-
-    glance.etaText = PHUI.CreateLabel(glance.textBlock, "muted", nil, PHUI.Fonts.SMALL)
-    glance.etaText:SetPoint("TOPLEFT", glance.capacityText, "BOTTOMLEFT", 0, -L.GLANCE_TEXT_GAP_Y)
-    glance.etaText:SetJustifyH("CENTER")
-
-    -- Quick Search entry point (Glance Quick Search pass): the ONLY way
-    -- into SEARCH. Click replaces Glance in place - never opens Menu/All
-    -- Items or another window (see SetState(Shell.STATE.SEARCH)). Sits in
-    -- the icon row's top-right corner - the square's width is driven by
-    -- the text column below, so this fits without stretching Glance back
-    -- into a rectangle (Fix_TODO #4).
-    glance.searchButton = PHUI.CreateIconButton(glance, L.GLANCE_SEARCH_ICON_SIZE,
-        "Interface\\Common\\UI-Searchbox-Icon", {
-            tooltipText = "Quick Search",
-            onClick = function() Shell:SetState(Shell.STATE.SEARCH) end,
+    -- One shared row geometry for Bag/Gold/Ammo (METRIC ROW SYSTEM spec)
+    -- - only texture/text/style ever varies between them.
+    local function BuildMetricRow(texture, iconOpts, hasSecondary, primaryStyle)
+        return Pockets.UI.MetricRow:Create(glance, {
+            width = contentWidth,
+            height = L.GLANCE_METRIC_ROW_HEIGHT,
+            iconSize = L.GLANCE_METRIC_ICON_SIZE,
+            gap = L.GLANCE_METRIC_ICON_TEXT_GAP,
+            texture = texture,
+            iconOpts = iconOpts,
+            hasSecondary = hasSecondary,
+            primaryStyle = primaryStyle,
         })
-    glance.searchButton:SetPoint("TOPRIGHT", glance, "TOPRIGHT", -L.GLANCE_PADDING, -L.GLANCE_PADDING)
+    end
+
+    -- Bag (BAG ROW spec): capacity is the strongest text in the section
+    -- ("primary" style); ETA is the row's right-aligned secondary value.
+    -- Constants.HUD_ICON is already clean backpack art - no texcoord crop.
+    glance.bagRow = BuildMetricRow(Constants.HUD_ICON, { insetTexCoord = false }, true, "primary")
+    glance.bagRow:SetPoint("TOPLEFT", glance.header, "BOTTOMLEFT", 0, -L.GLANCE_HEADER_GAP)
+
+    -- Gold (GOLD spec): always present, immediately below Bag. "muted"
+    -- style, not yellow text - the native gold icon already identifies
+    -- it (VISUAL HIERARCHY spec: "Avoid making Gold yellow").
+    glance.goldRow = BuildMetricRow(Constants.GOLD_ICON, { insetTexCoord = false }, false, "muted")
+    glance.goldRow:SetPoint("TOPLEFT", glance.bagRow, "BOTTOMLEFT", 0, -L.GLANCE_METRIC_ROW_GAP)
+
+    -- Ammo (AMMO ROW spec): optional, always the final metric row. Built
+    -- once and shown/hidden per render (ShouldShowAmmoRow) so absent
+    -- Ammo reclaims its row height completely.
+    glance.ammoRow = BuildMetricRow(Constants.CATEGORY_ICON.ammo, nil, false, "muted")
+    glance.ammoRow:SetPoint("TOPLEFT", glance.goldRow, "BOTTOMLEFT", 0, -L.GLANCE_METRIC_ROW_GAP)
+    glance.ammoRow:Hide()
+
+    -- Recent Items strip (RECENT ITEMS spec) - re-anchored per render
+    -- depending on whether Ammo is showing (see RenderGlance); this
+    -- initial anchor just gives it a valid position before the first
+    -- render runs.
+    glance.recentStrip = Pockets.UI.RecentItemStrip:Create(glance, {
+        width = contentWidth,
+        iconSize = L.GLANCE_RECENT_ICON_SIZE,
+        gap = L.GLANCE_RECENT_ICON_GAP,
+    })
+    glance.recentStrip:SetPoint("TOPLEFT", glance.goldRow, "BOTTOMLEFT", 0, -L.GLANCE_RECENT_GAP)
 end
 
 function Shell:BuildShell()
@@ -548,9 +579,18 @@ function Shell:Initialize()
     -- collapsed, and any other key just propagates through untouched. Not
     -- calling SetPropagateKeyboardInput(true) for ESCAPE consumes the key
     -- so it never also opens the WoW Game Menu.
+    --
+    -- HandleEscape is pcall'd defensively (combat-safety hardening pass):
+    -- if it (or anything it calls - SetState/Render) ever throws, this
+    -- still falls through to SetPropagateKeyboardInput(true) rather than
+    -- silently trapping every future keypress on this frame - action-bar
+    -- keybinds must never get stuck behind an unrelated render bug.
     frame:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
-            Shell:HandleEscape()
+            local ok = pcall(Shell.HandleEscape, Shell)
+            if not ok then
+                self:SetPropagateKeyboardInput(true)
+            end
         else
             self:SetPropagateKeyboardInput(true)
         end
@@ -770,27 +810,62 @@ end
 
 function Shell:RenderGlance()
     local glance = self.frame.glance
+    local InventoryState = Pockets.Services.InventoryState
 
-    local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
+    -- Bag row: capacity is the strongest text (VISUAL HIERARCHY spec),
+    -- ETA is the row's secondary/right-aligned value.
+    local capacity = InventoryState:GetGeneralCapacity()
     local color = Layout:GetCapacityColor(capacity.utilization)
-    glance.capacityText:SetText(string.format("%d / %d", capacity.used, capacity.total))
-    glance.capacityText:SetTextColor(color.r, color.g, color.b)
+    glance.bagRow:SetPrimary(string.format("%d / %d", capacity.used, capacity.total))
+    glance.bagRow:SetPrimaryColor(color.r, color.g, color.b)
 
     local estimator = Pockets.Services.CapacityEstimator
     local estimatorState = estimator:GetState()
     local confidenceOK = estimator:GetConfidence() >= 0.5
     if estimatorState == Constants.ESTIMATOR_STATE.FULL then
-        glance.etaText:SetText("Full")
+        glance.bagRow:SetSecondary("Full")
     elseif estimatorState == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
         -- Prefer omission to a noisy/fabricated number (§2, §9).
-        glance.etaText:SetText(Layout:FormatCompactETA(estimator:GetETA()) or "")
+        glance.bagRow:SetSecondary(Layout:FormatCompactETA(estimator:GetETA()) or "")
     else
-        glance.etaText:SetText("")
+        glance.bagRow:SetSecondary("")
     end
 
-    -- Ammo intentionally omitted from Glance (Glance compactness pass) -
-    -- it stays available in Menu/Category/All's footer.
-    self.frame:SetSize(L.GLANCE_SIZE, L.GLANCE_SIZE)
+    -- Gold (GOLD spec): always present, second row. GetMoney() is a
+    -- player-money read, not a bag/item/combat/tooltip/binding call, so
+    -- it isn't restricted to Adapters/ (TDD §3) - read here and handed to
+    -- the standalone MoneyFormat component, never Blizzard's MoneyFrame
+    -- or pH's own Ledger module.
+    glance.goldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(GetMoney()))
+
+    -- Ammo (AMMO ROW spec): optional, always the final metric row - shown
+    -- only when a real ammo-specialized bag is equipped (same predicate
+    -- the Menu/Category/All footer already uses), never merely because
+    -- ammo items sit in a normal bag.
+    local ammoCapacity = InventoryState:GetAmmoCapacity()
+    local showAmmo = self:ShouldShowAmmoRow(ammoCapacity)
+    if showAmmo then
+        glance.ammoRow:SetPrimary(string.format("%d / %d", ammoCapacity.used, ammoCapacity.total))
+        glance.ammoRow:Show()
+    else
+        glance.ammoRow:Hide()
+    end
+
+    -- Recent Items strip (RECENT ITEMS spec): newest-first, unique-by-
+    -- itemID, current-quantity-resolved records - same accessor Category
+    -- List/Grid already use for "recent" (no second bag scan). Re-anchor
+    -- under whichever row is now last (Gold or Ammo) before Ammo's
+    -- visibility can shift where it lands.
+    glance.recentStrip:ClearAllPoints()
+    local lastMetricRow = showAmmo and glance.ammoRow or glance.goldRow
+    glance.recentStrip:SetPoint("TOPLEFT", lastMetricRow, "BOTTOMLEFT", 0, -L.GLANCE_RECENT_GAP)
+    glance.recentStrip:SetItems(Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.RECENT))
+
+    -- Pure arithmetic from fixed row geometry (DYNAMIC SIZE / LAYOUT
+    -- specs) - never a runtime GetHeight()/GetBottom() query. Width is
+    -- fixed; height grows by exactly one metric row when Ammo is shown,
+    -- shrinks back by exactly that when it isn't.
+    self.frame:SetSize(L.GLANCE_WIDTH, Constants:GlanceContentHeight(showAmmo))
 end
 
 --------------------------------------------------

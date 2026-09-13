@@ -91,6 +91,73 @@ function Debug:DumpBags()
     print(COLOR_YELLOW .. "==============================" .. COLOR_RESET)
 end
 
+-- Right-click use/equip/disenchant-target diagnostic: dumps every
+-- currently-active pooled item button's bagID/slotID/interactive flag
+-- alongside the REAL bagIndexFrame:GetID()/button:GetID() values
+-- ContainerFrameItemButtonTemplate's own inherited OnClick resolves bag/
+-- slot from - so "right-click doesn't work" can be diagnosed from actual
+-- runtime values instead of guessed at. Existing as a slash command (not
+-- an ad-hoc /run) specifically because a long inline /run script can
+-- exceed the chat edit box's line-length limit.
+function Debug:DumpSecureButtons()
+    print(COLOR_YELLOW .. "=== Pockets Item Buttons ===" .. COLOR_RESET)
+    print(string.format("  CursorHasItem: %s", tostring(CursorHasItem and CursorHasItem())))
+    local count = 0
+    for _, pool in pairs(Pockets.UI.ItemButtonPool.pools) do
+        for _, button in ipairs(pool.active) do
+            count = count + 1
+            print(string.format(
+                "  #%d bagID=%s slotID=%s interactive=%s resolvedBagID=%s resolvedSlotID=%s",
+                count, tostring(button.bagID), tostring(button.slotID), tostring(button.interactive),
+                tostring(button.bagIndexFrame and button.bagIndexFrame:GetID()), tostring(button:GetID())))
+        end
+    end
+    if count == 0 then
+        print("  (no active item buttons found - open a category, All Items, or Recent items first)")
+    end
+    print(COLOR_YELLOW .. "====================================" .. COLOR_RESET)
+end
+
+-- Enumerates every visual region (Texture/FontString) a pooled item
+-- button actually has, with real name/type/shown/size - so an unwanted
+-- decoration (e.g. ContainerFrameItemButtonTemplate's glow/overlay
+-- textures Pockets doesn't manage) can be identified from real runtime
+-- data instead of guessed at by field name.
+function Debug:DumpButtonRegions()
+    local target
+    for _, pool in pairs(Pockets.UI.ItemButtonPool.pools) do
+        target = target or pool.active[1]
+    end
+
+    if not target then
+        print("[Pockets] No active item buttons found - open a category, All Items, or Recent items first")
+        return
+    end
+
+    -- region:GetName() only reports a GLOBAL frame name, which most of
+    -- ContainerFrameItemButtonTemplate's sub-regions don't have. Cross-
+    -- reference each region against the button's OWN Lua fields so we
+    -- get the actual key (e.g. "IconBorder", "NewItemTexture") - what's
+    -- actually needed to write button.<Field>:Hide().
+    local fieldNameByRegion = {}
+    for key, value in pairs(target) do
+        if type(value) == "table" and value.GetObjectType then
+            fieldNameByRegion[value] = key
+        end
+    end
+
+    print(COLOR_YELLOW .. "=== Pockets Button Regions ===" .. COLOR_RESET)
+    local regions = { target:GetRegions() }
+    for i, region in ipairs(regions) do
+        local w, h = region:GetSize()
+        print(string.format(
+            "  #%d field=%s type=%s shown=%s size=%.0fx%.0f",
+            i, tostring(fieldNameByRegion[region]), tostring(region:GetObjectType()),
+            tostring(region:IsShown()), w or -1, h or -1))
+    end
+    print(COLOR_YELLOW .. "===============================" .. COLOR_RESET)
+end
+
 function Debug:DumpEvents()
     print(COLOR_YELLOW .. "=== Pockets EventBus Subscribers ===" .. COLOR_RESET)
     for eventName, list in pairs(Pockets.Services.EventBus.subscribers) do
@@ -128,8 +195,12 @@ function Debug:HandleCommand(args)
         self:DumpEvents()
     elseif subCmd == "bags" then
         self:DumpBags()
+    elseif subCmd == "secure" then
+        self:DumpSecureButtons()
+    elseif subCmd == "regions" then
+        self:DumpButtonRegions()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, regions")
     end
 end
 

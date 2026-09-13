@@ -90,7 +90,12 @@ Constants.ESTIMATOR_SAMPLE_WINDOW_MAX = 60
     are "Interface\Icons\<name>" paths.
 
     Provenance, for future maintainers who want to swap any of these:
-      HUD/other  = 133628  (BagBrother "Normal Bags" rule icon - generic bag look)
+      HUD        = "Interface\Buttons\Button-Backpack-Up" (stock Blizzard
+                   backpack-slot icon art - a clean backpack drawing on a
+                   transparent background, not an item-icon square with
+                   black corner padding, so it reads well at Glance's
+                   small icon size with no texcoord cropping needed)
+      other      = 133628  (BagBrother "Normal Bags" rule icon - generic bag look)
       recent     = "Interface\Icons\INV_Scroll_02" (Inscription/Attune scroll icon, distinct from quest)
       equipment  = 133126  (BagBrother item-class icon: Armor/Weapon/Gem)
       consumable = 134756  (BagBrother item-class icon: Consumable)
@@ -98,8 +103,12 @@ Constants.ESTIMATOR_SAMPLE_WINDOW_MAX = 60
       quest      = "Interface\Icons\INV_Scroll_03" (Attune/Inscription scroll icon)
       ammo       = 133581  (BagBrother's default-ammo-icon fallback)
       junk       = 134414  (BagBrother item-class icon: Miscellaneous)
+      gold       = "Interface\MoneyFrame\UI-GoldIcon" (stock Blizzard money-
+                   frame coin icon - same asset pH's own Ledger/HUD money
+                   display uses, already clean/inline at small sizes)
 ]]
-Constants.HUD_ICON = 133628
+Constants.HUD_ICON = "Interface\\Buttons\\Button-Backpack-Up"
+Constants.GOLD_ICON = "Interface\\MoneyFrame\\UI-GoldIcon"
 
 Constants.CATEGORY_ICON = {
     recent = "Interface\\Icons\\INV_Scroll_02",
@@ -116,44 +125,47 @@ Constants.CATEGORY_ICON = {
 -- Items shell (.plans/Pockets_Glance_UI.md). Only Glance is exempt from the
 -- stable width/header/footer contract shared by Menu/Category/All.
 Constants.LAYOUT = {
-    -- Glance: minimal always-visible HUD, exempt from the stable shell
-    -- contract. Fixed size (no longer content-dependent - Ammo was
-    -- dropped from Glance entirely) so it stays as compact as possible.
-    -- True square (Fix_TODO #3): bag icon top-left, search icon top-right,
-    -- "59 / 76" / compact "13m" ETA centered below as a two-line column.
-    -- GLANCE_SIZE is DERIVED (below), not hand-picked - it's the true
-    -- minimum that fits the icon row and text column with no slack on
-    -- whichever axis needs more room.
-    GLANCE_ICON_SIZE = 30,
-    -- Must match PHUI.Spacing.PADDING (Shared/PHUI.lua) - pH's own main
-    -- HUD frame (ph/UI_HUD.lua's PADDING) uses the same 12px inset on all
-    -- sides, and Pockets' Glance is the equivalent main-HUD-level frame,
-    -- not one of pH's smaller inner sub-panels (those use PANEL_PADDING =
-    -- 8, which is what SHELL_PADDING below already mirrors). Was
-    -- incorrectly 6 - visibly cramped next to pH's real HUD padding.
-    GLANCE_PADDING = 12,
-    -- Vertical gap between the icon row and the text column below it.
-    GLANCE_ICON_TEXT_GAP = 4,
-    GLANCE_TEXT_GAP_Y = 1,
-    -- Just enough for the worst realistic capacity string ("199 / 200")
-    -- at GameFontNormal - the ETA line ("13m") never needs more.
-    GLANCE_TEXT_BLOCK_WIDTH = 62,
-    -- Hand-picked line heights for the two stacked text rows (same
-    -- approach as SEARCH_FEEDBACK_LINE_HEIGHT below - a fixed pixel
-    -- value, not a runtime font query) so GLANCE_SIZE can be derived at
-    -- load time.
-    GLANCE_CAPACITY_LINE_HEIGHT = 14,
-    GLANCE_ETA_LINE_HEIGHT = 10,
-    -- Quick Search entry point (Glance Quick Search pass) - small icon
-    -- button, top-right corner of the icon row, sized to read as a
-    -- glyph rather than a full chrome button.
-    GLANCE_SEARCH_ICON_SIZE = 16,
-    -- Nominal gap between the bag icon and the search icon, used only in
-    -- GLANCE_SIZE's derivation below - in practice the two sit much
-    -- farther apart than this (pinned to opposite corners of a width
-    -- driven by the text column), this just keeps the derivation correct
-    -- if the text column ever shrinks below the icon row's own minimum.
-    GLANCE_ICON_SEARCH_GAP = 4,
+    -- Glance: compact metric-list HUD (Glance redesign pass), NOT a
+    -- centered status card and NOT forced square - exempt from the
+    -- stable shell contract. Structure: a lightweight header ("pockets" +
+    -- Search), then Bag/Gold/Ammo metric rows (Ammo optional, always
+    -- last), then a Recent Items icon strip. Width is fixed (chosen to
+    -- comfortably fit both the worst-case metric-row text and ~5 Recent
+    -- icons - see GLANCE_WIDTH below); height is pure arithmetic from
+    -- these constants in Shell:RenderGlance (row count varies only with
+    -- Ammo's presence), never a runtime GetHeight() query.
+    GLANCE_PADDING = 8,
+    -- "pockets" label + Search icon, one row.
+    GLANCE_HEADER_HEIGHT = 18,
+    GLANCE_HEADER_GAP = 6,
+    -- Search matches metric-icon size (HEADER spec: "approximately the
+    -- same visual size as the metric icons, not an oversized button").
+    GLANCE_SEARCH_ICON_SIZE = 18,
+    -- Shared by every metric row (Bag/Gold/Ammo) via UI/MetricRow.lua -
+    -- identical icon size/row height/left edge/spacing is the whole point
+    -- of the shared component (METRIC ROW SYSTEM spec), not per-row
+    -- tuning.
+    GLANCE_METRIC_ICON_SIZE = 18,
+    GLANCE_METRIC_ROW_HEIGHT = 18,
+    GLANCE_METRIC_ICON_TEXT_GAP = 6,
+    -- Small, uniform gap between stacked metric rows - deliberately not a
+    -- divider (spec: "Do NOT add divider lines between these rows").
+    GLANCE_METRIC_ROW_GAP = 3,
+    -- Recent Items strip (RECENT ITEMS spec) - "slightly larger than the
+    -- 16-20px metric icons... but keep compact". Width/count below are
+    -- sized together: 5 icons at this size+gap is what GLANCE_WIDTH's
+    -- content width is chosen to fit (RECENT ITEMS + WIDTH spec - the
+    -- strip helps set Glance's width, not the other way around).
+    -- Shell/RecentItemStrip still clamp to however many ACTUALLY fit at
+    -- render time rather than hard-coding a count.
+    GLANCE_RECENT_GAP = 6,
+    GLANCE_RECENT_ICON_SIZE = 22,
+    GLANCE_RECENT_ICON_GAP = 4,
+    -- Fixed content width: comfortably fits the worst-case metric-row
+    -- text (icon + "199 / 200" + gap + "8m") AND 5 Recent icons
+    -- (5*22 + 4*4 = 126, +6px slack = 132). Total width adds
+    -- GLANCE_PADDING on both sides.
+    GLANCE_WIDTH = 148,
 
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
@@ -271,27 +283,21 @@ Constants.LAYOUT = {
 -- Shell.lua's RenderMenu, which computes and applies it per-render the
 -- same way Category/All already do.
 
--- Glance's square size is the true minimum that fits its content on
--- whichever axis needs more room - never hand-picked, so it can't be
--- bigger than it needs to be on the constrained axis (Fix_TODO #3:
--- "true square, not square-ish"). Three candidates: the icon+search top
--- row, the text column below it, and the full vertical stack height -
--- the largest wins. The text column is the binding constraint with
--- today's values, so the icon+search row (now shown again) fits inside
--- it for free without growing Glance back into a rectangle.
-local glanceIconRowWidth = Constants.LAYOUT.GLANCE_PADDING * 2
-    + Constants.LAYOUT.GLANCE_ICON_SIZE
-    + Constants.LAYOUT.GLANCE_ICON_SEARCH_GAP
-    + Constants.LAYOUT.GLANCE_SEARCH_ICON_SIZE
-local glanceTextRowWidth = Constants.LAYOUT.GLANCE_PADDING * 2
-    + Constants.LAYOUT.GLANCE_TEXT_BLOCK_WIDTH
-local glanceContentHeight = Constants.LAYOUT.GLANCE_PADDING * 2
-    + Constants.LAYOUT.GLANCE_ICON_SIZE
-    + Constants.LAYOUT.GLANCE_ICON_TEXT_GAP
-    + Constants.LAYOUT.GLANCE_CAPACITY_LINE_HEIGHT
-    + Constants.LAYOUT.GLANCE_TEXT_GAP_Y
-    + Constants.LAYOUT.GLANCE_ETA_LINE_HEIGHT
-Constants.LAYOUT.GLANCE_SIZE = math.max(glanceIconRowWidth, glanceTextRowWidth, glanceContentHeight)
+-- Single source of truth for Glance's total height, shared by
+-- Shell:RenderGlance (which also decides includeAmmo) and tests - pure
+-- arithmetic from fixed row-geometry constants, deliberately never a
+-- runtime GetHeight()/GetBottom() query (a frame anchored by a single
+-- point with an unresolved dimension can report nil for those - see the
+-- Glance blank-render bug this pass fixed). Ammo adds exactly one metric
+-- row; its absence removes exactly that row's height (AMMO ROW spec).
+function Constants:GlanceContentHeight(includeAmmo)
+    local L = Constants.LAYOUT
+    local rowCount = includeAmmo and 3 or 2
+    return L.GLANCE_PADDING * 2
+        + L.GLANCE_HEADER_HEIGHT + L.GLANCE_HEADER_GAP
+        + rowCount * L.GLANCE_METRIC_ROW_HEIGHT + (rowCount - 1) * L.GLANCE_METRIC_ROW_GAP
+        + L.GLANCE_RECENT_GAP + L.GLANCE_RECENT_ICON_SIZE
+end
 
 -- Domain events published on Pockets' internal EventBus (TDD §5.5)
 Constants.DOMAIN_EVENT = {

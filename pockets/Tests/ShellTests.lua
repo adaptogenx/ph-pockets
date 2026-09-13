@@ -408,45 +408,118 @@ Pockets.Tests.TestRunner:Register("Shell: expanding from Glance grows right/down
 end)
 
 --------------------------------------------------
--- Glance compactness pass
+-- Glance redesign pass: compact metric-list HUD (header + Bag/Gold/Ammo
+-- metric rows + Recent Items strip), replacing the old centered/square
+-- status card.
 --------------------------------------------------
 
--- Fix_TODO #3: Glance must be a TRUE square (width == height exactly),
--- not the old "square-ish" wide rectangle.
-Pockets.Tests.TestRunner:Register("Shell: Glance is a true square (width == height)", function()
+local function WithAmmoCapacity(capacity, fn)
+    local InventoryState = Pockets.Services.InventoryState
+    local original = InventoryState.GetAmmoCapacity
+    InventoryState.GetAmmoCapacity = function() return capacity end
+
+    local ok, err = pcall(fn)
+
+    InventoryState.GetAmmoCapacity = original
+    if not ok then
+        error(err, 0)
+    end
+end
+
+local function WithRecentItems(items, fn)
+    local original = Pockets.API.GetAggregatedCategoryItems
+    Pockets.API.GetAggregatedCategoryItems = function(categoryID)
+        if categoryID == Pockets.Constants.CATEGORY.RECENT then
+            return items
+        end
+        return original(categoryID)
+    end
+
+    local ok, err = pcall(fn)
+
+    Pockets.API.GetAggregatedCategoryItems = original
+    if not ok then
+        error(err, 0)
+    end
+end
+
+local function FakeRecentItem(itemID, quantity)
+    return {
+        itemID = itemID, itemLink = "item:" .. itemID, name = "Item " .. itemID,
+        texture = 1, quality = 1, quantity = quantity, bagID = 0, slotID = itemID,
+        interactive = true,
+    }
+end
+
+--------------------------------------------------
+-- Header (no X/back button, Search top-right, same visual size as
+-- metric icons)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: header has no X/back button", function()
     ResetToGlance()
-    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
-    local ok = width == height
-    return ok, ok and "OK" or string.format("expected width == height, got %s x %s", tostring(width), tostring(height))
+    local header = Shell.frame.glance.header
+    local ok = header.closeButton == nil and header.backButton == nil
+    return ok, ok and "OK" or "expected Glance's header to have no close/back button"
 end)
 
--- Glance minimum-size pass: GLANCE_SIZE must be DERIVED from its actual
--- content (icon+search row, text column, full vertical stack), never a
--- hand-picked number with slack - this is what "minimum size possible"
--- means and what keeps it from silently regressing bigger later. The
--- search icon (re-enabled alongside the square pass, Fix_TODO #4) is
--- included in the icon-row candidate below.
-Pockets.Tests.TestRunner:Register("Shell: Glance size is the derived minimum, not hand-picked slack", function()
+Pockets.Tests.TestRunner:Register("Glance: Search icon is right-aligned and matches metric icon size", function()
+    ResetToGlance()
     local L = Pockets.Constants.LAYOUT
-    local iconRowWidth = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_SEARCH_GAP + L.GLANCE_SEARCH_ICON_SIZE
-    local textRowWidth = L.GLANCE_PADDING * 2 + L.GLANCE_TEXT_BLOCK_WIDTH
-    local contentHeight = L.GLANCE_PADDING * 2 + L.GLANCE_ICON_SIZE + L.GLANCE_ICON_TEXT_GAP
-        + L.GLANCE_CAPACITY_LINE_HEIGHT + L.GLANCE_TEXT_GAP_Y + L.GLANCE_ETA_LINE_HEIGHT
-    local expected = math.max(iconRowWidth, textRowWidth, contentHeight)
-    ResetToGlance()
-    local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
-    local ok = width == L.GLANCE_SIZE and width == expected and height == expected
+    local point = Shell.frame.glance.header.iconButton:GetPoint()
+    local width = Shell.frame.glance.header.iconButton:GetWidth()
+    local ok = point == "RIGHT" and width == L.GLANCE_SEARCH_ICON_SIZE
+        and width == L.GLANCE_METRIC_ICON_SIZE
     return ok, ok and "OK" or string.format(
-        "expected derived size %s, got %s x %s", tostring(expected), tostring(width), tostring(height))
+        "expected Search right-anchored at metric icon size, got point=%s width=%s", tostring(point), tostring(width))
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: Glance no longer shows Ammo", function()
+--------------------------------------------------
+-- Metric row system: Bag/Gold/Ammo share one component/geometry
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("MetricRow: Bag/Gold/Ammo use the shared MetricRow component", function()
     ResetToGlance()
-    local ok = Shell.frame.glance.ammoText == nil
-    return ok, ok and "OK" or "expected Glance to have no ammoText widget at all"
+    local glance = Shell.frame.glance
+    local ok = type(glance.bagRow.SetPrimary) == "function"
+        and type(glance.goldRow.SetPrimary) == "function"
+        and type(glance.ammoRow.SetPrimary) == "function"
+        and glance.bagRow.SetPrimary == glance.goldRow.SetPrimary
+        and glance.goldRow.SetPrimary == glance.ammoRow.SetPrimary
+    return ok, ok and "OK" or "expected Bag/Gold/Ammo rows to share the exact same MetricRow method, not per-row implementations"
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: Glance ETA is compact (no 'to full' suffix)", function()
+Pockets.Tests.TestRunner:Register("MetricRow: Bag/Gold/Ammo rows have identical icon size, row height, and left edge", function()
+    ResetToGlance()
+    local L = Pockets.Constants.LAYOUT
+    local glance = Shell.frame.glance
+    local rows = { glance.bagRow, glance.goldRow, glance.ammoRow }
+
+    local ok = true
+    for _, row in ipairs(rows) do
+        local iw, ih = row.icon:GetSize()
+        local point, _, _, xOfs, yOfs = row.icon:GetPoint()
+        if iw ~= L.GLANCE_METRIC_ICON_SIZE or ih ~= L.GLANCE_METRIC_ICON_SIZE
+            or row:GetHeight() ~= L.GLANCE_METRIC_ROW_HEIGHT
+            or point ~= "LEFT" or xOfs ~= 0 or yOfs ~= 0 then
+            ok = false
+        end
+    end
+    return ok, ok and "OK" or "expected identical icon size/row height/left-edge anchor across Bag/Gold/Ammo"
+end)
+
+Pockets.Tests.TestRunner:Register("MetricRow: Ammo icon has no ItemButton/border treatment", function()
+    ResetToGlance()
+    local icon = Shell.frame.glance.ammoRow.icon
+    local ok = icon.GetBackdrop == nil and icon.GetObjectType and icon:GetObjectType() == "Texture"
+    return ok, ok and "OK" or "expected the Ammo icon to be a plain Texture, not a bordered/backdrop widget"
+end)
+
+--------------------------------------------------
+-- Bag row: capacity + ETA
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: Bag ETA uses the existing estimator, compact (no 'to full' suffix)", function()
     local estimator = Pockets.Services.CapacityEstimator
     local originalGetState = estimator.GetState
     local originalGetConfidence = estimator.GetConfidence
@@ -456,7 +529,7 @@ Pockets.Tests.TestRunner:Register("Shell: Glance ETA is compact (no 'to full' su
     estimator.GetETA = function() return 13 * 60 end
 
     ResetToGlance()
-    local text = Shell.frame.glance.etaText:GetText()
+    local text = Shell.frame.glance.bagRow.secondaryText:GetText()
 
     estimator.GetState = originalGetState
     estimator.GetConfidence = originalGetConfidence
@@ -465,6 +538,198 @@ Pockets.Tests.TestRunner:Register("Shell: Glance ETA is compact (no 'to full' su
 
     local ok = text == "13m"
     return ok, ok and "OK" or string.format("expected compact '13m', got %s", tostring(text))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Bag ETA shows 'Full' in the full state", function()
+    local estimator = Pockets.Services.CapacityEstimator
+    local originalGetState = estimator.GetState
+    estimator.GetState = function() return Pockets.Constants.ESTIMATOR_STATE.FULL end
+
+    ResetToGlance()
+    local text = Shell.frame.glance.bagRow.secondaryText:GetText()
+
+    estimator.GetState = originalGetState
+    ResetToGlance()
+
+    local ok = text == "Full"
+    return ok, ok and "OK" or string.format("expected 'Full', got %s", tostring(text))
+end)
+
+--------------------------------------------------
+-- Gold: always present, pH Ledger-compatible formatting
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: Gold is always rendered", function()
+    ResetToGlance()
+    local text = Shell.frame.glance.goldRow.primaryText:GetText()
+    local ok = text ~= nil and text ~= ""
+    return ok, ok and "OK" or "expected Glance's Gold row to always show some value"
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Gold uses the standalone Pockets money formatter (matches GetMoney())", function()
+    ResetToGlance()
+    local text = Shell.frame.glance.goldRow.primaryText:GetText()
+    local expected = Pockets.UI.MoneyFormat:Format(GetMoney())
+    local ok = text == expected
+    return ok, ok and "OK" or string.format("expected Gold text %q, got %q", tostring(expected), tostring(text))
+end)
+
+--------------------------------------------------
+-- Ammo: optional, always follows Gold, removes its row when absent
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: Ammo hidden when no ammo container is equipped", function()
+    WithAmmoCapacity({ used = 0, total = 0 }, function()
+        ResetToGlance()
+        if Shell.frame.glance.ammoRow:IsShown() then
+            error("expected Ammo row hidden when GetAmmoCapacity reports total 0", 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Ammo shown and formatted when a container is equipped", function()
+    local text
+    WithAmmoCapacity({ used = 12, total = 16 }, function()
+        ResetToGlance()
+        local ammoRow = Shell.frame.glance.ammoRow
+        if not ammoRow:IsShown() then
+            error("expected Ammo row shown", 0)
+        end
+        text = ammoRow.primaryText:GetText()
+    end)
+    ResetToGlance()
+    local ok = text == "12 / 16"
+    return ok, ok and "OK" or string.format("expected '12 / 16', got %s", tostring(text))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Ammo always follows Gold (anchored relative to the Gold row)", function()
+    ResetToGlance()
+    local glance = Shell.frame.glance
+    local _, relativeTo = glance.ammoRow:GetPoint()
+    local ok = relativeTo == glance.goldRow
+    return ok, ok and "OK" or "expected Ammo's anchor to be relative to the Gold row"
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Ammo absence removes exactly its row height (no reserved space)", function()
+    local L = Pockets.Constants.LAYOUT
+    local heightWithout, heightWith
+
+    WithAmmoCapacity({ used = 0, total = 0 }, function()
+        ResetToGlance()
+        heightWithout = Shell.frame:GetHeight()
+    end)
+    WithAmmoCapacity({ used = 3, total = 16 }, function()
+        ResetToGlance()
+        heightWith = Shell.frame:GetHeight()
+    end)
+    ResetToGlance()
+
+    local expectedDelta = L.GLANCE_METRIC_ROW_HEIGHT + L.GLANCE_METRIC_ROW_GAP
+    local ok = heightWith - heightWithout == expectedDelta
+    return ok, ok and "OK" or string.format(
+        "expected Ammo to add exactly %s px (row height + gap), got delta %s",
+        tostring(expectedDelta), tostring(heightWith - heightWithout))
+end)
+
+--------------------------------------------------
+-- Recent Items strip
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: Recent items render newest-first, in the order the API returns them", function()
+    local order
+    WithRecentItems({ FakeRecentItem(301, 1), FakeRecentItem(302, 1), FakeRecentItem(303, 1) }, function()
+        ResetToGlance()
+        local pool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.glance.recentStrip.poolAnchor)
+        order = {}
+        for _, button in ipairs(pool.active) do
+            table.insert(order, button.itemID)
+        end
+    end)
+    ResetToGlance()
+
+    local ok = order and order[1] == 301 and order[2] == 302 and order[3] == 303
+    return ok, ok and "OK" or string.format("expected newest-first order 301,302,303 - got %s",
+        order and table.concat(order, ",") or "nil")
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Recent items carry no duplicate itemIDs", function()
+    ResetToGlance()
+    local items = Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.RECENT)
+    local seen = {}
+    local ok = true
+    for _, item in ipairs(items) do
+        if seen[item.itemID] then
+            ok = false
+        end
+        seen[item.itemID] = true
+    end
+    return ok, ok and "OK" or "expected Glance's Recent source to contain no duplicate itemIDs"
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Recent item quantity reflects the current carried total", function()
+    local quantity
+    WithRecentItems({ FakeRecentItem(401, 7) }, function()
+        ResetToGlance()
+        local pool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.glance.recentStrip.poolAnchor)
+        quantity = pool.active[1] and pool.active[1].quantity
+    end)
+    ResetToGlance()
+
+    local ok = quantity == 7
+    return ok, ok and "OK" or string.format("expected quantity 7, got %s", tostring(quantity))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Recent strip clamps to however many items actually fit its width", function()
+    local L = Pockets.Constants.LAYOUT
+    local contentWidth = L.GLANCE_WIDTH - L.GLANCE_PADDING * 2
+    local maxFit = math.floor((contentWidth + L.GLANCE_RECENT_ICON_GAP) / (L.GLANCE_RECENT_ICON_SIZE + L.GLANCE_RECENT_ICON_GAP))
+
+    local manyItems = {}
+    for i = 1, maxFit + 5 do
+        manyItems[i] = FakeRecentItem(500 + i, 1)
+    end
+
+    local shownCount
+    WithRecentItems(manyItems, function()
+        ResetToGlance()
+        local pool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.glance.recentStrip.poolAnchor)
+        shownCount = #pool.active
+    end)
+    ResetToGlance()
+
+    local ok = shownCount == maxFit
+    return ok, ok and "OK" or string.format("expected exactly %s items shown (width-clamped), got %s",
+        tostring(maxFit), tostring(shownCount))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: Recent strip targets roughly 4-5 icons at the current width", function()
+    local L = Pockets.Constants.LAYOUT
+    local contentWidth = L.GLANCE_WIDTH - L.GLANCE_PADDING * 2
+    local maxFit = math.floor((contentWidth + L.GLANCE_RECENT_ICON_GAP) / (L.GLANCE_RECENT_ICON_SIZE + L.GLANCE_RECENT_ICON_GAP))
+    local ok = maxFit >= 4 and maxFit <= 5
+    return ok, ok and "OK" or string.format("expected 4-5 Recent icons to fit, got %s", tostring(maxFit))
+end)
+
+--------------------------------------------------
+-- Sizing: content-driven rectangle, not a forced square
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Glance: sizes to content width/height, not a forced square", function()
+    local L = Pockets.Constants.LAYOUT
+    WithAmmoCapacity({ used = 0, total = 0 }, function()
+        ResetToGlance()
+        local width, height = Shell.frame:GetWidth(), Shell.frame:GetHeight()
+        if width ~= L.GLANCE_WIDTH then
+            error(string.format("expected width %s, got %s", tostring(L.GLANCE_WIDTH), tostring(width)), 0)
+        end
+        if height ~= Pockets.Constants:GlanceContentHeight(false) then
+            error(string.format("expected content-derived height, got %s", tostring(height)), 0)
+        end
+    end)
+    ResetToGlance()
+    return true, "OK"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: PositionStrategy V1 anchor is TOPLEFT", function()
@@ -1292,6 +1557,44 @@ Pockets.Tests.TestRunner:Register("Shell: Glance does not intercept Escape (keyb
     return ok, ok and "OK" or "expected Glance to leave keyboard capture disabled so Escape is not intercepted"
 end)
 
+-- Combat-safety hardening pass: an expanded state must keep working
+-- (keyboard capture enabled, action-bar keys still propagate through
+-- non-Escape presses) even while CombatAPI reports combat - Pockets must
+-- never block/hide behind a combat conditional (CLAUDE.md/UI_RULES.md).
+-- Forcing IsInCombat true here also guards against ever reintroducing a
+-- combat-conditional branch into Render() by accident.
+for _, state in ipairs({ Shell.STATE.MENU, Shell.STATE.ALL, Shell.STATE.SEARCH }) do
+    Pockets.Tests.TestRunner:Register(
+        string.format("Shell: %s keeps keyboard capture enabled even while CombatAPI reports combat", tostring(state)),
+        function()
+            local CombatAPI = Pockets.Adapters.CombatAPI
+            local original = CombatAPI.IsInCombat
+            CombatAPI.IsInCombat = function() return true end
+
+            Shell:SetState(state)
+            local ok = Shell.frame:IsKeyboardEnabled() == true
+
+            CombatAPI.IsInCombat = original
+            ResetToGlance()
+            return ok, ok and "OK" or string.format(
+                "expected keyboard capture still enabled for %s during combat", tostring(state))
+        end)
+end
+
+Pockets.Tests.TestRunner:Register("Shell: CATEGORY keeps keyboard capture enabled even while CombatAPI reports combat", function()
+    local CombatAPI = Pockets.Adapters.CombatAPI
+    local original = CombatAPI.IsInCombat
+    CombatAPI.IsInCombat = function() return true end
+
+    Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+    local ok = Shell.frame:IsKeyboardEnabled() == true
+
+    CombatAPI.IsInCombat = original
+    ResetToGlance()
+    return ok, ok and "OK" or "expected keyboard capture still enabled for CATEGORY during combat"
+end)
+
 -- Back = navigate up (routes through GoBack/ESCAPE_PARENT, one level at a
 -- time); X/Escape = dismiss Pockets (jump straight to Glance, bypassing
 -- GoBack entirely) - top-bar/close pass's semantic distinction.
@@ -1673,13 +1976,13 @@ end
 
 Pockets.Tests.TestRunner:Register("Shell: Glance's search icon is visible and clickable", function()
     ResetToGlance()
-    local ok = Shell.frame.glance.searchButton:IsShown()
-    return ok, ok and "OK" or "expected the Glance search icon to be visible (Fix_TODO #4, re-enabled alongside the square Glance pass)"
+    local ok = Shell.frame.glance.header.iconButton:IsShown()
+    return ok, ok and "OK" or "expected the Glance header's search icon to be visible"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: clicking Glance's search icon enters SEARCH, not Menu/All Items", function()
     ResetToGlance()
-    Shell.frame.glance.searchButton:Click()
+    Shell.frame.glance.header.iconButton:Click()
     local ok = Shell:GetState() == Shell.STATE.SEARCH
     ResetToGlance()
     return ok, ok and "OK" or string.format("expected SEARCH after clicking the Glance search icon, got %s", tostring(Shell:GetState()))
@@ -1829,7 +2132,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH ranks exact > prefix > substrin
     return ok, message
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: SEARCH result rows are real ItemButtonPool secure buttons bound to bag/slot", function()
+Pockets.Tests.TestRunner:Register("Shell: SEARCH result rows are real ItemButtonPool buttons bound to bag/slot", function()
     ResetToGlance()
     Shell:SetState(Shell.STATE.SEARCH)
     local ok, message = WithAllAggregatedItems({
@@ -1838,8 +2141,9 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH result rows are real ItemButton
         Shell.frame.shell.searchPanel.editBox:SetText("linen")
         local row = Shell.frame.shell.searchRows[1]
         local result = row.itemID == 1 and row.bagID == 0 and row.slotID == 1
-            and row.interactive == true and row.GetAttribute and row:GetAttribute("type2") == "item"
-        return result, result and "OK" or "expected the search result row to be a real, interactive secure item button"
+            and row.interactive == true and row.bagIndexFrame and row.bagIndexFrame:GetID() == 0
+            and row:GetID() == 1
+        return result, result and "OK" or "expected the search result row to be a real, interactive item button bound to bag 0 slot 1"
     end)
     ResetToGlance()
     return ok, message
@@ -1931,7 +2235,7 @@ end)
 
 Pockets.Tests.TestRunner:Register("Shell: entering SEARCH never opens Menu or All Items", function()
     ResetToGlance()
-    Shell.frame.glance.searchButton:Click()
+    Shell.frame.glance.header.iconButton:Click()
     local ok = Shell:GetState() ~= Shell.STATE.MENU and Shell:GetState() ~= Shell.STATE.ALL
         and Shell:GetState() == Shell.STATE.SEARCH
     ResetToGlance()

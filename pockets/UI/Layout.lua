@@ -13,6 +13,7 @@ local _, Pockets = ...
 
 Pockets.UI.Layout = Pockets.UI.Layout or {}
 local Layout = Pockets.UI.Layout
+local PHUI = Pockets.UI.PHUI
 
 Layout.PADDING = 8
 

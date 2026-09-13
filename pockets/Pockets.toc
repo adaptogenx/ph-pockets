@@ -10,8 +10,9 @@
 Init.lua
 Constants.lua
 
-# Shared, addon-agnostic UI theming primitives (colors/fonts/backdrops/
-# panel+button factories) - self-contained, no Pockets namespace dependency
+# Generic UI theming primitives (colors/fonts/backdrops/panel+button
+# factories), namespaced under Pockets.UI.PHUI - Pockets-local only, not
+# a cross-addon global (see Shared/PHUI.lua's header comment)
 Shared/PHUI.lua
 
 # WoW API Adapters (isolate direct Blizzard API access)
@@ -20,6 +21,7 @@ Adapters/ItemAPI.lua
 Adapters/CombatAPI.lua
 Adapters/TooltipAPI.lua
 Adapters/BindingsAPI.lua
+Adapters/MailAPI.lua
 
 # NOTE: Bindings.xml is intentionally NOT listed here. WoW auto-discovers
 # and parses a file literally named "Bindings.xml" in the addon's root
@@ -38,8 +40,12 @@ Core/StackConsolidator.lua
 
 # UI
 UI/Layout.lua
+UI/MoneyFormat.lua
+UI/Header.lua
+UI/MetricRow.lua
 UI/PositionStrategy.lua
 UI/ItemButtonPool.lua
+UI/RecentItemStrip.lua
 UI/Search.lua
 UI/FlowLayout.lua
 UI/Shell.lua
@@ -57,9 +63,11 @@ Tests/RecentItemsTests.lua
 Tests/CapacityEstimatorTests.lua
 Tests/InventoryStateTests.lua
 Tests/BagAPITests.lua
+Tests/MailAPITests.lua
 Tests/SearchTests.lua
 Tests/ItemButtonPoolTests.lua
 Tests/FlowLayoutTests.lua
+Tests/MoneyFormatTests.lua
 Tests/APITests.lua
 Tests/ShellTests.lua
 Tests/StackResolverTests.lua

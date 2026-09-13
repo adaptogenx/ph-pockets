@@ -84,6 +84,22 @@ At minimum, test each of the following before calling a phase done
 - [ ] Automatic consolidation while items are locked (once Phase 5 lands)
 - [ ] `/reload` while a flyout/full view is open
 
+### Glance Acceptance Checks (Glance cleanup pass)
+
+- [ ] Glance shows a small, clean bag icon centered horizontally - no
+      black slot/border look, no ItemButton-style chrome
+- [ ] Capacity, Full/ETA, and Gold read as one centered vertical stack
+      directly below the bag icon
+- [ ] Gold always shows a value and matches `/run print(GetMoney())`
+      converted to gold/silver/copper (copper omitted once you have >= 1g)
+- [ ] Search icon stays in the top-right corner and never shifts the
+      centered stack, with or without Ammo showing
+- [ ] Without an ammo bag/quiver equipped: no Ammo row, no reserved empty
+      space below Gold
+- [ ] With an ammo bag/quiver equipped: Ammo is the last row, below Gold,
+      showing `[icon] used / total`
+- [ ] Glance stays a true square in both the Ammo and no-Ammo states
+
 ### UI_SPEC Acceptance Checks (Pockets_UI_SPEC.md §16)
 
 - [ ] HUD shows a large, recognizable square bag icon (not text-only)

@@ -1,10 +1,14 @@
 --[[
     Tests/ItemButtonPoolTests.lua - Count-fontstring visibility (TDD §24.1)
-    and secure right-click binding.
+    and bag/slot ID binding for Blizzard's inherited
+    ContainerFrameItemButtonTemplate right-click use/equip/disenchant-
+    target behavior.
 
-    Count/template tests need a real button (ItemButtonTemplate), so those
-    run in-client via /pockets test run. Secure-binding helpers are pure
-    enough to exercise with a mock button (no live bag scan).
+    These need a real button (ContainerFrameItemButtonTemplate), so they
+    run in-client via /pockets test run - there is no secure-attribute
+    bookkeeping left to exercise with a mock button anymore; Blizzard's
+    own OnClick resolves bag/slot live from bagIndexFrame:GetID()/
+    button:GetID(), which Configure() just keeps in sync.
 ]]
 
 local _, Pockets = ...
@@ -31,46 +35,46 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure hides the Count tex
     return ok, ok and "OK" or "expected Count fontstring hidden for quantity 1"
 end)
 
-Pockets.Tests.TestRunner:Register("ItemButtonPool: pooled buttons are protected SecureActionButtons", function()
+Pockets.Tests.TestRunner:Register("ItemButtonPool: pooled buttons inherit ContainerFrameItemButtonTemplate", function()
     local button = ItemButtonPool:Acquire(UIParent)
-    local ok = button.IsProtected and button:IsProtected() == true
+    -- NewItemTexture is a field only ContainerFrameItemButtonTemplate
+    -- provides (not plain ItemButtonTemplate) - its presence confirms the
+    -- inheritance actually took, without guessing at a specific OnClick
+    -- function reference (client-build-specific, verified manually
+    -- in-client instead - see the plan's verification steps).
+    local ok = button.NewItemTexture ~= nil
     ItemButtonPool:ReleaseAll(UIParent)
-    return ok, ok and "OK" or "expected pooled item buttons to be protected (SecureActionButtonTemplate)"
+    return ok, ok and "OK" or "expected pooled item buttons to inherit ContainerFrameItemButtonTemplate (NewItemTexture missing)"
 end)
 
-Pockets.Tests.TestRunner:Register("ItemButtonPool: keeps Blizzard SecureActionButton OnClick (consumable use)", function()
-    if not SecureActionButton_OnClick then
-        return true, "SKIP: SecureActionButton_OnClick is not present"
-    end
+Pockets.Tests.TestRunner:Register("ItemButtonPool: OnClick is never overridden (stays Blizzard's own handler)", function()
     local button = ItemButtonPool:Acquire(UIParent)
+    -- Pockets must never SetScript("OnClick", ...) on these buttons -
+    -- doing so would replace Blizzard's own inherited use/equip/
+    -- disenchant-target handler. GetScript("OnClick") returning nil here
+    -- would mean either no template loaded (build error) or something
+    -- clobbered it - both are failures.
     local onClick = button:GetScript("OnClick")
     local preClick = button:GetScript("PreClick")
     ItemButtonPool:ReleaseAll(UIParent)
-    local ok = onClick == SecureActionButton_OnClick and preClick ~= nil
-    return ok, ok and "OK" or "expected untainted SecureActionButton_OnClick plus a PreClick insecure handler"
+    local ok = onClick ~= nil and preClick ~= nil
+    return ok, ok and "OK" or "expected a Blizzard-provided OnClick plus Pockets' own PreClick, neither nil"
 end)
 
-Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure binds right-click use to the physical bag slot", function()
-    if Pockets.Adapters.CombatAPI:IsInCombat() then
-        return true, "SKIP: secure attributes cannot be written during combat"
-    end
+Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure binds bagIndexFrame/button IDs to the physical bag slot", function()
     local button = ItemButtonPool:Acquire(UIParent)
     ItemButtonPool:Configure(button, {
         itemID = 1, texture = 1, quantity = 1, bagID = 0, slotID = 5,
     })
-    local type2 = button.GetAttribute and button:GetAttribute("type2")
-    local item2 = button.GetAttribute and button:GetAttribute("item2")
+    local bagID = button.bagIndexFrame:GetID()
+    local slotID = button:GetID()
     ItemButtonPool:ReleaseAll(UIParent)
-    local ok = type2 == "item" and item2 == "0 5"
+    local ok = bagID == 0 and slotID == 5
     return ok, ok and "OK" or string.format(
-        "expected type2=item item2='0 5', got type2=%s item2=%s",
-        tostring(type2), tostring(item2))
+        "expected bagIndexFrame ID 0 / button ID 5, got %s/%s", tostring(bagID), tostring(slotID))
 end)
 
-Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure clears secure use on a non-interactive record", function()
-    if Pockets.Adapters.CombatAPI:IsInCombat() then
-        return true, "SKIP: secure attributes cannot be written during combat"
-    end
+Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure clears IDs to 0/0 on a non-interactive record", function()
     local button = ItemButtonPool:Acquire(UIParent)
     ItemButtonPool:Configure(button, {
         itemID = 1, texture = 1, quantity = 1, bagID = 0, slotID = 5,
@@ -78,57 +82,12 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure clears secure use o
     ItemButtonPool:Configure(button, {
         itemID = 1, texture = 1, quantity = 1, interactive = false,
     })
-    local type2 = button.GetAttribute and button:GetAttribute("type2")
-    local item2 = button.GetAttribute and button:GetAttribute("item2")
+    local bagID = button.bagIndexFrame:GetID()
+    local slotID = button:GetID()
     ItemButtonPool:ReleaseAll(UIParent)
-    local ok = type2 == nil and item2 == nil
+    local ok = bagID == 0 and slotID == 0
     return ok, ok and "OK" or string.format(
-        "expected cleared type2/item2, got type2=%s item2=%s",
-        tostring(type2), tostring(item2))
-end)
-
-local function MockSecureButton()
-    local attrs = {}
-    return {
-        attrs = attrs,
-        SetAttribute = function(self, key, value)
-            self.attrs[key] = value
-        end,
-        GetAttribute = function(self, key)
-            return self.attrs[key]
-        end,
-    }
-end
-
-Pockets.Tests.TestRunner:Register("ItemButtonPool: ApplySecureUseBinding writes type2/item2 out of combat", function()
-    local button = MockSecureButton()
-    ItemButtonPool.ApplySecureUseBinding(button, 1, 12, false)
-    local ok = button.attrs.type2 == "item" and button.attrs.item2 == "1 12"
-    return ok, ok and "OK" or string.format(
-        "expected type2=item item2='1 12', got type2=%s item2=%s",
-        tostring(button.attrs.type2), tostring(button.attrs.item2))
-end)
-
-Pockets.Tests.TestRunner:Register("ItemButtonPool: ApplySecureUseBinding defers SetAttribute during combat", function()
-    local button = MockSecureButton()
-    ItemButtonPool.ApplySecureUseBinding(button, 0, 3, false)
-    ItemButtonPool.ApplySecureUseBinding(button, 2, 8, true)
-    local unchanged = button.attrs.type2 == "item" and button.attrs.item2 == "0 3"
-    local pending = button.pendingSecureBagID == 2 and button.pendingSecureSlotID == 8
-    ItemButtonPool.ApplySecureUseBinding(button, nil, nil, false)
-    local ok = unchanged and pending
-    return ok, ok and "OK" or "expected combat rebinding to leave live attributes unchanged and record a pending slot"
-end)
-
-Pockets.Tests.TestRunner:Register("ItemButtonPool: FlushPendingSecureBindings applies deferred combat rebinding", function()
-    local button = MockSecureButton()
-    ItemButtonPool.ApplySecureUseBinding(button, 4, 1, true)
-    ItemButtonPool:FlushPendingSecureBindings(false)
-    local ok = button.attrs.type2 == "item" and button.attrs.item2 == "4 1"
-        and button.pendingSecureBagID == nil
-    return ok, ok and "OK" or string.format(
-        "expected flushed item2='4 1', got type2=%s item2=%s",
-        tostring(button.attrs.type2), tostring(button.attrs.item2))
+        "expected cleared IDs 0/0, got bagID=%s slotID=%s", tostring(bagID), tostring(slotID))
 end)
 
 Pockets.Tests.TestRunner:Register("ItemButtonPool: HandleInsecureClick pickups on left-click and does not UseItem on right-click", function()

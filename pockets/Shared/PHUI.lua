@@ -2,25 +2,30 @@
     Shared/PHUI.lua - Generic pH-brand UI primitives (colors, fonts,
     backdrops, panel/button/label factories).
 
-    This library is intentionally addon-agnostic: it reads no Pockets
-    namespace and writes only to _G.PHUI, guarded by version so a future
-    second copy (e.g. loaded by the pH addon itself) doesn't reinitialize
-    or fight over shared frames. Values below are copied from pH's actual
-    rendered compact HUD (ph/ph/UI_HUD.lua), not pH's older/drifted brand
-    color module, since UI_HUD.lua is what's actually on screen.
+    Lives entirely inside Pockets' own namespace (Pockets.UI.PHUI) - NOT
+    published to any cross-addon global (no _G.PHUI). Pockets and pH are
+    separate installed addons that both run in WoW's single shared Lua
+    global environment, so a file that wrote to _G.PHUI here would be
+    silently visible to - and silently overridden by - pH's own separate
+    copy of a same-named file, in whichever load order the two addons
+    happen to land in. That already caused one real bug (a Pockets-only
+    addition to this file went missing whenever pH's copy loaded first).
+    This is meant to become a genuinely separate, published shared UI
+    library later; until then it's proven out here, Pockets-local only,
+    like every other Pockets module. Values below are copied from pH's
+    actual rendered compact HUD (ph/ph/UI_HUD.lua), not pH's older/
+    drifted brand color module, since UI_HUD.lua is what's actually on
+    screen.
 
     Pockets-specific geometry (HUD width, flyout grid, etc.) does NOT
     belong here - that stays in Pockets/Constants.lua and UI/Layout.lua.
     This file only owns generic, reusable visual primitives.
 ]]
 
-if _G.PHUI and (_G.PHUI.version or 0) >= 1 then
-    return
-end
+local _, Pockets = ...
 
-local PHUI = _G.PHUI or {}
-PHUI.version = 1
-_G.PHUI = PHUI
+Pockets.UI.PHUI = Pockets.UI.PHUI or {}
+local PHUI = Pockets.UI.PHUI
 
 --------------------------------------------------
 -- Colors (ph/ph/UI_HUD.lua:42-61)
@@ -167,6 +172,29 @@ function PHUI.CreateCloseButton(parent, opts)
         button:SetScript("OnClick", opts.onClick)
     end
     return button
+end
+
+--------------------------------------------------
+-- Native icon presentation: a plain texture meant to sit directly on a
+-- panel surface (Glance's bag/ammo icons) - never wrapped in an
+-- ItemButton/bordered-slot treatment. Shares the same 0.08/0.92 texcoord
+-- inset CreateIconButton's icon uses, since that's what crops the black
+-- padding baked into most stock WoW icon art. Pass insetTexCoord = false
+-- for art (e.g. the backpack button texture) that's already clean at the
+-- edges.
+--------------------------------------------------
+function PHUI.CreateNativeIcon(parent, size, texture, opts)
+    opts = opts or {}
+    local icon = parent:CreateTexture(nil, opts.layer or "ARTWORK")
+    icon:SetSize(size, size)
+    if texture then
+        icon:SetTexture(texture)
+    end
+    if opts.insetTexCoord ~= false then
+        local inset = opts.texCoordInset or 0.08
+        icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    end
+    return icon
 end
 
 --------------------------------------------------

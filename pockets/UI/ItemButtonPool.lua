@@ -6,13 +6,19 @@
     open; they Acquire()/ReleaseAll() from a shared pool per parent frame.
 
     Configure() is the single place that wires a pooled button to a live
-    bag+slot: left-click/drag/split/tooltip go through Adapters/BagAPI,
-    and right-click use is bound via SecureActionButtonTemplate attributes
-    (type2=item) so Blizzard's protected-action rules allow it. Do not wrap
-    or replace OnClick - that taints the handler. Equipping armor can still
-    succeed from tainted code; using a consumable cannot. Insecure
-    pickup/modified-clicks belong on PreClick. Security
-    stays on these pooled buttons - the Pockets root frame is not secure.
+    bag+slot: left-click/drag/split/tooltip go through Adapters/BagAPI on
+    PreClick, and right-click use/equip/disenchant-target is Blizzard's own
+    ContainerFrameItemButtonTemplate OnClick - never wrapped or replaced,
+    only ever HookScript'd non-destructively if ever needed. That template
+    resolves bag/slot itself, live at click time, via
+    self:GetParent():GetID() (bagID) and self:GetID() (slotID) - the same
+    mechanism Blizzard's own bag UI and every bag-replacement addon
+    (confirmed against Baganator's real source) relies on, including native
+    combat-safety and disenchant/enchant spell-targeting, with no custom
+    secure-attribute bookkeeping required on our end. Pockets' pools are
+    item-major (one grid mixes items from many bags), unlike a bag-major
+    index frame, so each pooled button gets its own tiny bagIndexFrame
+    wrapper carrying the bagID via SetID - see Acquire/Configure below.
     Shared by every body Shell renders (Category grid, All Items flow) so
     both stay in sync (UI_SPEC §10 "share item rendering/pooling code").
 ]]
@@ -23,73 +29,10 @@ Pockets.UI.ItemButtonPool = Pockets.UI.ItemButtonPool or {}
 local ItemButtonPool = Pockets.UI.ItemButtonPool
 
 local BagAPI = Pockets.Adapters.BagAPI
-local CombatAPI = Pockets.Adapters.CombatAPI
 local SIZE = Pockets.Constants.LAYOUT.ITEM_BUTTON_SIZE
 
 -- pools[parentFrame] = { free = {}, active = {} }
 ItemButtonPool.pools = ItemButtonPool.pools or {}
-
--- Buttons whose type2/item2 attributes could not be written during combat
--- and must be flushed on PLAYER_REGEN_ENABLED.
-local pendingSecureButtons = {}
-
-local function IsInCombat(inCombat)
-    if inCombat ~= nil then
-        return inCombat and true or false
-    end
-    return CombatAPI:IsInCombat()
-end
-
--- Binds (or clears) the right-click secure use action. SetAttribute is
--- forbidden during combat, so a lockdown call only records the intended
--- bag/slot and waits for FlushPendingSecureBindings.
-function ItemButtonPool.ApplySecureUseBinding(button, bagID, slotID, inCombat)
-    if IsInCombat(inCombat) then
-        button.pendingSecureBagID = bagID
-        button.pendingSecureSlotID = slotID
-        pendingSecureButtons[button] = true
-        return
-    end
-
-    if bagID and slotID then
-        button:SetAttribute("type2", "item")
-        button:SetAttribute("item2", tostring(bagID) .. " " .. tostring(slotID))
-    else
-        button:SetAttribute("type2", nil)
-        button:SetAttribute("item2", nil)
-    end
-    button.pendingSecureBagID = nil
-    button.pendingSecureSlotID = nil
-    pendingSecureButtons[button] = nil
-end
-
-function ItemButtonPool:FlushPendingSecureBindings(inCombat)
-    if IsInCombat(inCombat) then
-        return
-    end
-    local snapshot = {}
-    for button in pairs(pendingSecureButtons) do
-        snapshot[#snapshot + 1] = button
-    end
-    for i = 1, #snapshot do
-        local button = snapshot[i]
-        ItemButtonPool.ApplySecureUseBinding(
-            button,
-            button.pendingSecureBagID,
-            button.pendingSecureSlotID,
-            false
-        )
-    end
-end
-
--- Secure attributes cannot change during combat; apply anything queued
--- the moment lockdown lifts. Localized here so the root frame stays
--- a normal (non-secure) Button.
-local regenWatcher = CreateFrame("Frame")
-regenWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-regenWatcher:SetScript("OnEvent", function()
-    ItemButtonPool:FlushPendingSecureBindings()
-end)
 
 -- Converts one InventoryState:AggregateRecords() aggregate ({ itemID,
 -- itemLink, texture, quality, totalQuantity, stacks = {...} }) into the
@@ -144,10 +87,9 @@ local function ResolveInteractionStack(button)
     return nil, nil, nil
 end
 
--- Insecure click path (wired on PreClick): pickup, split-stack, and
--- Blizzard modified-click (chat-link etc). Right-click use is not
--- handled here - UseContainerItem must run from the untainted
--- SecureActionButtonTemplate OnClick using attributes from Configure().
+-- Pickup/split-stack/modified-click path (wired on PreClick). Right-click
+-- use is not handled here - it's Blizzard's own inherited OnClick (see
+-- CreateItemButton), resolved from the button's own bagIndexFrame/self ID.
 function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     if not self.interactive then
         return
@@ -175,11 +117,13 @@ function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     end
 end
 
--- Scripts are wired once at create time. Re-SetScript during Configure
--- would fail in combat on a protected SecureActionButton. OnClick is
--- left as SecureActionButtonTemplate's Blizzard handler so item use
--- runs untainted; wrapping it is what made armor equip while potions
--- were blocked (SECURE_ACTIONS.item: EquipItemByName vs UseContainerItem).
+-- Scripts are wired once at create time. OnClick is deliberately never
+-- SetScript'd/replaced - it stays ContainerFrameItemButtonTemplate's own
+-- Blizzard handler, which performs left-click pickup, right-click use/
+-- equip, disenchant/enchant spell-targeting, and split-stack natively
+-- (resolved from self:GetParent():GetID()/self:GetID() - see
+-- CreateItemButton/Configure). PreClick only adds Pockets' own modified-
+-- click (chat-link) and split-stack-frame handling on top.
 local function WireItemButtonScripts(button)
     if button.pocketsScriptsWired then
         return
@@ -240,13 +184,24 @@ local function WireItemButtonScripts(button)
     end)
 end
 
+-- ContainerFrameItemButtonTemplate resolves bag/slot via
+-- self:GetParent():GetID() (bagID) / self:GetID() (slotID), same as
+-- Blizzard's real bag frames and every bag-replacement addon that
+-- inherits it (confirmed against Baganator's live source). Pockets'
+-- pools are item-major (one grid mixes items from many bags), unlike a
+-- bag-major index frame, so each button gets its OWN tiny bagIndexFrame
+-- wrapper carrying the bagID - see Configure, which sets both IDs fresh
+-- every render.
 local function CreateItemButton(parent)
+    local bagIndexFrame = CreateFrame("Frame", nil, parent)
+
     local button = CreateFrame(
         "Button",
         nil,
-        parent,
-        "ItemButtonTemplate,BackdropTemplate,SecureActionButtonTemplate"
+        bagIndexFrame,
+        "ContainerFrameItemButtonTemplate,BackdropTemplate"
     )
+    button.bagIndexFrame = bagIndexFrame
     button:SetSize(SIZE, SIZE)
     button:RegisterForClicks("AnyUp")
     button:RegisterForDrag("LeftButton")
@@ -275,8 +230,8 @@ end
 function ItemButtonPool:ReleaseAll(parent)
     local pool = self:GetPool(parent)
     for _, button in ipairs(pool.active) do
-        -- Hide/ClearAllPoints are protected on SecureActionButtons;
-        -- pcall so a combat recycle never throws out of ClearBody.
+        -- pcall'd defensively so a recycle can never throw out of
+        -- ClearBody regardless of template/combat quirks.
         pcall(function()
             button:Hide()
             button:ClearAllPoints()
@@ -293,9 +248,12 @@ end
 -- stack at interaction time via ResolveInteractionStack above) rather than
 -- trusting record.bagID/slotID forever - callers re-Configure on every
 -- render, but interactions between renders must never act on a stale
--- location (UI_SPEC §8 "Stale-location safety"). Right-click use cannot
--- re-resolve at click time (secure attributes must be set ahead of time),
--- so Configure binds type2/item2 to this render's physical bag/slot.
+-- location (UI_SPEC §8 "Stale-location safety"). Right-click use/equip/
+-- disenchant-target resolves bag/slot itself, live at click time, via
+-- ContainerFrameItemButtonTemplate's own OnClick reading
+-- bagIndexFrame:GetID()/button:GetID() - so binding those here just keeps
+-- them in sync with this render's physical location, the same as every
+-- other field on the button.
 function ItemButtonPool:Configure(button, record)
     local interactive = record.interactive ~= false and record.bagID ~= nil and record.slotID ~= nil
 
@@ -324,6 +282,24 @@ function ItemButtonPool:Configure(button, record)
             button.IconBorder:Hide()
         end
     end
+    -- ContainerFrameItemButtonTemplate (unlike the old bare
+    -- ItemButtonTemplate Pockets used before) ships several Blizzard
+    -- attention/decoration overlays Pockets never asked for and never
+    -- managed - identified via /pockets debug regions against a real
+    -- button rather than guessed at: "flash" (a 90x90 glow, oversized at
+    -- every Pockets button size) and "BattlepayItemTexture" (a shop-item
+    -- ribbon) were both found rendering unconditionally regardless of
+    -- item type. Explicitly hidden every render alongside NewItemTexture
+    -- rather than left at whatever the inherited template defaults to.
+    if button.NewItemTexture then
+        button.NewItemTexture:Hide()
+    end
+    if button.flash then
+        button.flash:Hide()
+    end
+    if button.BattlepayItemTexture then
+        button.BattlepayItemTexture:Hide()
+    end
 
     button.bagID = record.bagID
     button.slotID = record.slotID
@@ -332,13 +308,15 @@ function ItemButtonPool:Configure(button, record)
     button.quantity = record.quantity
     button.interactive = interactive
 
-    -- Right-click use: secure item attribute on the resolved physical
-    -- slot from this render. Cleared when the button is non-interactive
-    -- so a recycled pool button cannot use a previous item. Deferred
-    -- until PLAYER_REGEN_ENABLED if this runs during combat lockdown.
+    -- 0/0 when non-interactive so a recycled pool button can never
+    -- resolve to a previous item's slot (same "reject stale location"
+    -- intent as button.bagID/slotID above, just for Blizzard's own
+    -- click resolution instead of Pockets').
     if interactive then
-        ItemButtonPool.ApplySecureUseBinding(button, record.bagID, record.slotID)
+        button.bagIndexFrame:SetID(record.bagID)
+        button:SetID(record.slotID)
     else
-        ItemButtonPool.ApplySecureUseBinding(button, nil, nil)
+        button.bagIndexFrame:SetID(0)
+        button:SetID(0)
     end
 end

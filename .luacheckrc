@@ -33,7 +33,6 @@ globals = {
     -- Pockets-specific globals (must be included)
     "_G",
     "Pockets",
-    "PHUI",
     "PocketsDB",
     "PocketsCharDB",
     "SLASH_POCKETS1",
@@ -92,6 +91,16 @@ globals = {
     "IsInventoryItemLocked",
     "GetContainerNumFreeSlots",
     "C_Container",
+    "GetMoney",
+
+    -- Mailbox API (Mail Attach pass - Adapters/MailAPI.lua only)
+    "SendMailFrame",
+    "GetSendMailItem",
+    "SetSendMailItem",
+    "ATTACHMENTS_MAX_SEND",
+    "C_MailInfo",
+    "ClearCursor",
+    "CursorHasItem",
     "C_Timer",
     "C_Timer.After",
     "C_Timer.NewTicker",
