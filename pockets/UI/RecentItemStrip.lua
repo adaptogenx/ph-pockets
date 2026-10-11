@@ -21,8 +21,13 @@ local _, Pockets = ...
 
 Pockets.UI.RecentItemStrip = Pockets.UI.RecentItemStrip or {}
 local RecentItemStrip = Pockets.UI.RecentItemStrip
+local PHUI = Pockets.UI.PHUI
 
--- opts: width (required), iconSize (required), gap (default 4).
+-- opts: width (required), iconSize (required), gap (default 4),
+-- moreButton (optional { tooltipText, onClick, size }): a ">>" button
+-- placed in the slot right after the LAST shown icon. It takes one icon
+-- slot out of the strip's capacity (never extra width), so the strip -
+-- and Glance - never resize for it.
 function RecentItemStrip:Create(parent, opts)
     opts = opts or {}
     local iconSize = opts.iconSize or 20
@@ -72,27 +77,89 @@ function RecentItemStrip:Create(parent, opts)
         end
     end
 
+    -- Recent Item Preview (opt-in toggle, /pockets recentpreview):
+    -- HookScript, never SetScript - ItemButtonPool's own OnEnter/OnLeave
+    -- (tooltip wiring) must keep firing unchanged. Wired once per pooled
+    -- button (same guard pattern as ItemButtonPool.pocketsScriptsWired)
+    -- since a recycled button would otherwise stack a duplicate hook
+    -- every time the strip re-acquires it. previewRecord is read at hover
+    -- time, not click time, so it always reflects this render's item.
+    -- The handlers are also stored as plain fields (not just passed to
+    -- HookScript) - GetScript() only ever returns a SetScript handler,
+    -- never a HookScript one, so tests need a direct reference to invoke
+    -- them without simulating a real mouse-enter event.
+    local function WirePreviewHooks(button)
+        if button.pocketsPreviewHooksWired then
+            return
+        end
+        button.pocketsPreviewHooksWired = true
+
+        function button.previewOnEnter(self)
+            if Pockets.SavedSettings.recentItemPreviewEnabled and self.previewRecord then
+                Pockets.UI.ItemPreview:Show(self.previewRecord)
+            end
+        end
+        function button.previewOnLeave()
+            Pockets.UI.ItemPreview:Hide()
+        end
+
+        button:HookScript("OnEnter", button.previewOnEnter)
+        button:HookScript("OnLeave", button.previewOnLeave)
+    end
+
     -- items: newest-first, unique-by-itemID records already resolved to
     -- current carried quantity (Pockets.API.GetAggregatedCategoryItems
     -- with Constants.CATEGORY.RECENT - no second bag scan here). Clamps
     -- to however many actually fit at this strip's own width rather than
     -- a hard-coded count (RECENT ITEMS + WIDTH spec) - returns the
     -- number actually shown.
+    if opts.moreButton then
+        local size = opts.moreButton.size or iconSize
+        strip.moreButton = PHUI.CreateIconButton(strip, size, nil, {
+            tooltipText = opts.moreButton.tooltipText,
+            onClick = opts.moreButton.onClick,
+        })
+        strip.moreButton.glyph = PHUI.CreateLabel(strip.moreButton, "primary", ">>", PHUI.Fonts.SMALL)
+        strip.moreButton.glyph:SetPoint("CENTER", 0, 0)
+        strip.moreButton:Hide()
+    end
+
     function strip:SetItems(items)
         local pool = Pockets.UI.ItemButtonPool
         pool:ReleaseAll(self.poolAnchor)
+        -- A button about to be recycled/repositioned could be the one
+        -- the preview is currently showing (mouse still over it from a
+        -- prior render) - clear it preemptively rather than leaving a
+        -- stale icon orphaned on screen.
+        Pockets.UI.ItemPreview:Hide()
 
-        local maxFit = math.max(0, math.floor((self._width + self._gap) / (self._iconSize + self._gap)))
+        local slots = math.max(0, math.floor((self._width + self._gap) / (self._iconSize + self._gap)))
+        local maxFit = self.moreButton and math.max(slots - 1, 0) or slots
         local count = math.min(#items, maxFit)
 
         for i = 1, count do
             local button = pool:Acquire(self.poolAnchor)
             button:SetSize(self._iconSize, self._iconSize)
             NeutralizeSlotChrome(button)
+            WirePreviewHooks(button)
             pool:Configure(button, items[i])
+            button.previewRecord = items[i]
+            -- Tells ItemButtonPool's shared OnEnter to leave this
+            -- button's tooltip anchor alone (per-button ANCHOR_RIGHT)
+            -- instead of redirecting it to the HUD's top-right like
+            -- every other item surface - Recent items get their own,
+            -- more specific anchor via the hover preview above.
+            button.isRecentItem = true
             button:ClearAllPoints()
             button:SetPoint("LEFT", self, "LEFT", (i - 1) * (self._iconSize + self._gap), 0)
             button:Show()
+        end
+
+        if self.moreButton then
+            -- Only meaningful with something to expand; hidden otherwise.
+            self.moreButton:ClearAllPoints()
+            self.moreButton:SetPoint("LEFT", self, "LEFT", count * (self._iconSize + self._gap), 0)
+            self.moreButton:SetShown(count > 0)
         end
 
         return count

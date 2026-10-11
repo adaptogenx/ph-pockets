@@ -5,6 +5,19 @@
     appear here (PRD §3.3, TDD §8.2, §12.3). Callers (InventoryState's diff
     step) are responsible for distinguishing acquisition from movement
     before calling Record.
+
+    Persistence (Recent Items persistence pass): self.entries is
+    reassigned to PocketsCharDB.recentItems's own table at load time (via
+    LoadPersisted, called from Events.lua once PocketsCharDB is
+    available) rather than a copy - every Record()/Clear() mutation is
+    then automatically captured by WoW's SavedVariablesPerCharacter write
+    at logout/reload, with no separate save step (same in-place-mutation
+    reliance UI/PositionStrategy.lua's SavePosition already uses for hud
+    position). Per-CHARACTER, not per-account, since acquisitions are
+    character-specific. `timestamp` uses GetTime() (session-relative
+    uptime, not wall-clock) - fine today since nothing compares it across
+    sessions (GetSince is same-session only), but a persisted entry's
+    timestamp is not meaningfully comparable after a reload/relog.
 ]]
 
 local _, Pockets = ...
@@ -73,8 +86,37 @@ function RecentItems:GetSince(timestamp)
     return out
 end
 
+-- Mutates self.entries in place (never reassigns to a new table) - once
+-- LoadPersisted has pointed self.entries at PocketsCharDB.recentItems,
+-- replacing the reference here would silently break persistence for
+-- every entry recorded after this call until the next reload.
 function RecentItems:Clear()
-    self.entries = {}
+    for i = #self.entries, 1, -1 do
+        table.remove(self.entries, i)
+    end
+    self.revision = self.revision + 1
+end
+
+-- Restores acquisition history saved from a previous session (Recent
+-- Items persistence pass). Reassigns self.entries to savedEntries
+-- ITSELF, not a copy, so subsequent Record()/Clear() calls keep writing
+-- into the exact table WoW will persist again at the next logout/reload.
+-- Called once from Events.lua's ADDON_LOADED handler, after
+-- PocketsCharDB.recentItems is confirmed to exist. Validates
+-- defensively - a corrupted/hand-edited save, or an entry missing
+-- itemID/quantity, is dropped rather than trusted (Record already
+-- requires both, so nothing downstream expects to handle their absence).
+function RecentItems:LoadPersisted(savedEntries)
+    if type(savedEntries) ~= "table" then
+        return
+    end
+    for i = #savedEntries, 1, -1 do
+        local entry = savedEntries[i]
+        if type(entry) ~= "table" or not entry.itemID or not entry.quantity then
+            table.remove(savedEntries, i)
+        end
+    end
+    self.entries = savedEntries
     self.revision = self.revision + 1
 end
 

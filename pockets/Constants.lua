@@ -78,6 +78,10 @@ Constants.ESTIMATOR_STATE = {
 Constants.RECENT_ITEMS_MAX = 50
 Constants.RECENT_DISPLAY_LIMIT = 20
 Constants.ESTIMATOR_SAMPLE_WINDOW_MAX = 60
+-- Loot Log (recent activity feed, NOT a durable history - pH owns that).
+-- Per-character, persisted in PocketsCharDB.lootLog; oldest entries drop
+-- first once the bound is hit.
+Constants.LOOT_LOG_MAX = 200
 
 --[[
     Verified Blizzard icon assets (UI_SPEC §3, §16.11-12).
@@ -135,17 +139,33 @@ Constants.LAYOUT = {
     -- these constants in Shell:RenderGlance (row count varies only with
     -- Ammo's presence), never a runtime GetHeight() query.
     GLANCE_PADDING = 8,
-    -- "pockets" label + Search icon, one row.
+    -- "pockets (time till full)" + Search + All Items icons, one row.
     GLANCE_HEADER_HEIGHT = 18,
     GLANCE_HEADER_GAP = 6,
-    -- Search matches metric-icon size (HEADER spec: "approximately the
-    -- same visual size as the metric icons, not an oversized button").
-    GLANCE_SEARCH_ICON_SIZE = 18,
-    -- Shared by every metric row (Bag/Gold/Ammo) via UI/MetricRow.lua -
-    -- identical icon size/row height/left edge/spacing is the whole point
-    -- of the shared component (METRIC ROW SYSTEM spec), not per-row
-    -- tuning.
-    GLANCE_METRIC_ICON_SIZE = 18,
+    -- Gap between "pockets" and its "(8m)"/"(Full)" subtitle, and between
+    -- the two trailing icon buttons.
+    GLANCE_HEADER_TITLE_GAP = 4,
+    GLANCE_HEADER_ICON_GAP = 4,
+    -- Must match PHUI.Spacing.ICON_BUTTON_SIZE (Shared/PHUI.lua) - these
+    -- are bordered, clickable icon BUTTONS (Search, All Items), the same
+    -- kind of element as Shell's expanded-header back/close/+ buttons
+    -- (SHELL_HEADER_SIDE_WIDTH/SHELL_HEADER_CLOSE_WIDTH below), not a
+    -- plain metric-row icon - they must match THAT convention, size-wise,
+    -- not GLANCE_METRIC_ICON_SIZE below.
+    GLANCE_HEADER_ICON_SIZE = 20,
+    -- Must match PHUI.Spacing.ICON_SIZE (Shared/PHUI.lua) - a PLAIN icon
+    -- with no button chrome (distinct from GLANCE_HEADER_ICON_SIZE
+    -- above), verified against pH's own UI_HUD.lua metric-tile icon
+    -- size (12px), not guessed. Shared by every metric row (Bag/Gold/
+    -- Ammo) via UI/MetricRow.lua - identical icon size/row height/left
+    -- edge/spacing is the whole point of the shared component (METRIC
+    -- ROW SYSTEM spec), not per-row tuning.
+    GLANCE_METRIC_ICON_SIZE = 12,
+    -- Row height stays taller than the 12px icon alone (comfortable
+    -- click/hover target, room for GameFontNormal-sized primary text) -
+    -- unlike pH's TILE_HEIGHT (icon+gap+bar stacked vertically), Pockets'
+    -- rows lay icon+text out horizontally, so there's no equivalent pH
+    -- value this needs to match.
     GLANCE_METRIC_ROW_HEIGHT = 18,
     GLANCE_METRIC_ICON_TEXT_GAP = 6,
     -- Small, uniform gap between stacked metric rows - deliberately not a
@@ -166,6 +186,20 @@ Constants.LAYOUT = {
     -- (5*22 + 4*4 = 126, +6px slack = 132). Total width adds
     -- GLANCE_PADDING on both sides.
     GLANCE_WIDTH = 148,
+    -- Glance's ">>" (more Recent) button sits in the strip's slot right
+    -- after the last shown Recent icon, same size as a Recent icon, so it
+    -- takes one icon slot (4 icons + ">>" at GLANCE_WIDTH) instead of
+    -- widening Glance.
+    GLANCE_RECENT_MORE_SIZE = 22,
+
+    -- Loot Log rows (Loot Log feature): `timestamp | loot`, dense, no
+    -- cards. Icon reuses GLANCE_METRIC_ICON_SIZE (pH-verified plain-icon
+    -- size) - a Loot Log row icon is a plain icon, not a bordered button.
+    -- LOOT_TIME_WIDTH fits "00:00" in GameFontNormalSmall with slack so
+    -- the timestamp can never wrap or push the loot column around.
+    LOOT_TIME_WIDTH = 34,
+    LOOT_ROW_PAD_Y = 3,
+    LOOT_COLUMN_GAP = 6,
 
     -- Stable shell: Menu/Category/All share this exact width, TOPLEFT,
     -- header height, footer height, and body left/right bounds (§3/§8
@@ -177,13 +211,15 @@ Constants.LAYOUT = {
     -- instead - see MAX_VISIBLE_LIST_ROWS), rather than always claiming
     -- the max whether or not the content needs it. The invariant is
     -- position stability, not identical frame height.
-    -- Wide enough that Category/All's item grid defaults to 5 columns
-    -- (5*ITEM_BUTTON_SIZE + 4*ITEM_BUTTON_GAP = 216, plus a few px slack)
-    -- when no scrollbar is showing - narrower values (192, and the
-    -- original 220) both left a visibly wasted trailing gap because only
-    -- 3-4 columns fit (item grid follow-up pass). Still comfortably fits
-    -- the worst-case Menu row too.
-    SHELL_WIDTH = 236,
+    -- Must match PHUI.PH_HUD_WIDTH (Shared/PHUI.lua) - pH's own real,
+    -- verified HUD width (ph/UI_HUD.lua:2629/2834, hudFrame:SetWidth(266))
+    -- - NOT GLANCE_WIDTH. Glance stays intentionally compact/content-sized
+    -- (never meant to clone pH's footprint), but the expanded Shell
+    -- (Search/Menu/Category/All) is meant to match pH's real width. The
+    -- item grid's column count is computed dynamically from this width
+    -- (FlowLayout:PlanFlat) rather than assumed fixed, so this value is
+    -- free to change without breaking layout.
+    SHELL_WIDTH = 266,
     -- Matches PHUI.Spacing.PANEL_PADDING (Shared/PHUI.lua) - Menu/Category/
     -- All are pH's smaller inner-sub-panel style, not the main HUD frame
     -- (that's Glance, which uses PHUI.Spacing.PADDING - see GLANCE_PADDING).
@@ -201,9 +237,22 @@ Constants.LAYOUT = {
     -- zone itself never moves (top-bar/close pass). X is always reserved
     -- at the far right, with the contextual action immediately left of it,
     -- so the title's right edge never shifts between expanded states.
+    -- Must match PHUI.Spacing.ICON_BUTTON_SIZE (Shared/PHUI.lua) - see
+    -- GLANCE_HEADER_ICON_SIZE's comment above; this is the SAME
+    -- established icon-button size, just this constant's own name
+    -- predates that shared default existing.
     SHELL_HEADER_SIDE_WIDTH = 20,
     SHELL_HEADER_RIGHT_WIDTH = 60,
-    SHELL_HEADER_CLOSE_WIDTH = 20,
+    -- Must match PHUI.NATIVE_CLOSE_BUTTON_SIZE (Shared/PHUI.lua) - the X
+    -- is a real UIPanelCloseButton, and pH's own closeBtn (ph/UI_History.
+    -- lua:156-157) never resizes it away from its native 32px. This is
+    -- deliberately NOT ICON_BUTTON_SIZE (20) like the other header
+    -- buttons - forcing the close template down to 20px visibly didn't
+    -- match pH's real X (the template's border/glow art doesn't scale
+    -- cleanly), so this one stays at pH's true native size and is
+    -- allowed to overhang SHELL_HEADER_HEIGHT slightly, same as pH's own
+    -- close button overhangs its thin corner placement.
+    SHELL_HEADER_CLOSE_WIDTH = 32,
     SHELL_HEADER_ACTION_GAP = 4,
 
     -- Shared Pockets list-row visual geometry (row unification pass) -
@@ -232,10 +281,6 @@ Constants.LAYOUT = {
     -- positioning is explicitly out of scope for this pass).
     MAX_VISIBLE_LIST_ROWS = 6,
 
-    -- Real Blizzard scrollbar + the gap PHUI leaves beside it - the width
-    -- reclaimed from the body when no scrollbar is needed (§4).
-    SCROLLBAR_RESERVE = 20,
-
     -- Informational only - FlowLayout derives actual column count from
     -- content width/ITEM_BUTTON_SIZE/ITEM_BUTTON_GAP dynamically, not
     -- from this constant. Documents the width-driven default (no
@@ -244,9 +289,16 @@ Constants.LAYOUT = {
     ITEM_BUTTON_SIZE = 40,
     ITEM_BUTTON_GAP = 4,
 
-    FULL_INVENTORY_LABEL_HEIGHT = 16,
-    FULL_INVENTORY_LABEL_ICON_SIZE = 12,
-    FULL_INVENTORY_LABEL_ICON_GAP = 4,
+    -- Full-inventory category header redesign (icon-free, collapsible
+    -- section headers - no pH equivalent exists for this, so this reuses
+    -- Pockets' OWN already-established compact single-line row height
+    -- (GLANCE_HEADER_HEIGHT/GLANCE_METRIC_ROW_HEIGHT are both 18) rather
+    -- than a freshly eyeballed number.
+    CATEGORY_HEADER_HEIGHT = 18,
+    -- Distinct from RECENT_DISPLAY_LIMIT (20, used by Glance's strip and
+    -- Quick Search) - the Full Inventory Recent SECTION is capped tighter
+    -- ("what did I just pick up", not another full category).
+    FULL_INVENTORY_RECENT_LIMIT = 5,
 
     -- Centralized expanded-surface opacity (UI layout pass §9) - Glance
     -- keeps the lighter, passive-HUD-like alpha; every expanded state
@@ -261,12 +313,25 @@ Constants.LAYOUT = {
     -- scrollable Menu/Category/All body: no footer, no scrollbar, capped
     -- at SEARCH_MAX_RESULT_ROWS rows, height derived purely from whatever
     -- is currently shown (input row, result rows, or feedback text).
+    -- Up to SEARCH_MAX_RESULT_ROWS matches render as real rows (with an
+    -- "and N more" line once totalCount exceeds that); beyond
+    -- SEARCH_OVERFLOW_LIMIT matches it collapses to "keep typing" feedback
+    -- instead, same as the old 3+-match behavior.
     SEARCH_INPUT_HEIGHT = 20,
     SEARCH_ICON_SIZE = 14,
     SEARCH_ROW_GAP = 4,
     SEARCH_FEEDBACK_LINE_HEIGHT = 16,
     SEARCH_FEEDBACK_LINE_GAP = 2,
-    SEARCH_MAX_RESULT_ROWS = 2,
+    SEARCH_MAX_RESULT_ROWS = 7,
+    SEARCH_OVERFLOW_LIMIT = 20,
+
+    -- Recent Item Preview (opt-in toggle, off by default) - a large
+    -- floating icon shown near top-center of the screen while hovering a
+    -- Recent Items strip button, independent of Glance's own position/
+    -- size so it never gets clipped by Glance's small footprint.
+    RECENT_PREVIEW_ICON_SIZE = 96,
+    RECENT_PREVIEW_PADDING = 8,
+    RECENT_PREVIEW_TOP_OFFSET = 80,
 }
 
 -- NOTE: Menu's and Category List's max browsing height
@@ -307,6 +372,7 @@ Constants.DOMAIN_EVENT = {
     CAPACITY_CHANGED = "POCKETS_CAPACITY_CHANGED",
     ETA_CHANGED = "POCKETS_ETA_CHANGED",
     COMBAT_STATE_CHANGED = "POCKETS_COMBAT_STATE_CHANGED",
+    LOOT_LOGGED = "POCKETS_LOOT_LOGGED",
     READY = "POCKETS_READY",
 }
 
@@ -323,4 +389,8 @@ Constants.DEFAULT_SETTINGS = {
         locked = false,
     },
     categoryViewMode = Constants.CATEGORY_VIEW_MODE.GRID,
+    -- Opt-in (v1 stays minimal/opinionated by default - PRD §4 non-goals
+    -- warn against a large configuration surface, so new visual extras
+    -- default OFF rather than always-on).
+    recentItemPreviewEnabled = false,
 }

@@ -198,6 +198,19 @@ Pockets.Tests.TestRunner:Register("Shell: Menu/Category/All share identical widt
     return ok, ok and "OK" or "Menu/Category/All geometry diverged"
 end)
 
+-- Expanding (Search/Menu/Category/All) is meant to match pH's real HUD
+-- width exactly (verified value, not Glance's own intentionally-compact
+-- width - Glance is content-sized on purpose, never meant to clone pH's
+-- footprint).
+Pockets.Tests.TestRunner:Register("Shell: expanded width equals pH's real HUD width (PHUI.PH_HUD_WIDTH)", function()
+    local L = Pockets.Constants.LAYOUT
+    local phHudWidth = Pockets.UI.PHUI.PH_HUD_WIDTH
+    local ok = L.SHELL_WIDTH == phHudWidth
+    return ok, ok and "OK" or string.format(
+        "expected SHELL_WIDTH (%s) to equal PHUI.PH_HUD_WIDTH (%s)",
+        tostring(L.SHELL_WIDTH), tostring(phHudWidth))
+end)
+
 Pockets.Tests.TestRunner:Register("Shell: state changes do not move the frame's screen anchor", function()
     Shell:SetState(Shell.STATE.MENU)
     local point1, _, relPoint1, x1, y1 = Shell.frame:GetPoint()
@@ -306,15 +319,15 @@ Pockets.Tests.TestRunner:Register("Shell: no scrollbar when Category content fit
     -- one viewport's worth of items.
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
 
-    local scrollFrame = Shell.frame.shell.scrollFrame
-    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-    local contentWidth = Shell.frame.shell.content:GetWidth()
-    local viewportWidth = scrollFrame:GetWidth()
+    local shell = Shell.frame.shell
+    local contentWidth = shell.content:GetWidth()
+    local viewportWidth = shell.scrollFrame:GetWidth()
+    local scrollBarShown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
 
     ResetToGlance()
 
-    local ok = (not scrollBar or not scrollBar:IsShown()) and math.abs(contentWidth - viewportWidth) < 0.01
-    return ok, ok and "OK" or "scrollbar (or its reserved gutter) was present without overflowing content"
+    local ok = not scrollBarShown and math.abs(contentWidth - viewportWidth) < 0.01
+    return ok, ok and "OK" or "scrollbar was present without overflowing content"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: FlowLayout actually places 5 columns per row at the no-scrollbar usable width", function()
@@ -329,13 +342,13 @@ Pockets.Tests.TestRunner:Register("Shell: FlowLayout actually places 5 columns p
     return ok, ok and "OK" or "expected exactly 5 columns to fit per row before wrapping"
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width only when content actually overflows", function()
+Pockets.Tests.TestRunner:Register(
+    "Shell: scrollbar appears when content overflows without narrowing content width (scrollbar redesign pass)", function()
     -- Force an overflow deterministically by aggregating far more items
     -- than the viewport could ever fit, bypassing live inventory state.
-    -- Compare content against the layout constant, not live
-    -- scrollFrame:GetWidth(): SetScrollBarShown also insets the
-    -- scrollFrame by SCROLLBAR_RESERVE so the native widget sits in that
-    -- gap, and a flushed layout makes the two widths equal.
+    -- The compact scrollbar lives in the panel's existing padding gutter,
+    -- not a reserved column, so content width must stay exactly the full
+    -- viewport width whether or not the bar is showing.
     local L = Pockets.Constants.LAYOUT
     local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
     local originalMode = Pockets.SavedSettings.categoryViewMode
@@ -349,22 +362,19 @@ Pockets.Tests.TestRunner:Register("Shell: scrollbar appears and reclaims width o
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
 
-    local scrollFrame = Shell.frame.shell.scrollFrame
-    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-    local contentWidth = Shell.frame.shell.content:GetWidth()
+    local shell = Shell.frame.shell
+    local contentWidth = shell.content:GetWidth()
     local fullWidth = L.SHELL_WIDTH - L.SHELL_PADDING * 2
-    local expectedContentWidth = fullWidth - L.SCROLLBAR_RESERVE
+    local scrollBarShown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
 
     Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
     Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
-    local ok = scrollBar and scrollBar:IsShown()
-        and math.abs(contentWidth - expectedContentWidth) < 0.01
+    local ok = scrollBarShown and math.abs(contentWidth - fullWidth) < 0.01
     return ok, ok and "OK" or string.format(
-        "expected scrollbar shown and content width %s (full %s minus reserve %s); got shown=%s content=%s",
-        tostring(expectedContentWidth), tostring(fullWidth), tostring(L.SCROLLBAR_RESERVE),
-        tostring(scrollBar and scrollBar:IsShown()), tostring(contentWidth))
+        "expected scrollbar shown and content width unchanged at %s; got shown=%s content=%s",
+        tostring(fullWidth), tostring(scrollBarShown), tostring(contentWidth))
 end)
 
 --------------------------------------------------
@@ -463,15 +473,41 @@ Pockets.Tests.TestRunner:Register("Glance: header has no X/back button", functio
     return ok, ok and "OK" or "expected Glance's header to have no close/back button"
 end)
 
-Pockets.Tests.TestRunner:Register("Glance: Search icon is right-aligned and matches metric icon size", function()
+Pockets.Tests.TestRunner:Register("Glance: Search icon is right-aligned and matches Shell's expanded-header icon-button size", function()
     ResetToGlance()
     local L = Pockets.Constants.LAYOUT
     local point = Shell.frame.glance.header.iconButton:GetPoint()
     local width = Shell.frame.glance.header.iconButton:GetWidth()
-    local ok = point == "RIGHT" and width == L.GLANCE_SEARCH_ICON_SIZE
-        and width == L.GLANCE_METRIC_ICON_SIZE
+    -- Must match SHELL_HEADER_SIDE_WIDTH (Shell's expanded-header back/
+    -- close/+ buttons), NOT GLANCE_METRIC_ICON_SIZE - a bordered icon
+    -- BUTTON is a different kind of element than a plain metric-row
+    -- icon, and conflating the two is exactly what made Glance's "+"
+    -- visibly mismatch Shell's own "+" earlier.
+    local ok = point == "RIGHT" and width == L.GLANCE_HEADER_ICON_SIZE
+        and width == L.SHELL_HEADER_SIDE_WIDTH
     return ok, ok and "OK" or string.format(
-        "expected Search right-anchored at metric icon size, got point=%s width=%s", tostring(point), tostring(width))
+        "expected Search right-anchored at Shell's icon-button size, got point=%s width=%s", tostring(point), tostring(width))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: header has Search, Loot Log, then a '+' All Items icon, '+' flush to the header's right edge", function()
+    ResetToGlance()
+    local header = Shell.frame.glance.header
+    local searchIsFirst = header.iconButton == header.icons[1]
+    local plusIsSecond = header.plusButton == header.icons[3] and header.lootButton == header.icons[2]
+    local plusPoint = header.plusButton:GetPoint()
+    local plusTexture = header.plusButton:GetNormalTexture() and header.plusButton:GetNormalTexture():GetTexture()
+    local ok = searchIsFirst and plusIsSecond and plusPoint == "RIGHT" and plusTexture == Pockets.UI.PHUI.Icons.PLUS
+    return ok, ok and "OK" or string.format(
+        "expected search=icons[1], loot=icons[2], plus=icons[3] flush right using PHUI.Icons.PLUS, got plusPoint=%s plusTexture=%s",
+        tostring(plusPoint), tostring(plusTexture))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: clicking the header's '+' jumps straight to All Items", function()
+    ResetToGlance()
+    Shell.frame.glance.header.plusButton:Click()
+    local ok = Shell:GetState() == Shell.STATE.ALL
+    ResetToGlance()
+    return ok, ok and "OK" or string.format("expected ALL after clicking Glance's '+', got %s", tostring(Shell:GetState()))
 end)
 
 --------------------------------------------------
@@ -508,6 +544,67 @@ Pockets.Tests.TestRunner:Register("MetricRow: Bag/Gold/Ammo rows have identical 
     return ok, ok and "OK" or "expected identical icon size/row height/left-edge anchor across Bag/Gold/Ammo"
 end)
 
+Pockets.Tests.TestRunner:Register("Glance: Bag/Gold/Ammo plain-icon size matches the shared library's default (PHUI.Spacing.ICON_SIZE)", function()
+    local L = Pockets.Constants.LAYOUT
+    local defaultIconSize = Pockets.UI.PHUI.Spacing.ICON_SIZE
+    local ok = L.GLANCE_METRIC_ICON_SIZE == defaultIconSize
+    return ok, ok and "OK" or string.format(
+        "expected GLANCE_METRIC_ICON_SIZE (%s) to equal PHUI.Spacing.ICON_SIZE (%s)",
+        tostring(L.GLANCE_METRIC_ICON_SIZE), tostring(defaultIconSize))
+end)
+
+-- Guards the exact regression that prompted this pass: Glance's header
+-- "+" visibly not matching Shell's expanded-header "+" because they were
+-- built from two different, un-linked size numbers. Both Glance's search
+-- icon and Shell's expanded-header side (back/+) button must trace back
+-- to the one shared default. The close (X) button is intentionally
+-- excluded here - see the dedicated native-close-size test below.
+Pockets.Tests.TestRunner:Register("Glance/Shell header icon-button sizes all match the shared library's default (PHUI.Spacing.ICON_BUTTON_SIZE)", function()
+    local L = Pockets.Constants.LAYOUT
+    local defaultIconButtonSize = Pockets.UI.PHUI.Spacing.ICON_BUTTON_SIZE
+    local ok = L.GLANCE_HEADER_ICON_SIZE == defaultIconButtonSize
+        and L.SHELL_HEADER_SIDE_WIDTH == defaultIconButtonSize
+    return ok, ok and "OK" or string.format(
+        "expected GLANCE_HEADER_ICON_SIZE (%s) and SHELL_HEADER_SIDE_WIDTH (%s) to both equal PHUI.Spacing.ICON_BUTTON_SIZE (%s)",
+        tostring(L.GLANCE_HEADER_ICON_SIZE), tostring(L.SHELL_HEADER_SIDE_WIDTH), tostring(defaultIconButtonSize))
+end)
+
+-- pH never resizes its own UIPanelCloseButton away from its native size
+-- (ph/UI_History.lua:156-157) - forcing it down to the same 20px as the
+-- other header icon buttons was the actual bug (the template's art
+-- doesn't scale cleanly), not a size PICKED to be different on purpose.
+Pockets.Tests.TestRunner:Register("Shell close (X) button matches pH's native, unscaled UIPanelCloseButton size", function()
+    local L = Pockets.Constants.LAYOUT
+    local nativeSize = Pockets.UI.PHUI.NATIVE_CLOSE_BUTTON_SIZE
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.MENU)
+    local closeButton = Shell.frame.shell.header.closeButton
+    local width, height = closeButton:GetSize()
+    ResetToGlance()
+    local ok = L.SHELL_HEADER_CLOSE_WIDTH == nativeSize and width == nativeSize and height == nativeSize
+    return ok, ok and "OK" or string.format(
+        "expected SHELL_HEADER_CLOSE_WIDTH (%s) and rendered size (%sx%s) to equal PHUI.NATIVE_CLOSE_BUTTON_SIZE (%s)",
+        tostring(L.SHELL_HEADER_CLOSE_WIDTH), tostring(width), tostring(height), tostring(nativeSize))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance header '+' matches Shell's expanded-header '+' exactly (size and texture)", function()
+    ResetToGlance()
+    local glancePlus = Shell.frame.glance.header.plusButton
+    local glanceWidth = glancePlus:GetWidth()
+    local glanceTexture = glancePlus:GetNormalTexture() and glancePlus:GetNormalTexture():GetTexture()
+
+    Shell:SetState(Shell.STATE.MENU)
+    local shellPlus = Shell.frame.shell.header.plusButton
+    local shellWidth = shellPlus:GetWidth()
+    local shellTexture = shellPlus:GetNormalTexture() and shellPlus:GetNormalTexture():GetTexture()
+    ResetToGlance()
+
+    local ok = glanceWidth == shellWidth and glanceTexture == shellTexture and glanceTexture == Pockets.UI.PHUI.Icons.PLUS
+    return ok, ok and "OK" or string.format(
+        "expected identical +buttons, got glance(width=%s texture=%s) shell(width=%s texture=%s)",
+        tostring(glanceWidth), tostring(glanceTexture), tostring(shellWidth), tostring(shellTexture))
+end)
+
 Pockets.Tests.TestRunner:Register("MetricRow: Ammo icon has no ItemButton/border treatment", function()
     ResetToGlance()
     local icon = Shell.frame.glance.ammoRow.icon
@@ -519,7 +616,7 @@ end)
 -- Bag row: capacity + ETA
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("Glance: Bag ETA uses the existing estimator, compact (no 'to full' suffix)", function()
+Pockets.Tests.TestRunner:Register("Glance: header subtitle uses the existing estimator, compact and parenthesized", function()
     local estimator = Pockets.Services.CapacityEstimator
     local originalGetState = estimator.GetState
     local originalGetConfidence = estimator.GetConfidence
@@ -529,30 +626,30 @@ Pockets.Tests.TestRunner:Register("Glance: Bag ETA uses the existing estimator, 
     estimator.GetETA = function() return 13 * 60 end
 
     ResetToGlance()
-    local text = Shell.frame.glance.bagRow.secondaryText:GetText()
+    local text = Shell.frame.glance.header.subtitleText:GetText()
 
     estimator.GetState = originalGetState
     estimator.GetConfidence = originalGetConfidence
     estimator.GetETA = originalGetETA
     ResetToGlance()
 
-    local ok = text == "13m"
-    return ok, ok and "OK" or string.format("expected compact '13m', got %s", tostring(text))
+    local ok = text == "(13m)"
+    return ok, ok and "OK" or string.format("expected compact '(13m)', got %s", tostring(text))
 end)
 
-Pockets.Tests.TestRunner:Register("Glance: Bag ETA shows 'Full' in the full state", function()
+Pockets.Tests.TestRunner:Register("Glance: header subtitle shows '(Full)' in the full state", function()
     local estimator = Pockets.Services.CapacityEstimator
     local originalGetState = estimator.GetState
     estimator.GetState = function() return Pockets.Constants.ESTIMATOR_STATE.FULL end
 
     ResetToGlance()
-    local text = Shell.frame.glance.bagRow.secondaryText:GetText()
+    local text = Shell.frame.glance.header.subtitleText:GetText()
 
     estimator.GetState = originalGetState
     ResetToGlance()
 
-    local ok = text == "Full"
-    return ok, ok and "OK" or string.format("expected 'Full', got %s", tostring(text))
+    local ok = text == "(Full)"
+    return ok, ok and "OK" or string.format("expected '(Full)', got %s", tostring(text))
 end)
 
 --------------------------------------------------
@@ -699,9 +796,10 @@ Pockets.Tests.TestRunner:Register("Glance: Recent strip clamps to however many i
     end)
     ResetToGlance()
 
-    local ok = shownCount == maxFit
-    return ok, ok and "OK" or string.format("expected exactly %s items shown (width-clamped), got %s",
-        tostring(maxFit), tostring(shownCount))
+    -- One slot is the ">>" more button, so items clamp to maxFit - 1.
+    local ok = shownCount == maxFit - 1
+    return ok, ok and "OK" or string.format("expected exactly %s items shown (width-clamped, minus the >> slot), got %s",
+        tostring(maxFit - 1), tostring(shownCount))
 end)
 
 Pockets.Tests.TestRunner:Register("Glance: Recent strip targets roughly 4-5 icons at the current width", function()
@@ -710,6 +808,107 @@ Pockets.Tests.TestRunner:Register("Glance: Recent strip targets roughly 4-5 icon
     local maxFit = math.floor((contentWidth + L.GLANCE_RECENT_ICON_GAP) / (L.GLANCE_RECENT_ICON_SIZE + L.GLANCE_RECENT_ICON_GAP))
     local ok = maxFit >= 4 and maxFit <= 5
     return ok, ok and "OK" or string.format("expected 4-5 Recent icons to fit, got %s", tostring(maxFit))
+end)
+
+--------------------------------------------------
+-- Recent Item Preview (opt-in toggle, /pockets recentpreview)
+--------------------------------------------------
+
+local function WithRecentPreviewEnabled(enabled, fn)
+    local original = Pockets.SavedSettings.recentItemPreviewEnabled
+    Pockets.SavedSettings.recentItemPreviewEnabled = enabled
+    local ok, err = pcall(fn)
+    Pockets.SavedSettings.recentItemPreviewEnabled = original
+    if not ok then
+        error(err, 0)
+    end
+end
+
+Pockets.Tests.TestRunner:Register("ItemPreview: Show/Hide toggles the frame's visibility", function()
+    Pockets.UI.ItemPreview:Show({ texture = 1, quality = 1 })
+    local shownAfterShow = Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown()
+    Pockets.UI.ItemPreview:Hide()
+    local hiddenAfterHide = not (Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown())
+    local ok = shownAfterShow and hiddenAfterHide
+    return ok, ok and "OK" or "expected Show() to display the preview frame and Hide() to hide it again"
+end)
+
+Pockets.Tests.TestRunner:Register("ItemPreview: Show is a no-op without a texture (never shows a blank frame)", function()
+    Pockets.UI.ItemPreview:Hide()
+    Pockets.UI.ItemPreview:Show({ quality = 1 })
+    local ok = not (Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown())
+    return ok, ok and "OK" or "expected Show() with no texture to leave the preview hidden"
+end)
+
+Pockets.Tests.TestRunner:Register("ItemPreview: Show re-anchors an already-visible GameTooltip to its own top-right", function()
+    -- Generic show (no real item) is enough to exercise the re-anchor -
+    -- ItemPreview:Show only cares whether GameTooltip:IsShown(), not
+    -- what it's currently displaying.
+    GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+    GameTooltip:Show()
+
+    Pockets.UI.ItemPreview:Show({ texture = 1, quality = 1 })
+    local point, relativeTo, relativePoint = GameTooltip:GetPoint()
+    local ok = point == "TOPLEFT" and relativeTo == Pockets.UI.ItemPreview.frame and relativePoint == "TOPRIGHT"
+
+    GameTooltip:Hide()
+    Pockets.UI.ItemPreview:Hide()
+    return ok, ok and "OK" or string.format(
+        "expected GameTooltip TOPLEFT anchored to preview's TOPRIGHT, got point=%s relativeTo=%s relativePoint=%s",
+        tostring(point), tostring(relativeTo == Pockets.UI.ItemPreview.frame), tostring(relativePoint))
+end)
+
+Pockets.Tests.TestRunner:Register("ItemPreview: Show does not touch GameTooltip when it isn't currently shown", function()
+    GameTooltip:Hide()
+    local ok, err = pcall(function()
+        Pockets.UI.ItemPreview:Show({ texture = 1, quality = 1 })
+    end)
+    local stillHidden = not GameTooltip:IsShown()
+    Pockets.UI.ItemPreview:Hide()
+    local result = ok and stillHidden
+    return result, result and "OK" or string.format("expected no error and GameTooltip to stay hidden, ok=%s err=%s", tostring(ok), tostring(err))
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: hovering a Recent item shows the large preview only when the toggle is on", function()
+    local ok, message = true, "OK"
+
+    WithRecentPreviewEnabled(true, function()
+        WithRecentItems({ FakeRecentItem(601, 1) }, function()
+            ResetToGlance()
+            local poolAnchor = Shell.frame.glance.recentStrip.poolAnchor
+            local pool = Pockets.UI.ItemButtonPool:GetPool(poolAnchor)
+            local row = pool.active[1]
+            -- previewOnEnter/previewOnLeave are called DIRECTLY (not via
+            -- GetScript, which only ever returns a SetScript handler,
+            -- never one of RecentItemStrip's HookScript'd callbacks).
+            row.previewOnEnter(row)
+            local shownWhenOn = Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown()
+            row.previewOnLeave(row)
+            local hiddenAfterLeave = not (Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown())
+            ok = shownWhenOn and hiddenAfterLeave
+            message = ok and "OK" or string.format("shownWhenOn=%s hiddenAfterLeave=%s", tostring(shownWhenOn), tostring(hiddenAfterLeave))
+        end)
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register("Glance: hovering a Recent item does nothing when the preview toggle is off", function()
+    local ok, message = true, "OK"
+    WithRecentPreviewEnabled(false, function()
+        WithRecentItems({ FakeRecentItem(602, 1) }, function()
+            ResetToGlance()
+            local poolAnchor = Shell.frame.glance.recentStrip.poolAnchor
+            local pool = Pockets.UI.ItemButtonPool:GetPool(poolAnchor)
+            local row = pool.active[1]
+            Pockets.UI.ItemPreview:Hide()
+            row.previewOnEnter(row)
+            ok = not (Pockets.UI.ItemPreview.frame and Pockets.UI.ItemPreview.frame:IsShown())
+            message = ok and "OK" or "expected no preview while the toggle is off"
+        end)
+    end)
+    ResetToGlance()
+    return ok, message
 end)
 
 --------------------------------------------------
@@ -847,7 +1046,7 @@ Pockets.Tests.TestRunner:Register("Shell: Render skips re-anchoring while a drag
     local _, _, _, afterX, afterY = Shell.frame:GetPoint()
 
     -- restore the real saved position so later tests aren't affected
-    Pockets.SavedSettings.hud.x, Pockets.SavedSettings.hud.y = savedX, savedY
+    Pockets.CharDB.hud.x, Pockets.CharDB.hud.y = savedX, savedY
     ResetToGlance()
 
     local ok = heldDuringDrag and ApproxEqual(afterX, savedX + 37) and ApproxEqual(afterY, savedY - 41)
@@ -976,25 +1175,26 @@ Pockets.Tests.TestRunner:Register("RowUnification: category label and item name 
         tostring(menuLabelLeft), tostring(itemNameLeft))
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: category count and item qty share the same right edge (chevron doesn't shift it)", function()
+-- Wasted-space pass: item rows no longer reserve Menu's chevron column
+-- (items never navigate deeper, so that 20px was permanently dead space,
+-- worse once a scrollbar narrowed the row further) - qty now sits flush
+-- against the row's own right edge instead of aligning with Menu's count.
+Pockets.Tests.TestRunner:Register("RowUnification: item qty sits flush against the row's right edge (no reserved chevron gap)", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
-    local menuRow = Shell.frame.shell.menuRows[1]
-    menuRow.count:SetText("180") -- worst-case 3-digit count
-    local menuCountRight = menuRow.count:GetRight()
-
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     local listRow = Shell.frame.shell.categoryListRows[1]
     local itemQtyRight = listRow and listRow.qty:GetRight()
+    local rowRight = listRow and listRow:GetRight()
 
     Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
-    local ok = itemQtyRight and math.abs(menuCountRight - itemQtyRight) < 0.01
-    return ok, ok and "OK" or string.format("expected matching count/qty right edge, got menu=%s item=%s",
-        tostring(menuCountRight), tostring(itemQtyRight))
+    local ok = itemQtyRight and rowRight and math.abs((rowRight - itemQtyRight) - Pockets.Constants.LAYOUT.LIST_ROW_PADDING) < 0.01
+    return ok, ok and "OK" or string.format("expected qty flush to row edge (padding only), got qtyRight=%s rowRight=%s",
+        tostring(itemQtyRight), tostring(rowRight))
 end)
 
 Pockets.Tests.TestRunner:Register("RowUnification: item rows have no chevron", function()
@@ -1056,18 +1256,21 @@ local function CheckListScrollState(n, expectScrollbar)
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
 
-        local scrollFrame = Shell.frame.shell.scrollFrame
-        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-        local shown = scrollBar and scrollBar:IsShown() or false
-        local contentWidth = Shell.frame.shell.content:GetWidth()
-        local viewportWidth = scrollFrame:GetWidth()
+        local shell = Shell.frame.shell
+        local shown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
+        local contentWidth = shell.content:GetWidth()
+        local viewportWidth = shell.scrollFrame:GetWidth()
+        -- Content width never changes based on scrollbar visibility
+        -- (scrollbar redesign pass - the compact bar lives in the existing
+        -- padding gutter, not a reserved column), so this holds shown or
+        -- not, unlike the old wide Blizzard scrollbar's reserved column.
         local noGutter = math.abs(contentWidth - viewportWidth) < 0.01
 
         if shown ~= expectScrollbar then
             error(string.format("n=%d: expected scrollbar shown=%s, got %s", n, tostring(expectScrollbar), tostring(shown)), 0)
         end
-        if (not expectScrollbar) and not noGutter then
-            error(string.format("n=%d: expected zero scrollbar gutter when hidden", n), 0)
+        if not noGutter then
+            error(string.format("n=%d: expected content width to always match the viewport width", n), 0)
         end
     end)
     ResetToGlance()
@@ -1200,18 +1403,17 @@ local function CheckMenuScrollState(n, expectScrollbar)
     WithNVisibleCategories(n, function()
         Shell:SetState(Shell.STATE.MENU)
 
-        local scrollFrame = Shell.frame.shell.scrollFrame
-        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-        local shown = scrollBar and scrollBar:IsShown() or false
-        local contentWidth = Shell.frame.shell.content:GetWidth()
-        local viewportWidth = scrollFrame:GetWidth()
+        local shell = Shell.frame.shell
+        local shown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
+        local contentWidth = shell.content:GetWidth()
+        local viewportWidth = shell.scrollFrame:GetWidth()
         local noGutter = math.abs(contentWidth - viewportWidth) < 0.01
 
         if shown ~= expectScrollbar then
             error(string.format("n=%d: expected scrollbar shown=%s, got %s", n, tostring(expectScrollbar), tostring(shown)), 0)
         end
-        if (not expectScrollbar) and not noGutter then
-            error(string.format("n=%d: expected zero scrollbar gutter when hidden", n), 0)
+        if not noGutter then
+            error(string.format("n=%d: expected content width to always match the viewport width", n), 0)
         end
     end)
     ResetToGlance()
@@ -1406,21 +1608,43 @@ end)
 Pockets.Tests.TestRunner:Register("Shell: removing Ammo from the footer does not shift the Bags anchor", function()
     Shell:SetState(Shell.STATE.MENU)
     local shell = Shell.frame.shell
-    local bagsLeftBefore = shell.footerBagsText:GetLeft()
+    local bagsLeftBefore = shell.footerBagRow:GetLeft()
 
-    shell.footerAmmoText:Show() -- simulate an ammo pool being present
+    shell.footerAmmoRow:Show() -- simulate an ammo pool being present
     Shell:ConfigureFooter() -- re-derives visibility from real (ammo-less) state, hiding it again
-    local bagsLeftAfter = shell.footerBagsText:GetLeft()
+    local bagsLeftAfter = shell.footerBagRow:GetLeft()
 
     ResetToGlance()
     local ok = bagsLeftBefore == bagsLeftAfter
     return ok, ok and "OK" or "Bags anchor moved when Ammo visibility changed"
 end)
 
+Pockets.Tests.TestRunner:Register("Shell: footer always shows Bag and Gold, reusing the shared MetricRow/MoneyFormat components", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local shell = Shell.frame.shell
+    Shell:ConfigureFooter()
+    local ok = shell.footerBagRow:IsShown() and shell.footerGoldRow:IsShown()
+        and shell.footerBagRow.primaryText:GetText() ~= nil
+        and shell.footerGoldRow.primaryText:GetText() == Pockets.UI.MoneyFormat:Format(GetMoney())
+    ResetToGlance()
+    return ok, ok and "OK" or "expected footer Bag/Gold rows visible and Gold text to match MoneyFormat output"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: footer Ammo metric shows only when ShouldShowAmmoRow is true", function()
+    Shell:SetState(Shell.STATE.MENU)
+    local shell = Shell.frame.shell
+    local ammoCapacity = Pockets.Services.InventoryState:GetAmmoCapacity()
+    local expectedShown = Shell:ShouldShowAmmoRow(ammoCapacity)
+    Shell:ConfigureFooter()
+    local ok = shell.footerAmmoRow:IsShown() == expectedShown
+    ResetToGlance()
+    return ok, ok and "OK" or string.format("expected footer Ammo shown=%s per ShouldShowAmmoRow", tostring(expectedShown))
+end)
+
 Pockets.Tests.TestRunner:Register("Shell: SavePosition ignores a negligible (phantom-drag) position change", function()
     ResetToGlance()
     Shell:SetState(Shell.STATE.MENU)
-    local hud = Pockets.SavedSettings.hud
+    local hud = Pockets.CharDB.hud
     local originalX, originalY = hud.x, hud.y
 
     -- Same spot, only float-rounding-scale noise - simulates a
@@ -1857,20 +2081,21 @@ Pockets.Tests.TestRunner:Register("CategoryView: List has no scrollbar when rows
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
 
-        local scrollFrame = Shell.frame.shell.scrollFrame
-        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-        local contentWidth = Shell.frame.shell.content:GetWidth()
-        local viewportWidth = scrollFrame:GetWidth()
+        local shell = Shell.frame.shell
+        local contentWidth = shell.content:GetWidth()
+        local viewportWidth = shell.scrollFrame:GetWidth()
+        local scrollBarShown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
 
-        if (scrollBar and scrollBar:IsShown()) or math.abs(contentWidth - viewportWidth) >= 0.01 then
-            error("scrollbar (or its gutter) present without List content overflowing", 0)
+        if scrollBarShown or math.abs(contentWidth - viewportWidth) >= 0.01 then
+            error("scrollbar present without List content overflowing", 0)
         end
     end)
     ResetToGlance()
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryView: List shows a scrollbar and reclaims width when rows overflow", function()
+Pockets.Tests.TestRunner:Register(
+    "CategoryView: List shows a scrollbar without narrowing content width when rows overflow", function()
     local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
     local manyItems = {}
     for i = 1, 200 do
@@ -1884,25 +2109,151 @@ Pockets.Tests.TestRunner:Register("CategoryView: List shows a scrollbar and recl
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
 
         local L = Pockets.Constants.LAYOUT
-        local scrollBar = _G[Shell.frame.shell.scrollFrame:GetName() .. "ScrollBar"]
-        local contentWidth = Shell.frame.shell.content:GetWidth()
+        local shell = Shell.frame.shell
+        local contentWidth = shell.content:GetWidth()
         local fullWidth = L.SHELL_WIDTH - L.SHELL_PADDING * 2
-        local expectedContentWidth = fullWidth - L.SCROLLBAR_RESERVE
-        local shown = scrollBar and scrollBar:IsShown() and true or false
+        local shown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
 
-        ok = shown and math.abs(contentWidth - expectedContentWidth) < 0.01
+        ok = shown and math.abs(contentWidth - fullWidth) < 0.01
         if not ok then
             failMessage = string.format(
-                "expected scrollbar shown and content width %s (full %s minus reserve %s); got shown=%s content=%s",
-                tostring(expectedContentWidth), tostring(fullWidth), tostring(L.SCROLLBAR_RESERVE),
-                tostring(shown), tostring(contentWidth))
+                "expected scrollbar shown and content width unchanged at %s; got shown=%s content=%s",
+                tostring(fullWidth), tostring(shown), tostring(contentWidth))
         end
     end)
 
     Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
     ResetToGlance()
 
-    return ok, ok and "OK" or (failMessage or "expected a scrollbar and content narrowed by SCROLLBAR_RESERVE once List rows overflow")
+    return ok, ok and "OK" or (failMessage or "expected a scrollbar without content narrowing once List rows overflow")
+end)
+
+--------------------------------------------------
+-- Full Inventory category headers/collapse (Full Inventory redesign)
+--
+-- No mock-inventory harness exists (per AGENTS.md, full confidence needs
+-- a manual in-game `/pockets test run`), so these run against whatever
+-- real bag/Recent contents the test character happens to have. They're
+-- written as structural invariants that hold regardless of exact
+-- contents (rather than asserting specific counts/items), except the
+-- Recent cap check, which is a best-effort upper-bound check.
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("Shell: entering Full Inventory preserves the TOPLEFT anchor", function()
+    Shell:SetState(Shell.STATE.GLANCE)
+    local pointBefore, _, relBefore, xBefore, yBefore = Shell.frame:GetPoint()
+    Shell:SetState(Shell.STATE.ALL)
+    local pointAfter, _, relAfter, xAfter, yAfter = Shell.frame:GetPoint()
+    ResetToGlance()
+    local ok = pointBefore == pointAfter and pointBefore == "TOPLEFT"
+        and relBefore == relAfter and xBefore == xAfter and yBefore == yAfter
+    return ok, ok and "OK" or "expected TOPLEFT anchor to be unchanged entering ALL"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Full Inventory category headers never share a row (no <50% packing)", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local headers = Shell.frame.shell.categoryHeaders
+    local ok = true
+    for i = 2, #headers do
+        if headers[i]:IsShown() and headers[i - 1]:IsShown() then
+            -- Fresh-row guarantee: each header's top is strictly below
+            -- the previous header's top (never side-by-side on one row).
+            if headers[i]:GetTop() >= headers[i - 1]:GetTop() then
+                ok = false
+            end
+        end
+    end
+    ResetToGlance()
+    return ok, ok and "OK" or "expected every category header to start below the previous one, never sharing a row"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Full Inventory category headers have no icon region and share one component", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local headers = Shell.frame.shell.categoryHeaders
+    local ok = #headers > 0
+    for _, header in ipairs(headers) do
+        if header:IsShown() then
+            ok = ok and header.icon == nil and header.isPocketsCategoryHeader == true
+                and header.label:GetText():match("^.+ %(%d+%)$") ~= nil
+        end
+    end
+    ResetToGlance()
+    return ok, ok and "OK" or "expected every visible header to be icon-free, share the CategoryHeader marker, and read 'Name (count)'"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Full Inventory never shows a zero-count category header", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local ok = true
+    for _, header in ipairs(Shell.frame.shell.categoryHeaders) do
+        if header:IsShown() then
+            local count = tonumber(header.label:GetText():match("%((%d+)%)$"))
+            if not count or count <= 0 then
+                ok = false
+            end
+        end
+    end
+    ResetToGlance()
+    return ok, ok and "OK" or "expected no visible category header with a zero item count"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Recent's Full Inventory header is capped at FULL_INVENTORY_RECENT_LIMIT and uses the same header component", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local L = Pockets.Constants.LAYOUT
+    local found, ok = false, true
+    for _, header in ipairs(Shell.frame.shell.categoryHeaders) do
+        if header:IsShown() and header.label:GetText():match("^Recent %(") then
+            found = true
+            local count = tonumber(header.label:GetText():match("%((%d+)%)$"))
+            ok = header.isPocketsCategoryHeader == true and count and count <= L.FULL_INVENTORY_RECENT_LIMIT
+        end
+    end
+    ResetToGlance()
+    -- found=false just means the test character has no recent items right
+    -- now (nothing to assert against) - not a failure.
+    return (not found) or ok, ok and "OK" or "expected Recent's header count to be <= FULL_INVENTORY_RECENT_LIMIT"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: collapsing a Full Inventory category updates its header's chevron and persists in CharDB", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local header = Shell.frame.shell.categoryHeaders[1]
+    local ok = false
+    if header and header:IsShown() then
+        -- header[1] corresponds to the FIRST visible section, which is
+        -- Recent whenever any recent items exist, else the next
+        -- populated category in CATEGORY_ORDER - read the id back off
+        -- CharDB after toggling rather than assuming which one it is.
+        header:Click()
+        local collapsedID
+        for id, collapsed in pairs(Pockets.CharDB.collapsedCategories) do
+            if collapsed then
+                collapsedID = id
+            end
+        end
+        ok = collapsedID ~= nil and header.collapsed == true
+            and header.chevron:GetText() == "\226\150\184" -- "▸" (collapsed)
+        -- Cleanup: never leave test-induced collapse state behind.
+        if collapsedID then
+            Pockets.CharDB.collapsedCategories[collapsedID] = nil
+        end
+        Shell:RenderAll("")
+    end
+    ResetToGlance()
+    return ok, ok and "OK" or "expected clicking a header to collapse it (chevron -> '\226\150\184', persisted in CharDB.collapsedCategories)"
+end)
+
+Pockets.Tests.TestRunner:Register("Shell: Full Inventory item buttons are all identical dimensions (ITEM_BUTTON_SIZE)", function()
+    Shell:SetState(Shell.STATE.ALL)
+    local L = Pockets.Constants.LAYOUT
+    local pool = Pockets.UI.ItemButtonPool:GetPool(Shell.frame.shell.content)
+    local ok = true
+    for _, button in ipairs(pool.active) do
+        local w, h = button:GetSize()
+        if w ~= L.ITEM_BUTTON_SIZE or h ~= L.ITEM_BUTTON_SIZE then
+            ok = false
+        end
+    end
+    ResetToGlance()
+    return ok, ok and "OK" or "expected every Full Inventory item button to be ITEM_BUTTON_SIZE x ITEM_BUTTON_SIZE"
 end)
 
 --------------------------------------------------
@@ -2022,8 +2373,8 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH has no footer and no scrollbar"
     ResetToGlance()
     Shell:SetState(Shell.STATE.SEARCH)
     local shell = Shell.frame.shell
-    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
-    local ok = not shell.footer:IsShown() and not (scrollBar and scrollBar:IsShown())
+    local ok = not shell.footer:IsShown() and not shell.scrollFrame:IsShown()
+        and not Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
     ResetToGlance()
     return ok, ok and "OK" or "expected SEARCH to show neither the footer nor a scrollbar"
 end)
@@ -2090,14 +2441,51 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH with 2 matches shows exactly tw
     return ok, message
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: SEARCH with 3+ matches hides all result rows and shows the match count", function()
+-- Builds `count` distinct "Mana <n>" items that all match query "mana",
+-- for exercising the capped-rows/overflow-trailer and full-feedback-
+-- collapse branches without hardcoding a match count against a layout
+-- constant that might change again later.
+local function BuildManaItems(count)
+    local items = {}
+    for i = 1, count do
+        table.insert(items, { itemID = i, name = string.format("Mana %d", i), quantity = 1, bagID = 0, slotID = i })
+    end
+    return items
+end
+
+Pockets.Tests.TestRunner:Register(
+    "Shell: SEARCH with more matches than SEARCH_MAX_RESULT_ROWS caps rows and shows an 'and N more' trailer", function()
     ResetToGlance()
     Shell:SetState(Shell.STATE.SEARCH)
-    local ok, message = WithAllAggregatedItems({
-        { itemID = 1, name = "Mana Potion", quantity = 1, bagID = 0, slotID = 1 },
-        { itemID = 2, name = "Mana Biscuit", quantity = 1, bagID = 0, slotID = 2 },
-        { itemID = 3, name = "Mana Ruby", quantity = 1, bagID = 0, slotID = 3 },
-    }, function()
+    local L = Pockets.Constants.LAYOUT
+    local totalCount = L.SEARCH_MAX_RESULT_ROWS + 3
+    local ok, message = WithAllAggregatedItems(BuildManaItems(totalCount), function()
+        Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        local rows = Shell.frame.shell.searchRows
+        local shownCount = 0
+        for _, row in ipairs(rows) do
+            if row:IsShown() then shownCount = shownCount + 1 end
+        end
+        local panel = Shell.frame.shell.searchPanel
+        local expectedRemaining = totalCount - L.SEARCH_MAX_RESULT_ROWS
+        local result = shownCount == L.SEARCH_MAX_RESULT_ROWS and not panel.feedbackPrimary:IsShown()
+            and panel.overflowLabel:IsShown()
+            and panel.overflowLabel:GetText() == string.format("and %d more. Keep typing to filter.", expectedRemaining)
+        return result, result and "OK" or string.format(
+            "expected %d capped rows and an 'and %d more' trailer, got %d rows shown, trailer=%s",
+            L.SEARCH_MAX_RESULT_ROWS, expectedRemaining, shownCount, tostring(panel.overflowLabel:GetText()))
+    end)
+    ResetToGlance()
+    return ok, message
+end)
+
+Pockets.Tests.TestRunner:Register(
+    "Shell: SEARCH beyond SEARCH_OVERFLOW_LIMIT matches hides all result rows and shows the match count", function()
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.SEARCH)
+    local L = Pockets.Constants.LAYOUT
+    local totalCount = L.SEARCH_OVERFLOW_LIMIT + 1
+    local ok, message = WithAllAggregatedItems(BuildManaItems(totalCount), function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana")
         local rows = Shell.frame.shell.searchRows
         local anyRowShown = false
@@ -2105,11 +2493,13 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH with 3+ matches hides all resul
             if row:IsShown() then anyRowShown = true end
         end
         local panel = Shell.frame.shell.searchPanel
-        local result = not anyRowShown and panel.feedbackPrimary:IsShown()
-            and panel.feedbackPrimary:GetText() == "3 items found"
+        local expectedText = string.format("%d items found", totalCount)
+        local result = not anyRowShown and not panel.overflowLabel:IsShown() and panel.feedbackPrimary:IsShown()
+            and panel.feedbackPrimary:GetText() == expectedText
             and panel.feedbackSecondary:IsShown() and panel.feedbackSecondary:GetText() == "Keep typing..."
         return result, result and "OK" or string.format(
-            "expected 3+ matches to hide rows and show '3 items found' / 'Keep typing...', got primary=%s secondary=%s anyRowShown=%s",
+            "expected >SEARCH_OVERFLOW_LIMIT matches to hide rows and show '%s' / 'Keep typing...', got primary=%s secondary=%s anyRowShown=%s",
+            expectedText,
             tostring(panel.feedbackPrimary:GetText()), tostring(panel.feedbackSecondary:GetText()), tostring(anyRowShown))
     end)
     ResetToGlance()

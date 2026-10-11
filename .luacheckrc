@@ -72,6 +72,11 @@ globals = {
 
     -- Item / bag API (Classic container API)
     "GetItemInfo",
+    "C_Item",
+    "GetItemIcon",
+    "GetItemQualityColor",
+    "ChatEdit_InsertLink",
+    "GetCurrentKeyBoardFocus",
     "GetItemInfoInstant",
     "GetItemFamily",
     "bit",

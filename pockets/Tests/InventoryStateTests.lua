@@ -53,8 +53,14 @@ Pockets.Tests.TestRunner:Register("InventoryState: bag-full ETA sampling uses GE
         return { general = { used = 10, total = 20 }, ammo = { used = 5, total = 16 } }
     end
 
+    -- Refresh() overwrites the previous-quantities snapshot with this
+    -- stub's empty bags; left that way, the next REAL refresh would diff
+    -- the whole inventory against nothing and log every carried item to
+    -- Recent / the persisted Loot Log as freshly acquired.
+    local originalPrevious = InventoryState.previousQuantitiesByItemID
     CapacityEstimator:Reset("test")
     InventoryState:Refresh("test")
+    InventoryState.previousQuantitiesByItemID = originalPrevious
 
     BagAPI.ScanAllBags = originalScan
     BagAPI.GetCapacityCounts = originalCounts

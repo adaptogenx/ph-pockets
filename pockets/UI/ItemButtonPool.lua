@@ -167,8 +167,23 @@ local function WireItemButtonScripts(button)
         end
     end)
 
+    -- Every non-Recent item surface (Category Grid/List, All Items,
+    -- Search) anchors its tooltip to the Pockets HUD's own top-right
+    -- corner, not per-button - a consistent, predictable spot regardless
+    -- of which row/icon in the list/grid/full-bag-view is hovered.
+    -- Recent-strip buttons (button.isRecentItem, set by
+    -- UI/RecentItemStrip.lua) are excluded: they already get their own,
+    -- more specific anchor (top-right of the large hover preview, when
+    -- that opt-in toggle is on) - see ItemPreview:Show. ANCHOR_NONE is
+    -- used instead of an anchor type so the tooltip only ever moves via
+    -- the explicit SetPoint below, with no initial per-button position
+    -- to visibly jump away from.
     button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self.isRecentItem then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        else
+            GameTooltip:SetOwner(self, "ANCHOR_NONE")
+        end
         if self.interactive then
             BagAPI:SetTooltipToBagItem(GameTooltip, self.bagID, self.slotID)
         elseif self.itemLink then
@@ -176,6 +191,10 @@ local function WireItemButtonScripts(button)
         else
             GameTooltip:Hide()
             return
+        end
+        if not self.isRecentItem then
+            GameTooltip:ClearAllPoints()
+            GameTooltip:SetPoint("TOPLEFT", Pockets.UI.Shell.frame, "TOPRIGHT", 4, 0)
         end
         GameTooltip:Show()
     end)

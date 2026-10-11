@@ -70,6 +70,31 @@ PHUI.Spacing = {
     PADDING = 12,
     ICON_GAP = 2,
     PANEL_PADDING = 8,
+    -- Two distinct default icon sizes, BOTH verified against pH's real,
+    -- installed UI_HUD.lua (not guessed) - conflating them, or picking a
+    -- number that merely "looks about right," is what caused Glance's
+    -- metric-row icons to render visibly larger than pH's own equivalent
+    -- icons side-by-side, and separately caused Glance's header "+" to
+    -- mismatch Shell's own +/back/close buttons. Every UI pass must
+    -- reuse ONE of these two, never invent or eyeball a third:
+    --   ICON_SIZE - a PLAIN icon with no button chrome, sitting directly
+    --     on a panel surface (Glance's Bag/Gold/Ammo metric-row icons).
+    --     ph/UI_HUD.lua:1238 - micro-bar metric-tile icon, "12px for
+    --     ultra-compact" (verbatim comment in pH's own source).
+    ICON_SIZE = 12,
+    --   ICON_BUTTON_SIZE - a bordered, clickable CreateIconButton/
+    --     CreateCloseButton (back/close/+/Search - anything with a
+    --     backdrop+border and a hover highlight). ph/UI_HUD.lua:110 -
+    --     "local ICON_SIZE = 20 -- Match stop button height (20px)",
+    --     pH's own button-icon size (minMaxBtn/historyBtn/overflowBtn).
+    --     This is the established size already used throughout Shell's
+    --     expanded header (back/close/+) - Glance's header buttons must
+    --     match it too, not the smaller plain-icon size.
+    -- Pockets/Constants.lua's GLANCE_*/SHELL_HEADER_* size constants are
+    -- meant to equal these (Constants.lua loads before this file, so it
+    -- can't read them directly at load time - see the "Must match"
+    -- comments on those constants).
+    ICON_BUTTON_SIZE = 20,
 }
 
 --------------------------------------------------
@@ -84,6 +109,19 @@ PHUI.Backdrops = {
         tileSize = 16,
         edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    },
+    -- Scaled-down border for small (~20px) icon buttons, verified against
+    -- pH's own overflowBtn (ph/UI_HUD.lua:996-1000). PANEL's edgeSize=12/
+    -- insets=3 is sized for full HUD panels - on a 20px button it eats
+    -- most of the icon's usable space, making the glyph look shrunk next
+    -- to pH's real buttons even when the outer button size matches.
+    ICON_BUTTON = {
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 10,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     },
 }
 
@@ -164,10 +202,28 @@ end
 -- Thin wrapper over Blizzard's stock close-button template so every PHUI
 -- panel gets the same close-button treatment instead of each caller
 -- re-declaring "UIPanelCloseButton" + a size by hand.
+-- pH's own close button (ph/UI_History.lua:156-157) never calls SetSize
+-- at all - it renders at UIPanelCloseButton's native/default size (32px).
+-- Forcing this template down to a small size (it was 20px here before)
+-- doesn't scale cleanly - the template's border/glow art is fixed-inset,
+-- not proportional, so a forced-small button visibly doesn't match pH's
+-- real X even though it's the same template. Default to that native
+-- size unless a caller has a real reason to override it.
+PHUI.NATIVE_CLOSE_BUTTON_SIZE = 32
+
+-- pH's own collapsed HUD frame width (ph/UI_HUD.lua:2629/2834 -
+-- hudFrame:SetWidth(266)). Pockets' own Glance stays intentionally
+-- narrower (sized to its actual content, not a pH clone), but any
+-- Pockets view meant to visually align/match pH's real HUD footprint
+-- (Shell's expanded Search/Menu/Category/All) should use this exact
+-- value, not an independently-chosen one.
+PHUI.PH_HUD_WIDTH = 266
+
 function PHUI.CreateCloseButton(parent, opts)
     opts = opts or {}
     local button = CreateFrame("Button", nil, parent, "UIPanelCloseButton")
-    button:SetSize(opts.size or 20, opts.size or 20)
+    local size = opts.size or PHUI.NATIVE_CLOSE_BUTTON_SIZE
+    button:SetSize(size, size)
     if opts.onClick then
         button:SetScript("OnClick", opts.onClick)
     end
@@ -256,7 +312,8 @@ function PHUI.CreateIconButton(parent, size, texturePath, opts)
     opts = opts or {}
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(size, size)
-    PHUI.ApplyBackdrop(button, opts)
+    PHUI.ApplyBackdrop(button, { backdrop = opts.backdrop or PHUI.Backdrops.ICON_BUTTON,
+        bgColor = opts.bgColor, borderColor = opts.borderColor, bgAlpha = opts.bgAlpha })
 
     button.icon = button:CreateTexture(nil, "ARTWORK")
     button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
@@ -291,5 +348,56 @@ function PHUI.CreateIconButton(parent, size, texturePath, opts)
         end)
     end
 
+    return button
+end
+
+--------------------------------------------------
+-- Icon texture paths (ph/UI_HUD.lua:103-108) - real Blizzard icon art
+-- pH uses directly. Any Pockets element meaning the same thing must use
+-- the exact same texture, never a font-drawn character standing in for
+-- it - a font glyph never visually matches Blizzard's own icon art (the
+-- "+" mismatch this table exists to fix).
+--------------------------------------------------
+PHUI.Icons = {
+    PLUS = "Interface\\Buttons\\UI-PlusButton-Up",
+    MINUS = "Interface\\Buttons\\UI-MinusButton-Up",
+    -- Loot Log entry point. Pockets-only affordance (pH's History button
+    -- is a quest-log BOOK, deliberately a different thing), so a stock
+    -- Blizzard scroll item icon; boxed via CreateIconButton like Search
+    -- because item icon art carries baked-in padding.
+    SCROLL = "Interface\\Icons\\INV_Scroll_03",
+}
+
+--- Borderless icon button: a plain Blizzard texture with no backdrop/box
+--- chrome, matching pH's own minMaxBtn/historyBtn (ph/UI_HUD.lua:956-990)
+--- - those have zero SetBackdrop call; their "border" is baked into the
+--- texture art itself. Use this (not CreateIconButton) for any icon that
+--- has a real Blizzard texture equivalent (e.g. PHUI.Icons.PLUS). Keep
+--- using CreateIconButton's boxed style only for Pockets-only affordances
+--- with no pH element to match (e.g. Search).
+function PHUI.CreateNativeIconButton(parent, size, texturePath, opts)
+    opts = opts or {}
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(size, size)
+    button:SetNormalTexture(texturePath)
+    if opts.pushedTexture then
+        button:SetPushedTexture(opts.pushedTexture)
+    end
+    button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    if opts.tooltipText then
+        button:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(opts.tooltipText)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    if opts.onClick then
+        button:SetScript("OnClick", function(self)
+            if not self.isActionDisabled then
+                opts.onClick(self)
+            end
+        end)
+    end
     return button
 end

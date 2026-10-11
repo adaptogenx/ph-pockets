@@ -33,8 +33,14 @@ end
 -- copper -> "1,234g 56s" | "1,234g" | "56s 78c" | "78c" (pH's Ledger
 -- module's contract). Copper is always dropped once gold >= 1 - never
 -- fake precision the player doesn't need at that scale.
+--
+-- Negative amounts (Loot Log expenses) render with a leading "-" on the
+-- same breakdown, matching pH's Ledger (never for zero).
 function MoneyFormat:Format(copper)
-    copper = math.max(0, math.floor(tonumber(copper) or 0))
+    copper = math.floor(tonumber(copper) or 0)
+    if copper < 0 then
+        return "-" .. self:Format(-copper)
+    end
 
     local gold = math.floor(copper / 10000)
     local silver = math.floor((copper % 10000) / 100)

@@ -25,32 +25,81 @@ local INCOMPLETE_RETRY_MAX = 10
 local pendingRefreshTimer = nil
 local incompleteRetries = 0
 
--- Always a fresh table copy, never a direct reference to
--- Constants.DEFAULT_SETTINGS.hud - Shell:SavePosition() mutates
--- Pockets.SavedSettings.hud in place on every drag, and aliasing it to
--- the shared constants table would let a drag silently corrupt the
--- addon's own defaults for the rest of the session.
-local function DefaultHud()
-    local default = Pockets.Constants.DEFAULT_SETTINGS.hud
+-- Always a fresh table copy, never a direct reference to the source -
+-- Shell:SavePosition() mutates Pockets.CharDB.hud in place on every
+-- drag, and aliasing it to a shared table (Constants.DEFAULT_SETTINGS.hud,
+-- or another character's saved position during migration below) would
+-- let a drag silently corrupt that shared table for the rest of the
+-- session.
+local function CopyHud(source)
     return {
-        point = default.point,
-        relativePoint = default.relativePoint,
-        x = default.x,
-        y = default.y,
-        locked = default.locked,
+        point = source.point,
+        relativePoint = source.relativePoint,
+        x = source.x,
+        y = source.y,
+        locked = source.locked,
     }
+end
+
+local function DefaultHud()
+    return CopyHud(Pockets.Constants.DEFAULT_SETTINGS.hud)
 end
 
 local function EnsureSavedVariables()
     if not PocketsDB then
-        PocketsDB = { version = 1, settings = { hud = DefaultHud() } }
+        PocketsDB = { version = 1, settings = {} }
+    end
+    if not PocketsDB.settings then
+        PocketsDB.settings = {}
     end
 
-    if not PocketsDB.settings then
-        PocketsDB.settings = { hud = DefaultHud() }
+    -- Category view preference (Category List/Grid view pass): falls
+    -- back safely to the default for anything but the two known values,
+    -- rather than trusting an old/corrupted/hand-edited save.
+    local Mode = Pockets.Constants.CATEGORY_VIEW_MODE
+    if PocketsDB.settings.categoryViewMode ~= Mode.GRID and PocketsDB.settings.categoryViewMode ~= Mode.LIST then
+        PocketsDB.settings.categoryViewMode = Pockets.Constants.DEFAULT_SETTINGS.categoryViewMode
     end
-    if not PocketsDB.settings.hud then
-        PocketsDB.settings.hud = DefaultHud()
+
+    -- nil (never saved before) means "use the default"; an explicit
+    -- true/false from a prior session must survive untouched.
+    if PocketsDB.settings.recentItemPreviewEnabled == nil then
+        PocketsDB.settings.recentItemPreviewEnabled = Pockets.Constants.DEFAULT_SETTINGS.recentItemPreviewEnabled
+    end
+
+    if not PocketsCharDB then
+        PocketsCharDB = { debug = { enabled = false, verbose = false } }
+    end
+    if not PocketsCharDB.debug then
+        PocketsCharDB.debug = { enabled = false, verbose = false }
+    end
+    -- Recent Items persistence pass: per-character (acquisitions are
+    -- character-specific), not per-account.
+    if not PocketsCharDB.recentItems then
+        PocketsCharDB.recentItems = {}
+    end
+
+    -- Full Inventory category collapse state (Full Inventory redesign) -
+    -- per-character (matches recentItems/hud above), keyed by categoryID
+    -- -> true (collapsed). Absent/false means expanded. Presentation-only
+    -- (never affects InventoryState/categorization).
+    if not PocketsCharDB.collapsedCategories then
+        PocketsCharDB.collapsedCategories = {}
+    end
+
+    -- HUD position pass: per-CHARACTER, not per-account - a position
+    -- shared across every character on the account meant a layout tuned
+    -- for one character's action bars/addons could overlap other UI
+    -- entirely on a different character. One-time migration: seed this
+    -- character's position from the OLD, no-longer-written account-wide
+    -- PocketsDB.settings.hud if this character has never saved a
+    -- position of its own yet, so at least the first character to log
+    -- in after this change keeps its already-tuned spot instead of
+    -- every character silently resetting to default. PocketsDB.settings.hud
+    -- itself is left alone afterward (inert legacy data, not deleted).
+    if not PocketsCharDB.hud then
+        local legacyHud = PocketsDB.settings.hud
+        PocketsCharDB.hud = legacyHud and CopyHud(legacyHud) or DefaultHud()
     end
     -- One-time migration: Pockets' V1 positioning uses a single fixed
     -- TOPLEFT anchor (UI layout pass §1). A position saved under the old
@@ -66,30 +115,23 @@ local function EnsureSavedVariables()
     -- commit, which turned out not to reliably match the TOPLEFT/TOPLEFT
     -- pairing actually applied). Treat that the same as a bad anchor
     -- type and reset to default rather than restoring an off-screen spot.
-    local hud = PocketsDB.settings.hud
+    local hud = PocketsCharDB.hud
     if hud.point ~= "TOPLEFT" or (hud.y or 0) > 1 or (hud.x or 0) < -1 then
         local locked = hud.locked
-        PocketsDB.settings.hud = DefaultHud()
-        PocketsDB.settings.hud.locked = locked or false
+        PocketsCharDB.hud = DefaultHud()
+        PocketsCharDB.hud.locked = locked or false
     end
 
-    -- Category view preference (Category List/Grid view pass): falls
-    -- back safely to the default for anything but the two known values,
-    -- rather than trusting an old/corrupted/hand-edited save.
-    local Mode = Pockets.Constants.CATEGORY_VIEW_MODE
-    if PocketsDB.settings.categoryViewMode ~= Mode.GRID and PocketsDB.settings.categoryViewMode ~= Mode.LIST then
-        PocketsDB.settings.categoryViewMode = Pockets.Constants.DEFAULT_SETTINGS.categoryViewMode
-    end
-
-    if not PocketsCharDB then
-        PocketsCharDB = { debug = { enabled = false, verbose = false } }
-    end
-    if not PocketsCharDB.debug then
-        PocketsCharDB.debug = { enabled = false, verbose = false }
+    -- Loot Log: per-character recent activity feed, bounded by
+    -- Constants.LOOT_LOG_MAX (see Core/LootLog.lua).
+    if type(PocketsCharDB.lootLog) ~= "table" then
+        PocketsCharDB.lootLog = { nextId = 1, entries = {} }
     end
 
     Pockets.SavedSettings = PocketsDB.settings
     Pockets.CharDB = PocketsCharDB
+    Pockets.Services.RecentItems:LoadPersisted(PocketsCharDB.recentItems)
+    Pockets.Services.LootLog:LoadPersisted(PocketsCharDB.lootLog)
 end
 
 local defaultBindingApplied = false
@@ -157,6 +199,8 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("BAG_UPDATE")
 mainFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
+mainFrame:RegisterEvent("PLAYER_MONEY")
+mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 mainFrame:RegisterEvent("MAIL_CLOSED")
 mainFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
 mainFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -168,8 +212,21 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
             InitializeAddon()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Money baseline for Loot Log. Taken here, not at ADDON_LOADED
+        -- (GetMoney can still read 0 that early, which would log the
+        -- whole purse as income). A later PEW (zoning) keeps the existing
+        -- baseline - ObserveMoney only sets it when none exists yet.
+        if Pockets.Services.LootLog.lastMoney == nil then
+            Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
+        end
         EnsureDefaultBinding()
         ScheduleRefresh("player_entering_world")
+    elseif event == "PLAYER_MONEY" then
+        Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
+    elseif event == "GET_ITEM_INFO_RECEIVED" then
+        -- Late item data: re-render visible Loot Log rows (no-op unless
+        -- it's the open view). Must not trigger a bag rescan.
+        Pockets.UI.Shell:RefreshLootLog()
     elseif event == "PLAYER_REGEN_DISABLED" then
         Pockets.Services.EventBus:Publish(Pockets.Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, { inCombat = true })
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -192,6 +249,7 @@ local function ShowHelp()
     print("|cffffff00/pockets show|r - Show/hide the HUD")
     print("|cffffff00/pockets toggle|r - Toggle the full inventory view")
     print("|cffffff00/pockets categoryview [grid|list]|r - Show or set the Category body view")
+    print("|cffffff00/pockets recentpreview [on|off]|r - Show or set the large Recent-item hover preview")
     print("|cffffff00/pockets help|r - Show this help")
     print("|cffffff00/pockets help dev|r - Show debug/testing commands")
     print("=========================")
@@ -212,6 +270,8 @@ local function ShowDevHelp()
     print("|cffffff00/pockets test sample <used> <total> <secondsAgo>|r - Inject a capacity sample")
     print("|cffffff00/pockets test category <itemID>|r - Print the category for an item")
     print("|cffffff00/pockets test recent <itemID> <quantity>|r - Inject a Recent Items entry")
+    print("|cffffff00/pockets test loot item <itemID> <quantity>|r - Inject a Loot Log item entry")
+    print("|cffffff00/pockets test loot money <copper>|r - Inject a Loot Log money entry (negative = expense)")
     print("===============================")
 end
 
@@ -236,6 +296,17 @@ local function HandleCommand(msg)
             print("[Pockets] Category view is currently " .. tostring(Pockets.SavedSettings.categoryViewMode))
         else
             print("[Pockets] Usage: /pockets categoryview grid|list")
+        end
+    elseif cmd == "recentpreview" then
+        local requested = (args[2] or ""):lower()
+        if requested == "on" or requested == "off" then
+            Pockets.SavedSettings.recentItemPreviewEnabled = (requested == "on")
+            print("[Pockets] Recent-item hover preview " .. (requested == "on" and "enabled" or "disabled"))
+        elseif requested == "" then
+            print("[Pockets] Recent-item hover preview is currently "
+                .. (Pockets.SavedSettings.recentItemPreviewEnabled and "on" or "off"))
+        else
+            print("[Pockets] Usage: /pockets recentpreview on|off")
         end
     elseif cmd == "debug" then
         Pockets.Debug:HandleCommand(args)

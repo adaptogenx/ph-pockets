@@ -60,6 +60,23 @@ function ItemAPI:IsPending(itemID)
     return cached == nil or cached.status == "pending"
 end
 
+-- Icon texture for an item, or nil if the client can't resolve it yet.
+-- Prefers already-cached metadata; GetItemIcon needs no item-cache round
+-- trip for most items, so Loot Log rows get their icon immediately.
+function ItemAPI:GetIcon(itemID)
+    if not itemID then
+        return nil
+    end
+    local cached = self.ItemCache[itemID]
+    if cached and cached.status == "ready" and cached.texture then
+        return cached.texture
+    end
+    if C_Item and C_Item.GetItemIconByID then
+        return C_Item.GetItemIconByID(itemID)
+    end
+    return GetItemIcon and GetItemIcon(itemID) or nil
+end
+
 -- Returns whether an item is currently a quest item (WoW Classic quest flag).
 function ItemAPI:IsQuestItem(itemID, itemLink)
     local _, _, _, _, _, itemClass = GetItemInfo(itemLink or itemID)

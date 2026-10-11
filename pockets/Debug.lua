@@ -246,8 +246,21 @@ function Debug:HandleTestCommand(args)
             Pockets.Services.RecentItems:Record({ itemID = itemID, quantity = quantity, timestamp = GetTime() })
             print(string.format("[Pockets] Recorded recent item %d x%d", itemID, quantity))
         end
+    elseif subCmd == "loot" then
+        local kind = args[3]
+        if kind == "item" and tonumber(args[4]) then
+            local itemID, quantity = tonumber(args[4]), tonumber(args[5]) or 1
+            local _, link = GetItemInfo(itemID)
+            Pockets.Services.LootLog:RecordItem(itemID, quantity, link)
+            print(string.format("[Pockets] Logged item %d x%d", itemID, quantity))
+        elseif kind == "money" and tonumber(args[4]) then
+            Pockets.Services.LootLog:RecordMoney(tonumber(args[4]))
+            print(string.format("[Pockets] Logged money %d", tonumber(args[4])))
+        else
+            print("[Pockets] Usage: /pockets test loot item <itemID> <quantity> | money <copper>")
+        end
     else
-        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>")
+        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>, loot item|money ...")
     end
 end
 

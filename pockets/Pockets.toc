@@ -22,6 +22,7 @@ Adapters/CombatAPI.lua
 Adapters/TooltipAPI.lua
 Adapters/BindingsAPI.lua
 Adapters/MailAPI.lua
+Adapters/MoneyAPI.lua
 
 # NOTE: Bindings.xml is intentionally NOT listed here. WoW auto-discovers
 # and parses a file literally named "Bindings.xml" in the addon's root
@@ -34,6 +35,7 @@ Adapters/MailAPI.lua
 Core/EventBus.lua
 Core/ItemCategorizer.lua
 Core/RecentItems.lua
+Core/LootLog.lua
 Core/CapacityEstimator.lua
 Core/InventoryState.lua
 Core/StackConsolidator.lua
@@ -45,9 +47,14 @@ UI/Header.lua
 UI/MetricRow.lua
 UI/PositionStrategy.lua
 UI/ItemButtonPool.lua
+UI/ItemPreview.lua
 UI/RecentItemStrip.lua
 UI/Search.lua
 UI/FlowLayout.lua
+UI/CategoryHeader.lua
+UI/ItemGrid.lua
+UI/ScrollBar.lua
+UI/LootLog.lua
 UI/Shell.lua
 UI/TooltipCounts.lua
 
@@ -60,6 +67,8 @@ Debug.lua
 Tests/TestRunner.lua
 Tests/CategorizerTests.lua
 Tests/RecentItemsTests.lua
+Tests/LootLogTests.lua
+Tests/LootLogUITests.lua
 Tests/CapacityEstimatorTests.lua
 Tests/InventoryStateTests.lua
 Tests/BagAPITests.lua
@@ -67,6 +76,7 @@ Tests/MailAPITests.lua
 Tests/SearchTests.lua
 Tests/ItemButtonPoolTests.lua
 Tests/FlowLayoutTests.lua
+Tests/ScrollBarTests.lua
 Tests/MoneyFormatTests.lua
 Tests/APITests.lua
 Tests/ShellTests.lua
