@@ -16,6 +16,9 @@ just pick up" without opening a traditional bag window.
 ./install.sh
 ```
 
+Installs to every detected Anniversary (`_anniversary_`) and Forever beta
+(`_classic_beta_`) AddOns folder. Pass a path to install to just one.
+
 ### Manual Installation (macOS & Windows)
 
 1. Copy the `pockets/` directory to your WoW AddOns folder:

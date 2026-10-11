@@ -211,15 +211,37 @@ end
 -- bag-major index frame, so each button gets its OWN tiny bagIndexFrame
 -- wrapper carrying the bagID - see Configure, which sets both IDs fresh
 -- every render.
+-- Buttons are NAMED. Modern templates (WoW Forever) declare their regions
+-- as "$parentCount" / "$parentIconTexture" etc. and Blizzard's helpers
+-- (SetItemButtonCount, ...) fall back to _G[button:GetName() .. "Count"];
+-- an anonymous button makes that concatenate nil (Forever M1 bug), and its
+-- $parent children all collapse onto the ancestor's name. Classic exposes
+-- the same regions as button.Count/.icon keys, so both are aliased below.
+local buttonSerial = 0
+local REGION_SUFFIXES = {
+    icon = "IconTexture",
+    Count = "Count",
+    IconBorder = "IconBorder",
+    Stock = "Stock",
+    NormalTexture = "NormalTexture",
+}
+
 local function CreateItemButton(parent)
     local bagIndexFrame = CreateFrame("Frame", nil, parent)
 
+    buttonSerial = buttonSerial + 1
+    local name = "PocketsItemButton" .. buttonSerial
     local button = CreateFrame(
         "Button",
-        nil,
+        name,
         bagIndexFrame,
         "ContainerFrameItemButtonTemplate,BackdropTemplate"
     )
+    for key, suffix in pairs(REGION_SUFFIXES) do
+        if button[key] == nil then
+            button[key] = _G[name .. suffix]
+        end
+    end
     button.bagIndexFrame = bagIndexFrame
     button:SetSize(SIZE, SIZE)
     button:RegisterForClicks("AnyUp")

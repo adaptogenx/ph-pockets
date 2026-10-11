@@ -169,3 +169,13 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: HandleInsecureClick pickups o
         "right-click used=%s picked=%s; left-click bag=%s slot=%s used=%s",
         tostring(rightUsed), tostring(rightPicked), tostring(pickedBag), tostring(pickedSlot), tostring(used))
 end)
+
+Pockets.Tests.TestRunner:Register("ItemButtonPool: pooled buttons are uniquely named (modern templates resolve _G[name..'Count'])", function()
+    local parent = CreateFrame("Frame")
+    local a = Pockets.UI.ItemButtonPool:Acquire(parent)
+    local b = Pockets.UI.ItemButtonPool:Acquire(parent)
+    local nameA, nameB = a:GetName(), b:GetName()
+    Pockets.UI.ItemButtonPool:ReleaseAll(parent)
+    local ok = nameA ~= nil and nameB ~= nil and nameA ~= nameB
+    return ok, ok and "OK" or string.format("names: %s / %s", tostring(nameA), tostring(nameB))
+end)
