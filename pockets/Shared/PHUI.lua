@@ -219,10 +219,19 @@ PHUI.NATIVE_CLOSE_BUTTON_SIZE = 32
 -- value, not an independently-chosen one.
 PHUI.PH_HUD_WIDTH = 266
 
+-- WoW Forever's UIPanelCloseButton art renders visibly larger than
+-- Classic's at the same size (user report: X too big), so it gets a
+-- smaller box there. Classic keeps pH's native 32.
+PHUI.FOREVER_CLOSE_BUTTON_SIZE = 24
+
 function PHUI.CreateCloseButton(parent, opts)
     opts = opts or {}
     local button = CreateFrame("Button", nil, parent, "UIPanelCloseButton")
     local size = opts.size or PHUI.NATIVE_CLOSE_BUTTON_SIZE
+    local ClientAPI = Pockets.Adapters.ClientAPI
+    if ClientAPI and ClientAPI:IsForever() then
+        size = PHUI.FOREVER_CLOSE_BUTTON_SIZE
+    end
     button:SetSize(size, size)
     if opts.onClick then
         button:SetScript("OnClick", opts.onClick)
