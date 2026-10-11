@@ -242,6 +242,18 @@ local function CreateItemButton(parent)
             button[key] = _G[name .. suffix]
         end
     end
+    -- Some modern templates expose neither key nor named global for these
+    -- regions. Create the two Pockets cannot render without, so Blizzard's
+    -- SetItemButtonCount/icon helpers always have something to write to.
+    if button.icon == nil then
+        button.icon = button:CreateTexture(name .. "IconTexture", "BORDER")
+        button.icon:SetAllPoints(button)
+    end
+    if button.Count == nil then
+        button.Count = button:CreateFontString(name .. "Count", "OVERLAY", "NumberFontNormal")
+        button.Count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -5, 2)
+        button.Count:Hide()
+    end
     button.bagIndexFrame = bagIndexFrame
     button:SetSize(SIZE, SIZE)
     button:RegisterForClicks("AnyUp")
@@ -305,9 +317,8 @@ function ItemButtonPool:Configure(button, record)
     -- actually shows/hides the count fontstring - it starts hidden, and
     -- a bare :SetText() alone never makes it visible again.
     local quantity = record.quantity or 0
-    if SetItemButtonCount then
-        SetItemButtonCount(button, quantity)
-    elseif button.Count then
+    local helperOk = SetItemButtonCount ~= nil and pcall(SetItemButtonCount, button, quantity)
+    if not helperOk and button.Count then
         button.Count:SetText(quantity > 1 and tostring(quantity) or "")
         if quantity > 1 then button.Count:Show() else button.Count:Hide() end
     end
