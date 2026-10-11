@@ -79,8 +79,8 @@ function Debug:DumpBags()
     for _, bag in ipairs(BagAPI:GetEquippedBags()) do
         local invSlot = BagAPI:ContainerIDToInventoryID(bag.bagID)
         local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
-        local bagName = bagLink and GetItemInfo(bagLink)
-        local bagFamily = bagLink and GetItemFamily and GetItemFamily(bagLink)
+        local bagName = bagLink and Pockets.Adapters.ItemAPI:RawGetItemInfo(bagLink)
+        local bagFamily = bagLink and Pockets.Adapters.ItemAPI:GetItemFamily(bagLink)
         local used = BagAPI:CountUsedSlots(bag.bagID, bag.slotCount)
         local isAmmo = BagAPI:IsAmmoBag(bag.bagID)
         print(string.format(
@@ -250,7 +250,7 @@ function Debug:HandleTestCommand(args)
         local kind = args[3]
         if kind == "item" and tonumber(args[4]) then
             local itemID, quantity = tonumber(args[4]), tonumber(args[5]) or 1
-            local _, link = GetItemInfo(itemID)
+            local _, link = Pockets.Adapters.ItemAPI:RawGetItemInfo(itemID)
             Pockets.Services.LootLog:RecordItem(itemID, quantity, link)
             print(string.format("[Pockets] Logged item %d x%d", itemID, quantity))
         elseif kind == "money" and tonumber(args[4]) then

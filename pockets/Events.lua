@@ -6,7 +6,7 @@
     rescanning on every individual event (TDD §8.1, §21).
 ]]
 
--- luacheck: globals PocketsDB PocketsCharDB GetAddOnMetadata BAG_UPDATE_DELAY PLAYERBANKSLOTS_FIRST_ID
+-- luacheck: globals PocketsDB PocketsCharDB BAG_UPDATE_DELAY PLAYERBANKSLOTS_FIRST_ID
 
 local ADDON_NAME, Pockets = ...
 
@@ -190,7 +190,7 @@ local function InitializeAddon()
 
     Pockets.Services.EventBus:Publish(Pockets.Constants.DOMAIN_EVENT.READY, nil)
 
-    local version = GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version") or "unknown"
+    local version = Pockets.Adapters.ClientAPI:GetAddonMetadata(ADDON_NAME, "Version") or "unknown"
     print(string.format("|cff00ff00[Pockets]|r Version %s loaded. Type /pockets help for commands.", version))
 end
 

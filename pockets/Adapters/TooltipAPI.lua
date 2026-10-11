@@ -12,16 +12,38 @@ Pockets.Adapters.TooltipAPI = Pockets.Adapters.TooltipAPI or {}
 local TooltipAPI = Pockets.Adapters.TooltipAPI
 
 TooltipAPI.hooked = false
+-- False when the client has no legacy item-tooltip handler (WoW Forever /
+-- modern tooltip pipeline). The carried-count line is then unavailable;
+-- modern TooltipDataProcessor integration is deferred to M3 (Forever §26).
+TooltipAPI.supported = nil
+
+-- Pure-ish feature check: does this tooltip still have the legacy handler?
+function TooltipAPI:HasLegacyItemHandler(tooltip)
+    if not tooltip or not tooltip.HookScript then
+        return false
+    end
+    if tooltip.HasScript then
+        local ok, has = pcall(tooltip.HasScript, tooltip, "OnTooltipSetItem")
+        return ok and has == true
+    end
+    return true
+end
 
 -- Registers a callback invoked with (tooltip, itemID, itemLink) whenever an
 -- item tooltip is shown. Safe to call multiple times; only hooks once.
+-- Silently does nothing (supported = false) where the legacy handler is gone.
 function TooltipAPI:OnItemTooltipShow(callback)
     if self.hooked then
         return
     end
     self.hooked = true
 
-    GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
+    if not self:HasLegacyItemHandler(GameTooltip) then
+        self.supported = false
+        return
+    end
+
+    local hookOk, hookErr = pcall(GameTooltip.HookScript, GameTooltip, "OnTooltipSetItem", function(tooltip)
         local ok, err = pcall(function()
             local _, itemLink = tooltip:GetItem()
             if not itemLink then
@@ -37,4 +59,8 @@ function TooltipAPI:OnItemTooltipShow(callback)
             Pockets.Debug:LogError("TooltipAPI hook failed: " .. tostring(err))
         end
     end)
+    self.supported = hookOk
+    if not hookOk and Pockets.Debug then
+        Pockets.Debug:LogError("TooltipAPI hook unavailable: " .. tostring(hookErr))
+    end
 end
