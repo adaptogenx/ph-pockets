@@ -375,6 +375,11 @@ PHUI.Icons = {
     -- Blizzard scroll item icon; boxed via CreateIconButton like Search
     -- because item icon art carries baked-in padding.
     SCROLL = "Interface\\Icons\\INV_Scroll_03",
+    -- "More / next" arrow (Recent strip's ">>"): Blizzard's spellbook
+    -- next-page arrow with its stock pressed variant - a real texture,
+    -- borderless like PLUS (the arrow art is its own button face).
+    NEXT = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up",
+    NEXT_PUSHED = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Down",
 }
 
 --- Borderless icon button: a plain Blizzard texture with no backdrop/box

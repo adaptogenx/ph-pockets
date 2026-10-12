@@ -115,12 +115,11 @@ function RecentItemStrip:Create(parent, opts)
     -- number actually shown.
     if opts.moreButton then
         local size = opts.moreButton.size or iconSize
-        strip.moreButton = PHUI.CreateIconButton(strip, size, nil, {
+        strip.moreButton = PHUI.CreateNativeIconButton(strip, size, PHUI.Icons.NEXT, {
+            pushedTexture = PHUI.Icons.NEXT_PUSHED,
             tooltipText = opts.moreButton.tooltipText,
             onClick = opts.moreButton.onClick,
         })
-        strip.moreButton.glyph = PHUI.CreateLabel(strip.moreButton, "primary", ">>", PHUI.Fonts.SMALL)
-        strip.moreButton.glyph:SetPoint("CENTER", 0, 0)
         strip.moreButton:Hide()
     end
 
