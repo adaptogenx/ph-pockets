@@ -94,6 +94,8 @@ globals = {
     "UseContainerItem",
     "OpenStackSplitFrame",
     "StackSplitFrame",
+    "ChatEdit_GetActiveWindow",
+    "ChatFrameUtil",
     "HandleModifiedItemClick",
     "IsModifiedClick",
     "GetInventorySlotInfo",

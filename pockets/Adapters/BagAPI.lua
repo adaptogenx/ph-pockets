@@ -356,6 +356,20 @@ function BagAPI:SplitStack(bagID, slotIndex, amount)
     end
 end
 
+-- True while a chat edit box is open/focused (shift-click should link).
+-- Tries the legacy global, the modern ChatFrameUtil, then the keyboard
+-- focus itself (chat edit boxes carry a .chatFrame field).
+function BagAPI:IsChatEditActive()
+    if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then
+        return true
+    end
+    if ChatFrameUtil and ChatFrameUtil.GetActiveWindow and ChatFrameUtil.GetActiveWindow() then
+        return true
+    end
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus ~= nil and focus.chatFrame ~= nil
+end
+
 function BagAPI:CanSplit()
     return OpenStackSplitFrame ~= nil or (StackSplitFrame ~= nil and StackSplitFrame.OpenStackSplitFrame ~= nil)
 end

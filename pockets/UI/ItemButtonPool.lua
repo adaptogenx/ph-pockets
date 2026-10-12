@@ -99,7 +99,11 @@ function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     if not self.interactive then
         return
     end
-    if IsModifiedClick and IsModifiedClick("SPLITSTACK") and BagAPI:CanSplit() then
+    -- With a chat edit box open, the split modifier (shift) means "link
+    -- this item", exactly like Blizzard's bags - so only split when chat
+    -- is not the click's target.
+    if IsModifiedClick and IsModifiedClick("SPLITSTACK") and BagAPI:CanSplit()
+        and not BagAPI:IsChatEditActive() then
         local bagID, slotID, quantity = ResolveInteractionStack(self)
         if bagID and quantity and quantity > 1 then
             -- Remember exactly which physical stack the split UI was
