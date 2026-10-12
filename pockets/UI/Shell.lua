@@ -882,6 +882,20 @@ function Shell:Render()
     local frame = self.frame
     local state = self.state
 
+    -- Closing in combat with protected item buttons: the root frame is in
+    -- their anchor chain, so SetPoint/SetSize on it (and re-laying-out
+    -- Glance's Recent strip) are blocked. Only do the allowed part - hide
+    -- the expanded container, show Glance, drop the backdrop - and finish
+    -- the layout when combat ends (OnCombatEnded re-renders).
+    if state == self.STATE.GLANCE and Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
+        frame.shell:Hide()
+        frame.glance:Show()
+        self:SetEscapeCatcherShown(false)
+        PHUI.ApplyBackdrop(frame, { bgAlpha = 0 })
+        self.renderDeferred = true
+        return
+    end
+
     -- Single root position ownership (§1/§2): every state - GLANCE
     -- included - reapplies the exact same saved TOPLEFT anchor through
     -- the one PositionStrategy-backed function before anything else runs.
