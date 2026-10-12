@@ -30,24 +30,26 @@ local PHUI = Pockets.UI.PHUI
 --------------------------------------------------
 -- Colors (ph/ph/UI_HUD.lua:42-61)
 --------------------------------------------------
+-- Palette per the Forever Glance TDD §3.3 (hex -> 0..1). Native values
+-- are preferred where visually equivalent; these are the approved ones.
 PHUI.Colors = {
-    TEXT_PRIMARY = { 0.86, 0.82, 0.70 },
-    TEXT_MUTED = { 0.62, 0.58, 0.50 },
+    TEXT_PRIMARY = { 0.902, 0.867, 0.784 },   -- #E6DDC8 warm ivory
+    TEXT_MUTED = { 0.663, 0.627, 0.557 },     -- #A9A08E secondary
     TEXT_DISABLED = { 0.45, 0.42, 0.38 },
 
-    ACCENT_GOOD = { 0.25, 0.78, 0.42 },
+    ACCENT_GOOD = { 0.388, 0.784, 0.475 },    -- #63C879 (<70%)
     ACCENT_NEUTRAL = { 0.55, 0.70, 0.55 },
-    ACCENT_BAD = { 0.85, 0.38, 0.32 },
-    ACCENT_WARNING = { 0.90, 0.65, 0.20 },
+    ACCENT_BAD = { 0.871, 0.349, 0.322 },     -- #DE5952 (>=90%)
+    ACCENT_WARNING = { 0.898, 0.722, 0.239 }, -- #E5B83D (70-89%)
     ACCENT_GOLD = { 1.00, 0.82, 0.00 },
 
-    BG_DARK = { 0.08, 0.07, 0.06, 0.85 },
-    BG_PARCHMENT = { 0.18, 0.16, 0.13, 0.85 },
-    BORDER_BRONZE = { 0.52, 0.42, 0.28 },
+    BG_DARK = { 0.082, 0.094, 0.090, 0.92 },     -- #151817 @ 92%
+    BG_PARCHMENT = { 0.082, 0.094, 0.090, 0.92 },
+    BORDER_BRONZE = { 0.596, 0.451, 0.263 },     -- #987343
 
     HOVER = { 0.22, 0.20, 0.17, 0.60 },
     SELECTED = { 0.35, 0.32, 0.26, 0.75 },
-    DIVIDER = { 0.28, 0.25, 0.22, 0.50 },
+    DIVIDER = { 0.380, 0.333, 0.255, 0.60 },     -- #615541 @ 60%
 }
 
 --------------------------------------------------
@@ -60,6 +62,17 @@ PHUI.Fonts = {
     LARGE = "GameFontNormalLarge",
     HEADER = { "Fonts\\FRIZQT__.TTF", 12, "" },
     GLYPH_OUTLINE = { "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" },
+
+    -- Glance TDD §3.2 role tokens. All use the client's own Friz Quadrata
+    -- face (no bundled font). TITLE is the single token for BOTH the Glance
+    -- and the expanded header title so they can never drift apart.
+    TITLE = { "Fonts\\FRIZQT__.TTF", 17, "" },
+    ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 14, "" },
+    ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    CAPACITY = { "Fonts\\FRIZQT__.TTF", 17, "" },
+    MONEY = { "Fonts\\FRIZQT__.TTF", 15, "" },
+    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 13, "" },
+    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 10, "" },
 }
 
 --------------------------------------------------
@@ -191,7 +204,16 @@ end
 -- fixed per style (see TEXT_STYLE_FONT); pass fontTemplate to override.
 function PHUI.CreateLabel(parent, styleName, text, fontTemplate)
     local template = fontTemplate or TEXT_STYLE_FONT[styleName] or PHUI.Fonts.NORMAL
-    local fontString = parent:CreateFontString(nil, "OVERLAY", template)
+    local fontString
+    if type(template) == "table" then
+        -- { path, size, flags } role token (PHUI.Fonts.TITLE etc.)
+        fontString = parent:CreateFontString(nil, "OVERLAY")
+        fontString:SetFont(template[1], template[2], template[3] or "")
+        fontString:SetShadowOffset(1, -1)
+        fontString:SetShadowColor(0, 0, 0, 0.9)
+    else
+        fontString = parent:CreateFontString(nil, "OVERLAY", template)
+    end
     PHUI.ApplyTextStyle(fontString, styleName)
     if text then
         fontString:SetText(text)

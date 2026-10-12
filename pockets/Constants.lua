@@ -189,6 +189,10 @@ Constants.LAYOUT = {
     -- (5*22 + 4*4 = 126, +6px slack = 132). Total width adds
     -- GLANCE_PADDING on both sides.
     GLANCE_WIDTH = 148,
+    -- Forever Glance (UI/PocketsGlance.lua): reserved widths of the bag and
+    -- money groups in the content row; Recent takes the remainder.
+    GLANCE_BAG_GROUP_WIDTH = 138,
+    GLANCE_MONEY_GROUP_WIDTH = 100,
     -- Glance's ">>" (more Recent) button sits in the strip's slot right
     -- after the last shown Recent icon, same size as a Recent icon, so it
     -- takes one icon slot (4 icons + ">>" at GLANCE_WIDTH) instead of
@@ -308,7 +312,7 @@ Constants.LAYOUT = {
     -- (Menu/Category/All) uses one shared, more opaque body alpha plus a
     -- slightly-more-opaque header/footer chrome band, so nothing hardcodes
     -- its own alpha independently.
-    GLANCE_ALPHA = 0.85,
+    GLANCE_ALPHA = 0.92,
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,
 

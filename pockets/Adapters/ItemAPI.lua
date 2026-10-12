@@ -44,6 +44,27 @@ function ItemAPI:GetItemFamily(itemLinkOrID)
     return family
 end
 
+-- classID, subClassID for an item/link without needing it cached (the
+-- "instant" lookup). Nil when unavailable or Secret.
+function ItemAPI:GetInstantClass(itemLinkOrID)
+    if not itemLinkOrID then
+        return nil
+    end
+    local classID, subClassID
+    if C_Item and C_Item.GetItemInfoInstant then
+        local _, _, _, _, _, c, sc = C_Item.GetItemInfoInstant(itemLinkOrID)
+        classID, subClassID = c, sc
+    elseif GetItemInfoInstant then
+        local _, _, _, _, _, c, sc = GetItemInfoInstant(itemLinkOrID)
+        classID, subClassID = c, sc
+    end
+    local ClientAPI = Pockets.Adapters.ClientAPI
+    if type(classID) ~= "number" or ClientAPI:IsSecret(classID) or ClientAPI:IsSecret(subClassID) then
+        return nil
+    end
+    return classID, subClassID
+end
+
 -- Asks the client to load item data; the answer arrives later via
 -- GET_ITEM_INFO_RECEIVED. Legacy GetItemInfo already queues the request.
 function ItemAPI:RequestItemData(itemID)

@@ -7,6 +7,8 @@
     the domain layer work against normalized Pockets-owned tables.
 ]]
 
+-- luacheck: globals Enum GetInventoryItemTexture
+
 local _, Pockets = ...
 
 Pockets.Adapters.BagAPI = Pockets.Adapters.BagAPI or {}
@@ -15,6 +17,78 @@ local BagAPI = Pockets.Adapters.BagAPI
 -- Backpack (0) + normal equipped bags (1-4) are general-purpose in WoW Classic.
 -- Ammo/soul/quiver bags are detected by bag family and reported separately.
 BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
+
+-- Dedicated reagent-bag slot (Forever / retail-style clients). The bagID is
+-- feature-detected from Enum.BagIndex.ReagentBag - never hardcoded - and is
+-- nil on clients without that slot (Classic/TBC).
+function BagAPI:GetReagentBagID()
+    if Enum and Enum.BagIndex and type(Enum.BagIndex.ReagentBag) == "number" then
+        return Enum.BagIndex.ReagentBag
+    end
+    return nil
+end
+
+-- Every bagID Pockets scans: backpack, the four normal slots, and the
+-- dedicated reagent slot when the client has one.
+function BagAPI:GetScannedBagIDs()
+    local ids = {}
+    for _, bagID in ipairs(self.GENERAL_BAG_IDS) do
+        table.insert(ids, bagID)
+    end
+    local reagent = self:GetReagentBagID()
+    if reagent then
+        table.insert(ids, reagent)
+    end
+    return ids
+end
+
+-- Bag item subclass (classID 1 "Container") -> specialized bag class key.
+-- Subclass 0 is the plain bag. classID 11 (Quiver) is handled as "ammo".
+-- Keys double as the tab label lookup below.
+local CONTAINER_SUBCLASS_TO_CLASS = {
+    [1] = "soul",
+    [2] = "herbs",
+    [3] = "enchanting",
+    [4] = "engineering",
+    [5] = "gems",
+    [6] = "mining",
+    [7] = "skinning", -- Leatherworking bag
+    [8] = "inscription",
+    [9] = "fishing",
+    [10] = "cooking",
+}
+local ITEM_CLASS_CONTAINER, ITEM_CLASS_QUIVER = 1, 11
+
+BagAPI.BAG_CLASS_LABEL = {
+    ammo = "Ammo",
+    reagents = "Reagents",
+    soul = "Soul",
+    herbs = "Herbs",
+    enchanting = "Enchanting",
+    engineering = "Engineering",
+    gems = "Gems",
+    mining = "Mining",
+    skinning = "Skinning",
+    inscription = "Inscription",
+    fishing = "Fishing",
+    cooking = "Cooking",
+}
+
+-- Stable tab order: Ammo -> Reagents -> the rest (spec §6.4).
+BagAPI.BAG_CLASS_ORDER = { "ammo", "reagents", "soul", "herbs", "enchanting", "engineering",
+    "gems", "mining", "skinning", "inscription", "fishing", "cooking" }
+
+-- Pure: bag item class/subclass -> specialized class key, or nil for a
+-- plain bag / unknown. Split out for tests.
+function BagAPI.ClassifyBagItem(classID, subClassID)
+    if classID == ITEM_CLASS_QUIVER then
+        return "ammo"
+    end
+    if classID == ITEM_CLASS_CONTAINER then
+        return CONTAINER_SUBCLASS_TO_CLASS[subClassID]
+    end
+    return nil
+end
 
 -- Last positive GetContainerNumSlots per bagID. Mail/AH scans can report
 -- 0 for bags that are still equipped; we keep the known size so Glance
@@ -206,6 +280,43 @@ function BagAPI:IsAmmoBag(bagID)
     return self:IsAmmoFamily(bagFamily)
 end
 
+-- Specialized class key for an equipped bag ("ammo", "reagents", "herbs",
+-- ...), or nil for the backpack / a plain bag. Treats unknown/undetectable
+-- bags conservatively as plain (general), except the dedicated reagent slot,
+-- which is always "reagents" (spec §2: never mislabel; generic Reagents if
+-- the bag type cannot be identified).
+function BagAPI:GetBagClass(bagID)
+    if bagID == 0 then
+        return nil
+    end
+    if bagID == self:GetReagentBagID() then
+        return "reagents"
+    end
+    local invSlot = self:ContainerIDToInventoryID(bagID)
+    local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
+    if not bagLink then
+        return nil
+    end
+    local classID, subClassID = Pockets.Adapters.ItemAPI:GetInstantClass(bagLink)
+    local byItem = self.ClassifyBagItem(classID, subClassID)
+    if byItem then
+        return byItem
+    end
+    if self:IsAmmoBag(bagID) then
+        return "ammo"
+    end
+    return nil
+end
+
+-- Icon of the equipped bag item itself (exact art, never a guessed path).
+function BagAPI:GetBagTexture(bagID)
+    local invSlot = self:ContainerIDToInventoryID(bagID)
+    if invSlot and GetInventoryItemTexture then
+        return GetInventoryItemTexture("player", invSlot)
+    end
+    return nil
+end
+
 -- Enumerates every bag currently equipped (backpack + all four bag slots),
 -- returning { bagID = ..., slotCount = ... } for bags with a known size.
 -- Second return is true when at least one equipped bag has no live slot
@@ -214,7 +325,7 @@ end
 function BagAPI:GetEquippedBags()
     local bags = {}
     local incomplete = false
-    for bagID = 0, 4 do
+    for _, bagID in ipairs(self:GetScannedBagIDs()) do
         local apiCount = self:GetBagSlotCount(bagID)
         local equipped = self:HasEquippedBag(bagID)
         local slotCount, bagIncomplete = self.ResolveSlotCount(
@@ -241,7 +352,7 @@ function BagAPI:ScanAllBags()
     local snapshot = {}
     local bags, incomplete = self:GetEquippedBags()
     for _, bag in ipairs(bags) do
-        local capacityClass = self:IsAmmoBag(bag.bagID)
+        local capacityClass = self:GetBagClass(bag.bagID) == "ammo"
             and Pockets.Constants.CAPACITY_CLASS.AMMO
             or Pockets.Constants.CAPACITY_CLASS.GENERAL
 
@@ -258,38 +369,61 @@ function BagAPI:ScanAllBags()
     return snapshot, incomplete
 end
 
--- Pure aggregation step, split out from GetCapacityCounts so the
--- general/ammo split is unit-testable without a live bag scan (TESTING_GUIDE.md).
--- bagEntries: array of { isAmmo, slotCount, usedSlots }.
+-- Pure aggregation step, split out from GetCapacityCounts so the class
+-- split is unit-testable without a live bag scan (TESTING_GUIDE.md).
+-- bagEntries: array of { bagClass (nil = general, else a BAG_CLASS key),
+-- slotCount, usedSlots, bagID?, texture? }. Legacy `isAmmo` is still
+-- honored. `general` counts ONLY plain bags - ammo, reagents and
+-- profession bags are reported separately (never double-counted);
+-- `specialized[key]` carries one pool per class with merged capacities.
 function BagAPI:ClassifyCapacity(bagEntries)
     local generalUsed, generalTotal = 0, 0
     local ammoUsed, ammoTotal = 0, 0
+    local specialized = {}
 
     for _, entry in ipairs(bagEntries) do
-        if entry.isAmmo then
-            ammoTotal = ammoTotal + entry.slotCount
-            ammoUsed = ammoUsed + entry.usedSlots
-        else
+        local bagClass = entry.bagClass or (entry.isAmmo and "ammo" or nil)
+        if bagClass == nil then
             generalTotal = generalTotal + entry.slotCount
             generalUsed = generalUsed + entry.usedSlots
+        else
+            local pool = specialized[bagClass]
+            if not pool then
+                pool = { used = 0, total = 0, bagIDs = {} }
+                specialized[bagClass] = pool
+            end
+            pool.total = pool.total + entry.slotCount
+            pool.used = pool.used + entry.usedSlots
+            if entry.bagID then
+                table.insert(pool.bagIDs, entry.bagID)
+            end
+            pool.texture = pool.texture or entry.texture
+            if bagClass == "ammo" then
+                ammoTotal = ammoTotal + entry.slotCount
+                ammoUsed = ammoUsed + entry.usedSlots
+            end
         end
     end
 
     return {
         general = { used = generalUsed, total = generalTotal },
         ammo = { used = ammoUsed, total = ammoTotal },
+        specialized = specialized,
     }
 end
 
--- Returns { general = {used,total}, ammo = {used,total} } slot counts.
--- Ammo capacity is keyed off equipped bag family (IsAmmoBag), never off
--- what item category is carried - an ammo-specialized bag (quiver/ammo
--- pouch) is the only thing that creates an ammo pool (PRD §3.9, TDD §7).
+-- Returns { general = {used,total}, ammo = {used,total}, specialized =
+-- { [class] = {used,total,bagIDs,texture} } } slot counts. Classes are
+-- keyed off the equipped bag itself (GetBagClass), never off what item
+-- category is carried (PRD §3.9, TDD §7).
 function BagAPI:GetCapacityCounts()
     local bagEntries = {}
     for _, bag in ipairs(self:GetEquippedBags()) do
+        local bagClass = self:GetBagClass(bag.bagID)
         table.insert(bagEntries, {
-            isAmmo = self:IsAmmoBag(bag.bagID),
+            bagClass = bagClass,
+            bagID = bag.bagID,
+            texture = bagClass and self:GetBagTexture(bag.bagID) or nil,
             slotCount = bag.slotCount,
             usedSlots = self:CountUsedSlots(bag.bagID, bag.slotCount),
         })

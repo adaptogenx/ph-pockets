@@ -135,6 +135,7 @@ function InventoryState:Refresh(reason)
     local capacity = Pockets.Adapters.BagAPI:GetCapacityCounts()
     self.generalCapacity = self:BuildCapacityResult(capacity.general)
     self.ammoCapacity = self:BuildCapacityResult(capacity.ammo)
+    self.specializedCapacities = self:BuildSpecialized(capacity.specialized)
 
     Pockets.Services.CapacityEstimator:AddSample(GetTime(), capacity.general.used, capacity.general.total)
 
@@ -151,6 +152,30 @@ function InventoryState:BuildCapacityResult(counts)
         free = total - used,
         utilization = total > 0 and (used / total) or 0,
     }
+end
+
+-- Ordered (stable: Ammo -> Reagents -> profession bags) array of
+-- { class, label, used, total, free, utilization, bagIDs, texture } for
+-- every equipped specialized bag class.
+function InventoryState:BuildSpecialized(specialized)
+    local BagAPI = Pockets.Adapters.BagAPI
+    local out = {}
+    for _, key in ipairs(BagAPI.BAG_CLASS_ORDER) do
+        local pool = specialized and specialized[key]
+        if pool and pool.total > 0 then
+            local result = self:BuildCapacityResult(pool)
+            result.class = key
+            result.label = BagAPI.BAG_CLASS_LABEL[key]
+            result.bagIDs = pool.bagIDs
+            result.texture = pool.texture
+            table.insert(out, result)
+        end
+    end
+    return out
+end
+
+function InventoryState:GetSpecializedCapacities()
+    return self.specializedCapacities or {}
 end
 
 function InventoryState:GetGeneralCapacity()
