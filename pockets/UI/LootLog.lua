@@ -1,6 +1,6 @@
 --[[
     UI/LootLog.lua - Loot Log body: a dense, chronological
-    `timestamp | loot` list of recent item and money changes.
+    `timestamp | loot` list of items the player looted (not a ledger).
 
     Shell owns the frame, header, footer, scrollFrame and ScrollBar (the
     same chrome Menu/Category/All use); this module only fills Shell's
@@ -12,10 +12,7 @@
     arithmetic is unit-testable without real font metrics; Render only
     supplies a real FontString-backed `measure`.
 
-    Columns: [timestamp, fixed, never wraps][gap][loot content, rest].
-    Item rows put icon + name (+ quantity) in the loot column; money rows
-    have no icon and start at the loot column's left edge, so there is no
-    empty icon column making them look awkward.
+    Columns: [timestamp, fixed, never wraps][gap][icon][gap][name (+ qty)].
 
     Rows are pooled (created lazily, reused); nothing runs per frame.
 ]]
@@ -90,10 +87,6 @@ function LootLog:ItemText(entry)
     return text
 end
 
-function LootLog:MoneyText(entry)
-    return Pockets.UI.MoneyFormat:Format(entry.copper)
-end
-
 --------------------------------------------------
 -- Pure layout
 --------------------------------------------------
@@ -104,12 +97,11 @@ end
 -- the taller of the wrapped text and the icon, plus vertical padding.
 function LootLog:PlanRows(entries, rowWidth, measure)
     local lootLeft = L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP
-    local itemTextLeft = lootLeft + L.GLANCE_METRIC_ICON_SIZE + L.LOOT_COLUMN_GAP
+    local textLeft = lootLeft + L.GLANCE_METRIC_ICON_SIZE + L.LOOT_COLUMN_GAP
 
     local rows = {}
     local y = 0
     for i, entry in ipairs(entries) do
-        local textLeft = entry.kind == "item" and itemTextLeft or lootLeft
         local textWidth = math.max(rowWidth - textLeft, 1)
         local textHeight = measure(entry, textWidth)
         local height = math.max(textHeight, L.GLANCE_METRIC_ICON_SIZE) + L.LOOT_ROW_PAD_Y * 2
@@ -217,7 +209,7 @@ function LootLog:Render(view, entries, rowWidth)
     local scratch = view.measureText
     local function measure(entry, textWidth)
         scratch:SetWidth(textWidth)
-        scratch:SetText(entry.kind == "item" and self:ItemText(entry) or self:MoneyText(entry))
+        scratch:SetText(self:ItemText(entry))
         return math.ceil(scratch:GetStringHeight() or 0)
     end
 
@@ -243,22 +235,14 @@ function LootLog:Render(view, entries, rowWidth)
         row.text:SetPoint("TOPLEFT", row, "TOPLEFT", plan.textLeft, -L.LOOT_ROW_PAD_Y)
         row.text:SetWidth(plan.textWidth)
 
-        if entry.kind == "item" then
-            row.icon:ClearAllPoints()
-            row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP, -L.LOOT_ROW_PAD_Y)
-            row.icon:SetTexture(Pockets.Adapters.ItemAPI:GetIcon(entry.itemID))
-            row.icon:Show()
-            row.text:SetText(self:ItemText(entry))
-            local c = PHUI.Colors.TEXT_PRIMARY
-            row.text:SetTextColor(c[1], c[2], c[3])
-            row:EnableMouse(true)
-        else
-            row.icon:Hide()
-            row.text:SetText(self:MoneyText(entry))
-            local c = entry.copper < 0 and PHUI.Colors.ACCENT_BAD or PHUI.Colors.TEXT_PRIMARY
-            row.text:SetTextColor(c[1], c[2], c[3])
-            row:EnableMouse(false)
-        end
+        row.icon:ClearAllPoints()
+        row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP, -L.LOOT_ROW_PAD_Y)
+        row.icon:SetTexture(Pockets.Adapters.ItemAPI:GetIcon(entry.itemID))
+        row.icon:Show()
+        row.text:SetText(self:ItemText(entry))
+        local c = PHUI.Colors.TEXT_PRIMARY
+        row.text:SetTextColor(c[1], c[2], c[3])
+        row:EnableMouse(true)
         row:Show()
     end
 

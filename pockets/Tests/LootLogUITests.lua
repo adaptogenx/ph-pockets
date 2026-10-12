@@ -23,14 +23,14 @@ local COWL = "|cff0070dd|Hitem:9999::::::::|h[Wizard's Cowl of the Eagle]|h|r"
 local function WithFreshLog(fn)
     local saved = {
         store = LootLog.store, entries = LootLog.entries, revision = LootLog.revision,
-        lastMoney = LootLog.lastMoney, clock = LootLog.clock,
+        clock = LootLog.clock,
     }
     LootLog.store = { nextId = 1, entries = {} }
     LootLog.entries = LootLog.store.entries
     LootLog.clock = function() return 1000 end
     local ok, a, b = pcall(fn)
     LootLog.store, LootLog.entries, LootLog.revision = saved.store, saved.entries, saved.revision
-    LootLog.lastMoney, LootLog.clock = saved.lastMoney, saved.clock
+    LootLog.clock = saved.clock
     if not ok then
         Shell:SetState(Shell.STATE.GLANCE)
         error(a, 0)
@@ -72,13 +72,6 @@ TestRunner:Register("LootLog UI: uncached item with no link falls back without e
     return ok and type(text) == "string" and text ~= "", ok and "OK" or tostring(text)
 end)
 
-TestRunner:Register("LootLog UI: money text is negative-aware and uses the shared formatter", function()
-    local gain = LootLogView:MoneyText({ kind = "money", copper = 213 })
-    local loss = LootLogView:MoneyText({ kind = "money", copper = -4500 })
-    local ok = gain == "2s 13c" and loss == "-45s"
-    return ok, ok and "OK" or string.format("got %q / %q", gain, loss)
-end)
-
 --------------------------------------------------
 -- Pure layout (fake measure)
 --------------------------------------------------
@@ -91,7 +84,7 @@ end
 local function Entries()
     return {
         { id = 3, kind = "item", itemID = 1, quantity = 1 },
-        { id = 2, kind = "money", copper = 100 },
+        { id = 2, kind = "item", itemID = 3, quantity = 1 },
         { id = 1, kind = "item", itemID = 2, quantity = 1 },
     }
 end
@@ -115,20 +108,21 @@ TestRunner:Register("LootLog layout: wrapped item grows its row; variable height
     return ok, ok and "OK" or "row offsets/total did not follow per-row heights"
 end)
 
-TestRunner:Register("LootLog layout: item text gets the width after timestamp + icon; money starts at the icon column", function()
+TestRunner:Register("LootLog layout: item text gets the width after timestamp + icon", function()
     local rows = LootLogView:PlanRows(Entries(), 250, Measure({}))
     local lootLeft = L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP
     local itemLeft = lootLeft + L.GLANCE_METRIC_ICON_SIZE + L.LOOT_COLUMN_GAP
     local ok = rows[1].textLeft == itemLeft and rows[1].textWidth == 250 - itemLeft
-        and rows[2].textLeft == lootLeft and rows[2].textWidth == 250 - lootLeft
+        and rows[2].textLeft == itemLeft and rows[2].textWidth == 250 - itemLeft
     return ok, ok and "OK" or "column math wrong"
 end)
 
 TestRunner:Register("LootLog layout: width passed to measure is the remaining content width", function()
     local seen = {}
     LootLogView:PlanRows(Entries(), 250, function(entry, width) seen[entry.id] = width; return LINE end)
-    local ok = seen[3] == seen[1] and seen[2] > seen[3]
-    return ok, ok and "OK" or "item rows must be narrower than money rows by the icon column"
+    local expected = 250 - (L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP + L.GLANCE_METRIC_ICON_SIZE + L.LOOT_COLUMN_GAP)
+    local ok = seen[1] == expected and seen[2] == expected and seen[3] == expected
+    return ok, ok and "OK" or "measure width must be the width after the timestamp and icon columns"
 end)
 
 TestRunner:Register("LootLog layout: a row is never shorter than its icon", function()
@@ -245,14 +239,15 @@ end)
 TestRunner:Register("LootLog Shell: few rows - rows shown, no scrollbar, empty text hidden", function()
     return WithFreshLog(function()
         LootLog:RecordItem(2589, 2, LINEN)
-        LootLog:RecordMoney(213)
-        LootLog:RecordMoney(-4500)
+        LootLog:RecordItem(9999, 1, COWL)
+        LootLog:RecordItem(2589, 1, LINEN)
         Shell:OpenLootLog()
         local view = Shell.frame.shell.lootView
         local ok = view.rows[1]:IsShown() and view.rows[3]:IsShown() and not view.rows[4]
             and not view.emptyText:IsShown() and not Shell.frame.shell.scrollBar:IsShown()
-        -- Newest first: the -45s expense is on top.
-        ok = ok and view.rows[1].text:GetText() == "-45s" and view.rows[3].entry.kind == "item"
+        -- Newest first: the last recorded entry is on top.
+        ok = ok and view.rows[1].entry.itemID == 2589 and view.rows[1].entry.quantity == 1
+            and view.rows[3].entry.quantity == 2
         Shell:SetState(Shell.STATE.GLANCE)
         return ok, ok and "OK" or "short log rendering wrong"
     end)
@@ -272,7 +267,7 @@ end)
 
 TestRunner:Register("LootLog Shell: reopening after scrolling starts at the top again", function()
     return WithFreshLog(function()
-        for i = 1, 60 do LootLog:RecordMoney(i) end
+        for i = 1, 60 do LootLog:RecordItem(2589, i, LINEN) end
         Shell:OpenLootLog()
         Shell.frame.shell.scrollBar.slider:SetValue(100)
         Shell:GoBack()
@@ -285,12 +280,12 @@ end)
 
 TestRunner:Register("LootLog Shell: a new event while viewing the newest keeps the newest visible", function()
     return WithFreshLog(function()
-        for i = 1, 60 do LootLog:RecordMoney(i) end
+        for i = 1, 60 do LootLog:RecordItem(2589, i, LINEN) end
         Shell:OpenLootLog()
-        LootLog:RecordMoney(999)
+        LootLog:RecordItem(9999, 999, COWL)
         Shell:Render() -- RefreshLootLog's deferred render, run synchronously
         local view = Shell.frame.shell.lootView
-        local ok = Shell.frame.shell.scrollFrame:GetVerticalScroll() == 0 and view.rows[1].entry.copper == 999
+        local ok = Shell.frame.shell.scrollFrame:GetVerticalScroll() == 0 and view.rows[1].entry.quantity == 999
         Shell:SetState(Shell.STATE.GLANCE)
         return ok, ok and "OK" or "newest entry not on top at offset 0"
     end)
@@ -298,7 +293,7 @@ end)
 
 TestRunner:Register("LootLog Shell: re-render keeps the player's scroll position", function()
     return WithFreshLog(function()
-        for i = 1, 60 do LootLog:RecordMoney(i) end
+        for i = 1, 60 do LootLog:RecordItem(2589, i, LINEN) end
         Shell:OpenLootLog()
         Shell.frame.shell.scrollBar.slider:SetValue(80)
         Shell:Render()
@@ -314,7 +309,7 @@ TestRunner:Register("LootLog Shell: no render work while Loot Log is not the vis
         local renders = 0
         local original = Shell.RenderLoot
         Shell.RenderLoot = function(self, ...) renders = renders + 1; return original(self, ...) end
-        LootLog:RecordMoney(5)
+        LootLog:RecordItem(2589, 5, LINEN)
         Shell:RefreshLootLog()
         Shell.RenderLoot = original
         local ok = renders == 0
@@ -322,14 +317,12 @@ TestRunner:Register("LootLog Shell: no render work while Loot Log is not the vis
     end)
 end)
 
-TestRunner:Register("LootLog Shell: item rows have a tooltip handler; money rows are not interactive", function()
+TestRunner:Register("LootLog Shell: item rows have a tooltip handler and are mouse-enabled", function()
     return WithFreshLog(function()
         LootLog:RecordItem(2589, 1, LINEN)
-        LootLog:RecordMoney(10)
         Shell:OpenLootLog()
         local rows = Shell.frame.shell.lootView.rows
-        local ok = rows[2].entry.kind == "item" and rows[2]:GetScript("OnEnter") ~= nil and rows[2]:IsMouseEnabled()
-            and not rows[1]:IsMouseEnabled()
+        local ok = rows[1].entry.kind == "item" and rows[1]:GetScript("OnEnter") ~= nil and rows[1]:IsMouseEnabled()
         Shell:SetState(Shell.STATE.GLANCE)
         return ok, ok and "OK" or "row interactivity wrong"
     end)

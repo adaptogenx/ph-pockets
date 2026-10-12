@@ -1,30 +1,28 @@
 --[[
-    Core/LootLog.lua - Bounded, persisted feed of recent item and money
-    changes (Loot Log). "What did I just get or spend?" - nothing more.
-    Durable history/analytics stay pH's job.
+    Core/LootLog.lua - Bounded, persisted feed of items the player LOOTED
+    (Loot Log). Not a ledger: no sales, purchases, gold, mail, crafting or
+    other bag changes - only items that arrived while looting.
 
-    Pockets-owned and fully standalone: nothing here reads pH. The event
-    shape (id, time, kind, itemID/itemLink/quantity | copper) is
-    deliberately plain so pH can consume it later through an optional
-    API without Pockets depending on pH.
+    Pockets-owned and fully standalone: nothing here reads pH. The entry
+    shape (id, time, kind, itemID/itemLink/quantity) is deliberately plain
+    so pH can consume it later through an optional API without Pockets
+    depending on pH.
 
-    EVENT SOURCES AND DEDUPLICATION
-    There is exactly ONE source per kind, so one player action can never
-    be recorded twice:
-      * items: InventoryState:Refresh()'s aggregate per-itemID POSITIVE
-        delta (same acquisition-vs-movement rule RecentItems uses, TDD
-        §8.2), fed in through RecordItem. This covers mob/chest loot,
-        gathering, quest item rewards, vendor purchases and crafting
-        results alike. CHAT_MSG_LOOT is intentionally NOT used: it would
-        be a second signal for the same acquisition (and a locale-
-        dependent text parse).
-      * money: PLAYER_MONEY -> ObserveMoney(), a diff of successive
-        GetMoney() values. CHAT_MSG_MONEY and QUEST_TURNED_IN's
-        moneyReward are intentionally NOT used: both describe a change
-        PLAYER_MONEY already reports. A repeated PLAYER_MONEY with an
-        unchanged balance yields a zero delta and records nothing.
-    No attribution (mob/NPC/quest) is recorded - WoW doesn't reliably
-    say why money or an item changed.
+    WHAT COUNTS AS LOOT, AND DEDUPLICATION
+    One source, so one acquisition can never be recorded twice: the
+    aggregate per-itemID POSITIVE delta from InventoryState:Refresh() (the
+    same acquisition-vs-movement rule RecentItems uses, TDD §8.2), fed in
+    through ObserveAcquisition. That delta alone cannot tell loot from a
+    vendor purchase, mail, quest reward or crafting result, so it is only
+    accepted while a LOOT CONTEXT is active: the loot window is open, or
+    closed within LOOT_CONTEXT_GRACE_SECONDS (bag updates arrive shortly
+    after the window closes, especially with auto-loot). Sales and
+    purchases happen with a merchant window and never a loot window, so
+    they are never logged. CHAT_MSG_LOOT is intentionally NOT used (locale-
+    dependent text parse and a second signal for the same acquisition).
+    Known gap: items awarded by a group-loot roll after the window closed
+    arrive outside a loot context and are not logged.
+    No attribution (mob/NPC) is recorded.
 
     Order: entries are newest-first by a monotonically increasing `id`
     that is persisted, so simultaneous events keep their insertion order
@@ -42,12 +40,12 @@ local Constants = Pockets.Constants
 LootLog.store = LootLog.store or { nextId = 1, entries = {} }
 LootLog.entries = LootLog.store.entries -- same table as store.entries
 LootLog.revision = LootLog.revision or 0
-LootLog.lastMoney = nil
+LootLog.lootWindowOpen = false
+LootLog.lootClosedAt = nil
 LootLog.clock = LootLog.clock or time
 
 local KIND_ITEM = "item"
-local KIND_MONEY = "money"
-LootLog.KIND = { ITEM = KIND_ITEM, MONEY = KIND_MONEY }
+LootLog.KIND = { ITEM = KIND_ITEM }
 
 local function Push(self, entry)
     entry.id = self.store.nextId
@@ -73,28 +71,29 @@ function LootLog:RecordItem(itemID, quantity, itemLink)
     return Push(self, { kind = KIND_ITEM, itemID = itemID, quantity = quantity, itemLink = itemLink })
 end
 
--- copper is signed: positive income, negative expense.
-function LootLog:RecordMoney(copper)
-    copper = math.floor(tonumber(copper) or 0)
-    if copper == 0 then
-        return nil
+-- Loot window tracking (LOOT_OPENED / LOOT_CLOSED).
+function LootLog:SetLootWindowOpen(isOpen)
+    self.lootWindowOpen = isOpen and true or false
+    if not isOpen then
+        self.lootClosedAt = self.clock()
     end
-    return Push(self, { kind = KIND_MONEY, copper = copper })
 end
 
--- Called on every PLAYER_MONEY with the current balance. The first call
--- only establishes the baseline (login must not look like income).
-function LootLog:ObserveMoney(currentMoney)
-    currentMoney = tonumber(currentMoney)
-    if not currentMoney then
+function LootLog:IsLootContextActive()
+    if self.lootWindowOpen then
+        return true
+    end
+    return self.lootClosedAt ~= nil
+        and (self.clock() - self.lootClosedAt) <= Constants.LOOT_CONTEXT_GRACE_SECONDS
+end
+
+-- The single entry point for bag-derived acquisitions: records only while
+-- a loot context is active (see header). Returns the entry or nil.
+function LootLog:ObserveAcquisition(itemID, quantity, itemLink)
+    if not self:IsLootContextActive() then
         return nil
     end
-    local previous = self.lastMoney
-    self.lastMoney = currentMoney
-    if previous == nil then
-        return nil
-    end
-    return self:RecordMoney(currentMoney - previous)
+    return self:RecordItem(itemID, quantity, itemLink)
 end
 
 -- Newest first. Returns the live table when no limit is given.
@@ -138,9 +137,9 @@ function LootLog:LoadPersisted(saved)
     local maxId = 0
     for i = #entries, 1, -1 do
         local e = entries[i]
+        -- Money/other legacy kinds from earlier versions are dropped.
         local valid = type(e) == "table" and type(e.id) == "number" and type(e.time) == "number"
-            and ((e.kind == KIND_ITEM and e.itemID and (e.quantity or 0) > 0)
-                or (e.kind == KIND_MONEY and type(e.copper) == "number" and e.copper ~= 0))
+            and e.kind == KIND_ITEM and e.itemID and (e.quantity or 0) > 0
         if valid then
             maxId = math.max(maxId, e.id)
         else

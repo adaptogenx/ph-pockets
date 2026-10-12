@@ -91,7 +91,7 @@ local function RecordAcquisitions(oldTotals, newTotals, itemsByID)
         })
         -- Loot Log's item feed (see Core/LootLog.lua for why this diff is
         -- its single item source).
-        Pockets.Services.LootLog:RecordItem(acquisition.itemID, acquisition.quantity, itemLink)
+        Pockets.Services.LootLog:ObserveAcquisition(acquisition.itemID, acquisition.quantity, itemLink)
     end
 end
 

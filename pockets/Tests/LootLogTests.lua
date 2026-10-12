@@ -1,6 +1,6 @@
 --[[
     Tests/LootLogTests.lua - Core/LootLog.lua: event storage, ordering,
-    bounds, persistence, money observation and single-source dedup.
+    bounds, persistence, loot-context gating and single-source dedup.
 
     Every test runs against a throwaway store (WithFreshLog) and restores
     the player's real log afterward - these tests must never wipe or
@@ -16,15 +16,15 @@ local TestRunner = Pockets.Tests.TestRunner
 local function WithFreshLog(fn)
     local saved = {
         store = LootLog.store, entries = LootLog.entries, revision = LootLog.revision,
-        lastMoney = LootLog.lastMoney, clock = LootLog.clock,
+        lootWindowOpen = LootLog.lootWindowOpen, lootClosedAt = LootLog.lootClosedAt, clock = LootLog.clock,
     }
     LootLog.store = { nextId = 1, entries = {} }
     LootLog.entries = LootLog.store.entries
-    LootLog.lastMoney = nil
+    LootLog.lootWindowOpen, LootLog.lootClosedAt = false, nil
     LootLog.clock = function() return 1000 end -- every event in the same second
     local ok, a, b = pcall(fn)
     LootLog.store, LootLog.entries, LootLog.revision = saved.store, saved.entries, saved.revision
-    LootLog.lastMoney, LootLog.clock = saved.lastMoney, saved.clock
+    LootLog.lootWindowOpen, LootLog.lootClosedAt, LootLog.clock = saved.lootWindowOpen, saved.lootClosedAt, saved.clock
     if not ok then
         error(a, 0)
     end
@@ -58,25 +58,13 @@ TestRunner:Register("LootLog: invalid item events (zero/negative/missing) are ig
     end)
 end)
 
-TestRunner:Register("LootLog: money gain and expense recorded with sign", function()
-    return WithFreshLog(function()
-        LootLog:RecordMoney(213)
-        LootLog:RecordMoney(-4500)
-        LootLog:RecordMoney(0)
-        local entries = LootLog:GetEntries()
-        local ok = #entries == 2 and entries[2].copper == 213 and entries[1].copper == -4500
-            and entries[1].kind == "money"
-        return ok, ok and "OK" or "expected +213 then -4500 and no zero entry"
-    end)
-end)
-
 TestRunner:Register("LootLog: newest first, and same-second events keep insertion order", function()
     return WithFreshLog(function()
         LootLog:RecordItem(1, 1)
-        LootLog:RecordMoney(10)
+        LootLog:RecordItem(3, 1)
         LootLog:RecordItem(2, 1)
         local e = LootLog:GetEntries()
-        local ok = e[1].itemID == 2 and e[2].copper == 10 and e[3].itemID == 1
+        local ok = e[1].itemID == 2 and e[2].itemID == 3 and e[3].itemID == 1
             and e[1].time == e[3].time and e[1].id > e[2].id and e[2].id > e[3].id
         return ok, ok and "OK" or "ordering is not strictly newest-first by id within one second"
     end)
@@ -100,49 +88,6 @@ TestRunner:Register("LootLog: GetEntries(limit) returns the newest N", function(
         local e = LootLog:GetEntries(2)
         local ok = #e == 2 and e[1].itemID == 5 and e[2].itemID == 4
         return ok, ok and "OK" or "limit did not return newest-first slice"
-    end)
-end)
-
--- Money observation / dedup ---------------------------------------------
-
-TestRunner:Register("LootLog: first money observation is only a baseline (login is not income)", function()
-    return WithFreshLog(function()
-        LootLog:ObserveMoney(123456)
-        local ok = #LootLog:GetEntries() == 0 and LootLog.lastMoney == 123456
-        return ok, ok and "OK" or "baseline observation was recorded as an event"
-    end)
-end)
-
-TestRunner:Register("LootLog: PLAYER_MONEY diff records gain, then expense", function()
-    return WithFreshLog(function()
-        LootLog:ObserveMoney(1000)
-        LootLog:ObserveMoney(1213)
-        LootLog:ObserveMoney(768)
-        local e = LootLog:GetEntries()
-        local ok = #e == 2 and e[2].copper == 213 and e[1].copper == -445
-        return ok, ok and "OK" or "expected +213 then -445"
-    end)
-end)
-
-TestRunner:Register("LootLog dedup: repeated PLAYER_MONEY with an unchanged balance records nothing", function()
-    return WithFreshLog(function()
-        LootLog:ObserveMoney(5000)
-        LootLog:ObserveMoney(5100)
-        LootLog:ObserveMoney(5100)
-        LootLog:ObserveMoney(5100)
-        local ok = #LootLog:GetEntries() == 1
-        return ok, ok and "OK" or "a repeated PLAYER_MONEY duplicated the money event"
-    end)
-end)
-
-TestRunner:Register("LootLog dedup: quest money is one entry (PLAYER_MONEY is the only money source)", function()
-    -- A quest turn-in fires QUEST_TURNED_IN (moneyReward), CHAT_MSG_MONEY
-    -- and PLAYER_MONEY. Only PLAYER_MONEY is wired, so Pockets sees one.
-    return WithFreshLog(function()
-        LootLog:ObserveMoney(0)
-        LootLog:ObserveMoney(2500)
-        local ok = #LootLog:GetEntries() == 1 and LootLog:GetEntries()[1].copper == 2500
-        return ok, ok and "OK" or "expected exactly one +2500 entry"
     end)
 end)
 
@@ -185,6 +130,59 @@ local function Slot(bag, index, itemID, quantity)
     return { bagID = bag, slotIndex = index, itemID = itemID, quantity = quantity, itemLink = "item:" .. itemID }
 end
 
+-- Loot context gating ------------------------------------------------------
+
+TestRunner:Register("LootLog: no loot context => acquisitions (purchases, mail, quest, crafting) are NOT logged", function()
+    return WithFreshLog(function()
+        local e1 = LootLog:ObserveAcquisition(2589, 5)
+        local ok = e1 == nil and #LootLog:GetEntries() == 0 and LootLog:IsLootContextActive() == false
+        return ok, ok and "OK" or "an acquisition outside a loot window was logged"
+    end)
+end)
+
+TestRunner:Register("LootLog: loot window open => acquisitions are logged", function()
+    return WithFreshLog(function()
+        LootLog:SetLootWindowOpen(true)
+        LootLog:ObserveAcquisition(2589, 5, "item:2589")
+        local e = LootLog:GetEntries()
+        local ok = #e == 1 and e[1].itemID == 2589 and e[1].quantity == 5
+        return ok, ok and "OK" or "loot-window acquisition was not logged"
+    end)
+end)
+
+TestRunner:Register("LootLog: bag updates just after the window closes still count; later ones do not", function()
+    return WithFreshLog(function()
+        local now = 1000
+        LootLog.clock = function() return now end
+        LootLog:SetLootWindowOpen(true)
+        LootLog:SetLootWindowOpen(false)
+        now = 1000 + Constants.LOOT_CONTEXT_GRACE_SECONDS
+        local within = LootLog:ObserveAcquisition(1, 1) ~= nil
+        now = 1000 + Constants.LOOT_CONTEXT_GRACE_SECONDS + 1
+        local after = LootLog:ObserveAcquisition(2, 1) ~= nil
+        local ok = within and not after
+        return ok, ok and "OK" or string.format("within grace=%s after grace=%s", tostring(within), tostring(after))
+    end)
+end)
+
+TestRunner:Register("LootLog: a vendor sale/purchase flow (no loot window) logs nothing", function()
+    return WithFreshLog(function()
+        local slots = {}
+        local ok
+        WithStubbedBags(slots, function()
+            local InventoryState = Pockets.Services.InventoryState
+            slots.current = { Slot(0, 1, 2589, 10) }
+            InventoryState:Refresh("baseline")
+            slots.current = {}                                  -- sold
+            InventoryState:Refresh("sold")
+            slots.current = { Slot(0, 1, 159, 5) }              -- bought water
+            InventoryState:Refresh("bought")
+            ok = #LootLog:GetEntries() == 0
+        end)
+        return ok, ok and "OK" or "a sale/purchase was logged as loot"
+    end)
+end)
+
 TestRunner:Register("LootLog dedup: moving/splitting/combining stacks is not an acquisition", function()
     return WithFreshLog(function()
         local slots = {}
@@ -211,6 +209,7 @@ TestRunner:Register("LootLog dedup: one acquisition across two bags logs one ite
         local ok, detail
         WithStubbedBags(slots, function()
             local InventoryState = Pockets.Services.InventoryState
+            LootLog:SetLootWindowOpen(true)
             slots.current = { Slot(0, 1, 2589, 10) }
             InventoryState:Refresh("baseline")
             -- +5 landing as a new stack in another bag.
@@ -230,6 +229,7 @@ TestRunner:Register("LootLog: simultaneous acquisitions land in a deterministic 
         local ok
         WithStubbedBags(slots, function()
             local InventoryState = Pockets.Services.InventoryState
+            LootLog:SetLootWindowOpen(true)
             slots.current = {}
             InventoryState:Refresh("baseline")
             slots.current = { Slot(0, 1, 30, 1), Slot(0, 2, 10, 1), Slot(0, 3, 20, 1) }
@@ -259,10 +259,11 @@ TestRunner:Register("LootLog: LoadPersisted drops malformed entries, re-sorts, a
         }
         LootLog:LoadPersisted(saved)
         local e = LootLog:GetEntries()
-        local ok = #e == 3 and e[1].id == 7 and e[2].id == 6 and e[3].id == 3 and saved.nextId == 8
+        -- Legacy money entries (ids 7 and 5) are dropped too.
+        local ok = #e == 2 and e[1].id == 6 and e[2].id == 3 and saved.nextId == 7
             and LootLog.entries == saved.entries
         local newest = LootLog:RecordItem(1, 1)
-        ok = ok and newest.id == 8 and LootLog:GetEntries()[1] == newest
+        ok = ok and newest.id == 7 and LootLog:GetEntries()[1] == newest
         return ok, ok and "OK" or "persisted load did not sanitize/sort or nextId regressed"
     end)
 end)
@@ -271,7 +272,7 @@ TestRunner:Register("LootLog: LoadPersisted adopts the saved table so later even
     return WithFreshLog(function()
         local saved = { nextId = 1, entries = {} }
         LootLog:LoadPersisted(saved)
-        LootLog:RecordMoney(50)
+        LootLog:RecordItem(1, 1)
         local ok = #saved.entries == 1 and saved.nextId == 2
         return ok, ok and "OK" or "events recorded after load did not land in the persisted table"
     end)
@@ -283,8 +284,8 @@ TestRunner:Register("LootLog: publishes LOOT_LOGGED once per recorded event", fu
         local owner = {}
         Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.LOOT_LOGGED, function() count = count + 1 end, owner)
         LootLog:RecordItem(1, 1)
-        LootLog:RecordMoney(5)
-        LootLog:RecordMoney(0)
+        LootLog:RecordItem(2, 3)
+        LootLog:RecordItem(nil, 1)
         Pockets.Services.EventBus:UnsubscribeOwner(owner)
         local ok = count == 2
         return ok, ok and "OK" or ("expected 2 publishes, got " .. count)
@@ -302,9 +303,6 @@ TestRunner:Register("LootLog: works with pH absent (no pH global is read or requ
         _G[ledgerKey] = nil
         local ok, err = pcall(function()
             LootLog:RecordItem(1, 1)
-            LootLog:ObserveMoney(10)
-            LootLog:ObserveMoney(20)
-            Pockets.UI.MoneyFormat:Format(-20)
         end)
         _G[ledgerKey] = savedLedger
         return ok, ok and "OK" or tostring(err)

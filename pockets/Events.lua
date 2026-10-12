@@ -195,7 +195,8 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("BAG_UPDATE")
 mainFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
-mainFrame:RegisterEvent("PLAYER_MONEY")
+mainFrame:RegisterEvent("LOOT_OPENED")
+mainFrame:RegisterEvent("LOOT_CLOSED")
 mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 mainFrame:RegisterEvent("MAIL_CLOSED")
 mainFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
@@ -208,17 +209,12 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
             InitializeAddon()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Money baseline for Loot Log. Taken here, not at ADDON_LOADED
-        -- (GetMoney can still read 0 that early, which would log the
-        -- whole purse as income). A later PEW (zoning) keeps the existing
-        -- baseline - ObserveMoney only sets it when none exists yet.
-        if Pockets.Services.LootLog.lastMoney == nil then
-            Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
-        end
         EnsureDefaultBinding()
         ScheduleRefresh("player_entering_world")
-    elseif event == "PLAYER_MONEY" then
-        Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
+    elseif event == "LOOT_OPENED" then
+        Pockets.Services.LootLog:SetLootWindowOpen(true)
+    elseif event == "LOOT_CLOSED" then
+        Pockets.Services.LootLog:SetLootWindowOpen(false)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         -- Late item data: re-render visible Loot Log rows (no-op unless
         -- it's the open view). Must not trigger a bag rescan.
@@ -269,7 +265,6 @@ local function ShowDevHelp()
     print("|cffffff00/pockets test category <itemID>|r - Print the category for an item")
     print("|cffffff00/pockets test recent <itemID> <quantity>|r - Inject a Recent Items entry")
     print("|cffffff00/pockets test loot item <itemID> <quantity>|r - Inject a Loot Log item entry")
-    print("|cffffff00/pockets test loot money <copper>|r - Inject a Loot Log money entry (negative = expense)")
     print("===============================")
 end
 
