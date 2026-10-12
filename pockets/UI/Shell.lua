@@ -18,6 +18,8 @@
     data (§14 Performance).
 ]]
 
+-- luacheck: globals SecureHandlerWrapScript RegisterStateDriver UISpecialFrames
+
 local _, Pockets = ...
 
 Pockets.UI.Shell = Pockets.UI.Shell or {}
@@ -572,7 +574,12 @@ function Shell:Initialize()
         return
     end
 
-    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, "BackdropTemplate")
+    -- Where item buttons are secure (Forever), both top-level frames are
+    -- secure handlers too, so a restricted snippet can show/hide them in
+    -- combat. Insecure code may still show/hide them out of combat.
+    self.useSecure = Pockets.Adapters.BagAPI:UsesSecureItemAttributes() == true
+    local frameTemplate = self.useSecure and "SecureHandlerBaseTemplate,BackdropTemplate" or "BackdropTemplate"
+    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, frameTemplate)
     self.root = frame
 
     -- The expanded view (Menu/Category/All/Search/Loot) is its OWN top-level
@@ -581,7 +588,7 @@ function Shell:Initialize()
     -- re-anchored or resized then. Keeping the expanded item buttons under a
     -- separate chain means Glance can still be touched, and the expanded
     -- frame is only ever shown/hidden in combat (never resized/re-anchored).
-    local expanded = CreateFrame("Button", "PocketsExpandedFrame", UIParent, "BackdropTemplate")
+    local expanded = CreateFrame("Button", "PocketsExpandedFrame", UIParent, frameTemplate)
     expanded:Hide()
     self.expanded = expanded
 
@@ -675,6 +682,7 @@ function Shell:Initialize()
 
     self:BuildGlance()
     self:BuildShell()
+    self:BuildSecureControls()
     self:RestorePosition()
 
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.CAPACITY_CHANGED, function() self:OnDataChanged() end, self)
@@ -914,6 +922,7 @@ end
 -- PLAYER_REGEN_ENABLED: repair secure bindings from current state, then
 -- paint whatever was deferred.
 function Shell:OnCombatEnded()
+    self:UpdateCombatBindings()
     local pool = Pockets.UI.ItemButtonPool
     local hadDeferred = pool:Reconcile()
     if self.renderDeferred or hadDeferred then
@@ -926,54 +935,158 @@ end
 -- Plain Show/Hide only - allowed in combat.
 function Shell:ApplyVisibility()
     local showExpanded = self.state ~= self.STATE.GLANCE
-    if self.userHidden then
-        self.root:Hide()
-        self.expanded:Hide()
+    -- Insecure show/hide of these frames is blocked in combat; there only
+    -- the secure controls (BuildSecureControls) change visibility.
+    if self:IsCombatBlocked() then
         return
     end
-    self.root:SetShown(not showExpanded)
-    self.expanded:SetShown(showExpanded)
+    -- Expanded is hidden BEFORE root: its secure OnHide wrap shows root.
+    if self.userHidden then
+        self.expanded:Hide()
+        self.root:Hide()
+        return
+    end
+    if showExpanded then
+        self.expanded:Show()
+        self.root:Hide()
+    else
+        self.expanded:Hide()
+        self.root:Show()
+    end
 end
 
--- Views whose layout can be re-shown in combat as-is.
-local COMBAT_REOPENABLE = {
-    [Shell.STATE.MENU] = true,
-    [Shell.STATE.CATEGORY] = true,
-    [Shell.STATE.ALL] = true,
-}
+-- In combat, visibility is changed only by the secure controls; state just
+-- follows what is actually on screen.
+function Shell:SyncStateFromVisibility()
+    if self.expanded:IsShown() then
+        local shown = self.displayedState
+        if not shown or shown == self.STATE.GLANCE then
+            shown = self.STATE.ALL
+        end
+        self.state = shown
+        self.context = self.displayedContext or {}
+        self.userHidden = false
+        self.expandedVisible = true
+    else
+        self.state = self.STATE.GLANCE
+        self.expandedVisible = false
+    end
+    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
+end
 
 function Shell:RenderInCombat()
     local pool = Pockets.UI.ItemButtonPool
     self.renderDeferred = true
     pool:ValidateAll()
     pool:RefreshCounts()
+    self:SyncStateFromVisibility()
+end
 
-    if self.state == self.STATE.GLANCE then
-        self:SetEscapeCatcherShown(false)
-        self:ApplyVisibility()
-        self.expandedVisible = false
+-- Secure show/hide controls (Forever, protected item buttons). Restricted
+-- snippets may show/hide protected frames in combat; insecure code may not.
+--   * PocketsSecureToggle: bound to the Toggle Full Inventory key(s) while
+--     in combat (state driver below).
+--   * "+" on Glance (open) and X on the expanded header (close): secure
+--     overlays that exist only in combat, over the normal buttons.
+--   * Escape: the expanded frame is in UISpecialFrames, so Blizzard's own
+--     secure code hides it.
+local TOGGLE_SNIPPET = [[
+    local e = self:GetFrameRef("expanded")
+    local r = self:GetFrameRef("root")
+    local action = self:GetAttribute("pocketsaction") or "toggle"
+    local open
+    if action == "open" then
+        open = true
+    elseif action == "close" then
+        open = false
+    else
+        open = not e:IsShown()
+    end
+    if open then
+        e:Show()
+        r:Hide()
+    else
+        e:Hide()
+        r:Show()
+    end
+]]
+
+function Shell:OnSecureToggle()
+    self:SyncStateFromVisibility()
+    self:Render()
+end
+
+local function MakeSecureClicker(name, parent, action)
+    local b = CreateFrame("Button", name, parent, "SecureHandlerClickTemplate")
+    b:SetFrameRef("expanded", Shell.expanded)
+    b:SetFrameRef("root", Shell.root)
+    b:SetAttribute("pocketsaction", action)
+    b:SetAttribute("_onclick", TOGGLE_SNIPPET)
+    b:RegisterForClicks("AnyUp")
+    b:HookScript("PostClick", function() Shell:OnSecureToggle() end)
+    return b
+end
+
+function Shell:BuildSecureControls()
+    if not self.useSecure or not SecureHandlerWrapScript then
         return
     end
 
-    if self.expandedVisible then
-        -- Already open: navigation needs a re-layout, which waits. Keep
-        -- showing (and clicking) what is on screen.
-        self.state = self.displayedState or self.state
-        self.context = self.displayedContext or self.context
-        self:SetEscapeCatcherShown(true)
-        return
-    end
+    local toggle = MakeSecureClicker("PocketsSecureToggle", UIParent, "toggle")
+    toggle:SetSize(1, 1)
+    self.secureToggle = toggle
 
-    if COMBAT_REOPENABLE[self.laidOutState] then
-        self.state = self.laidOutState
-        self.context = self.laidOutContext or {}
-        self.displayedState, self.displayedContext = self.state, self.context
-        self:SetEscapeCatcherShown(true)
-        self:ApplyVisibility()
-        self.expandedVisible = not self.userHidden
+    -- Whenever the expanded frame hides (X, Escape, toggle), Glance returns.
+    SecureHandlerWrapScript(self.expanded, "OnHide", toggle,
+        [[ local r = owner:GetFrameRef("root") if r then r:Show() end ]])
+    self.expanded:HookScript("OnHide", function()
+        if Shell:IsCombatBlocked() then
+            Shell:Render()
+        end
+    end)
+    table.insert(UISpecialFrames, "PocketsExpandedFrame")
+
+    local function Overlay(target, action)
+        if not target then
+            return
+        end
+        local o = MakeSecureClicker(nil, target, action)
+        o:SetAllPoints(target)
+        o:SetFrameLevel(target:GetFrameLevel() + 10)
+        o:Hide()
+        RegisterStateDriver(o, "visibility", "[combat] show; hide")
+    end
+    Overlay(self.frame.glance.header.plusButton, "open")
+    Overlay(self.frame.shell.header.closeButton, "close")
+
+    -- Key binding -> secure toggle, active only in combat; out of combat
+    -- the normal binding runs Pockets_ToggleFullInventory (full behavior).
+    local driver = CreateFrame("Frame", "PocketsBindingDriver", UIParent, "SecureHandlerStateTemplate")
+    driver:SetAttribute("_onstate-pcombat", [[
+        if newstate == "combat" then
+            for i = 1, 2 do
+                local key = self:GetAttribute("key" .. i)
+                if key then
+                    self:SetBindingClick(true, key, "PocketsSecureToggle", "LeftButton")
+                end
+            end
+        else
+            self:ClearBindings()
+        end
+    ]])
+    RegisterStateDriver(driver, "pcombat", "[combat] combat; nocombat")
+    self.bindingDriver = driver
+    self:UpdateCombatBindings()
+end
+
+-- Out of combat only (SetAttribute on a protected frame).
+function Shell:UpdateCombatBindings()
+    if not self.bindingDriver or Pockets.Adapters.CombatAPI:IsInCombat() then
         return
     end
-    -- Nothing laid out to show: opens after combat (renderDeferred).
+    local key1, key2 = GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY")
+    self.bindingDriver:SetAttribute("key1", key1)
+    self.bindingDriver:SetAttribute("key2", key2)
 end
 
 -- Out-of-combat only: lay out All Items into the (hidden) expanded frame so
@@ -1053,11 +1166,7 @@ function Shell:Render()
     self:SetEscapeCatcherShown(true)
     self:RenderExpandedContent(state)
     self.displayedState, self.displayedContext = state, self.context
-    if COMBAT_REOPENABLE[state] then
-        self.laidOutState, self.laidOutContext = state, self.context
-    else
-        self.laidOutState, self.laidOutContext = nil, nil
-    end
+    self.laidOutState, self.laidOutContext = state, self.context
 end
 
 -- Lays out one expanded state into the expanded frame. Does not touch
@@ -1897,14 +2006,14 @@ end
 --------------------------------------------------
 
 function Shell:Show()
-    if self.frame then
+    if self.frame and not self:IsCombatBlocked() then
         self.userHidden = false
         self:ApplyVisibility()
     end
 end
 
 function Shell:Hide()
-    if self.frame then
+    if self.frame and not self:IsCombatBlocked() then
         self.userHidden = true
         self:ApplyVisibility()
         self.expandedVisible = false

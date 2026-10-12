@@ -2687,47 +2687,53 @@ Pockets.Tests.TestRunner:Register("Shell: entering SEARCH never opens Menu or Al
     return ok, ok and "OK" or string.format("expected SEARCH only, got %s", tostring(Shell:GetState()))
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: closing the expanded view works during combat even with protected item buttons", function()
+-- In combat only secure code can show/hide the frames, so the Shell's state
+-- must follow what is on screen. These tests stand in for the secure
+-- snippet by showing/hiding the frames directly while faking combat.
+local function WithFakeCombat(fn)
     local CombatAPI = Pockets.Adapters.CombatAPI
     local Pool = Pockets.UI.ItemButtonPool
     local originalCombat, originalProtected = CombatAPI.IsInCombat, Pool.templateProtected
-    ResetToGlance()
-    Shell:SetState(Shell.STATE.MENU)
     CombatAPI.IsInCombat = function() return true end
     Pool.templateProtected = true
-
-    Shell:HandleEscape() -- same path as Escape and the X button
-    local ok = Shell:GetState() == Shell.STATE.GLANCE
-        and not Shell.frame.shell:IsShown() and Shell.frame.glance:IsShown()
-        and not Shell.escapeCatcher:IsShown()
-
+    local ok, result, message = pcall(fn)
     CombatAPI.IsInCombat, Pool.templateProtected = originalCombat, originalProtected
     Pool.dirty = false
     ResetToGlance()
-    return ok, ok and "OK" or "expanded view did not close in combat"
+    if not ok then
+        return false, tostring(result)
+    end
+    return result, message
+end
+
+Pockets.Tests.TestRunner:Register("Shell: in combat, navigation requests never change state without a secure show/hide", function()
+    ResetToGlance()
+    return WithFakeCombat(function()
+        Shell:SetState(Shell.STATE.MENU)
+        local stayedGlance = Shell:GetState() == Shell.STATE.GLANCE and not Shell.expanded:IsShown()
+        return stayedGlance, stayedGlance and "OK" or "state changed in combat without the expanded frame being shown"
+    end)
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: expanded view opens in combat from the pre-laid-out All Items, and nav waits", function()
-    local CombatAPI = Pockets.Adapters.CombatAPI
-    local Pool = Pockets.UI.ItemButtonPool
-    local originalCombat, originalProtected = CombatAPI.IsInCombat, Pool.templateProtected
+Pockets.Tests.TestRunner:Register("Shell: secure open/close in combat is followed by Shell state; nav waits", function()
     ResetToGlance()
-    Shell:Prewarm() -- same as the idle prewarm; synchronous here
-    CombatAPI.IsInCombat = function() return true end
-    Pool.templateProtected = true
+    Shell:Prewarm()
+    return WithFakeCombat(function()
+        Shell.expanded:Show()
+        Shell.root:Hide() -- what the secure snippet does
+        Shell:OnSecureToggle()
+        local opened = Shell:GetState() == Shell.STATE.ALL and Shell.escapeCatcher:IsShown()
 
-    Shell:SetState(Shell.STATE.MENU) -- Glance click in combat
-    local opened = Shell.expanded:IsShown() and not Shell.root:IsShown()
-        and Shell:GetState() == Shell.STATE.ALL
-    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = "consumable" }) -- needs re-layout
-    local navRejected = Shell:GetState() == Shell.STATE.ALL and Shell.expanded:IsShown()
-    Shell:SetState(Shell.STATE.GLANCE)
-    local closed = not Shell.expanded:IsShown() and Shell.root:IsShown()
+        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = "consumable" })
+        local navRejected = Shell:GetState() == Shell.STATE.ALL
 
-    CombatAPI.IsInCombat, Pool.templateProtected = originalCombat, originalProtected
-    Pool.dirty = false
-    ResetToGlance()
-    local ok = opened and navRejected and closed
-    return ok, ok and "OK" or string.format("opened=%s navRejected=%s closed=%s",
-        tostring(opened), tostring(navRejected), tostring(closed))
+        Shell.expanded:Hide()
+        Shell.root:Show()
+        Shell:OnSecureToggle()
+        local closed = Shell:GetState() == Shell.STATE.GLANCE and not Shell.escapeCatcher:IsShown()
+
+        local ok = opened and navRejected and closed
+        return ok, ok and "OK" or string.format("opened=%s navRejected=%s closed=%s",
+            tostring(opened), tostring(navRejected), tostring(closed))
+    end)
 end)

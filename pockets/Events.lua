@@ -214,6 +214,7 @@ RegisterEventSafe("MAIL_CLOSED")
 RegisterEventSafe("AUCTION_HOUSE_CLOSED")
 RegisterEventSafe("PLAYER_REGEN_DISABLED")
 RegisterEventSafe("PLAYER_REGEN_ENABLED")
+RegisterEventSafe("UPDATE_BINDINGS")
 RegisterEventSafe("ADDON_ACTION_BLOCKED")
 RegisterEventSafe("ADDON_ACTION_FORBIDDEN")
 
@@ -223,6 +224,10 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName, blockedFunc)
         if addonName == ADDON_NAME and Pockets.Debug then
             Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc))
         end
+        return
+    end
+    if event == "UPDATE_BINDINGS" then
+        Pockets.UI.Shell:UpdateCombatBindings()
         return
     end
     if event == "ADDON_LOADED" then
