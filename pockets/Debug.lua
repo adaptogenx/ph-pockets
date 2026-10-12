@@ -30,6 +30,14 @@ end
 
 function Debug:LogError(message)
     print(COLOR_RED .. "[Pockets Error] " .. COLOR_RESET .. message)
+    -- Keep the last few errors in SavedVariables so they can be read from
+    -- disk after /reload (PocketsDB.errorLog), not just seen in chat.
+    if _G.PocketsDB then
+        local log = _G.PocketsDB.errorLog or {}
+        table.insert(log, tostring(message))
+        while #log > 20 do table.remove(log, 1) end
+        _G.PocketsDB.errorLog = log
+    end
 end
 
 --------------------------------------------------

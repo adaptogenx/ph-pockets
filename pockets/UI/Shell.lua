@@ -526,7 +526,10 @@ function Shell:BuildShell()
     -- keystroke re-renders from API.GetAllAggregatedItems(), never a bag
     -- rescan or categorization pass.
     shell.searchPanel.editBox:SetScript("OnTextChanged", function()
-        Shell:RenderSearch()
+        local ok, err = pcall(Shell.RenderSearch, Shell)
+        if not ok and Pockets.Debug then
+            Pockets.Debug:LogError("RenderSearch failed: " .. tostring(err))
+        end
     end)
     shell.searchPanel.editBox:SetScript("OnEscapePressed", function(box)
         box:ClearFocus()
