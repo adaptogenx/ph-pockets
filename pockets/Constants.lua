@@ -338,7 +338,7 @@ Constants.LAYOUT = {
     -- size so it never gets clipped by Glance's small footprint.
     RECENT_PREVIEW_ICON_SIZE = 96,
     RECENT_PREVIEW_PADDING = 8,
-    RECENT_PREVIEW_TOP_OFFSET = 80,
+    RECENT_PREVIEW_TOP_OFFSET = 24,
 }
 
 -- NOTE: Menu's and Category List's max browsing height
