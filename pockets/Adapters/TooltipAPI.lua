@@ -6,7 +6,7 @@
     (TDD §22 Error Handling).
 ]]
 
--- luacheck: globals TooltipDataProcessor Enum ItemRefTooltip
+-- luacheck: globals PocketsDB TooltipDataProcessor Enum ItemRefTooltip
 
 local _, Pockets = ...
 
@@ -69,7 +69,9 @@ function TooltipAPI:OnItemTooltipShow(callback)
     end
     self.hooked = true
 
-    if self:HasModernPipeline() then
+    -- Opt-in while the Forever freeze is bisected: /pockets debug tooltip on
+    local optedIn = PocketsDB and PocketsDB.settings and PocketsDB.settings.modernTooltips == true
+    if optedIn and self:HasModernPipeline() then
         local isSecret = function(v)
             return Pockets.Adapters.ClientAPI:IsSecret(v)
         end

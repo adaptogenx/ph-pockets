@@ -231,6 +231,10 @@ function Debug:HandleCommand(args)
         self:DumpBags()
     elseif subCmd == "secure" then
         self:DumpSecureButtons()
+    elseif subCmd == "tooltip" then
+        local on = (args[3] or ""):lower() == "on"
+        PocketsDB.settings.modernTooltips = on
+        print("[Pockets] modernTooltips=" .. tostring(on) .. " (applies after /reload)")
     elseif subCmd == "client" then
         self:DumpClient()
     elseif subCmd == "regions" then
