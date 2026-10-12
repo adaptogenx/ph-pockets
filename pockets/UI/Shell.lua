@@ -976,7 +976,7 @@ function Shell:RenderGlance()
     -- it isn't restricted to Adapters/ (TDD §3) - read here and handed to
     -- the standalone MoneyFormat component, never Blizzard's MoneyFrame
     -- or pH's own Ledger module.
-    glance.goldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(GetMoney()))
+    glance.goldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
 
     -- Ammo (AMMO ROW spec): optional, always the final metric row - shown
     -- only when a real ammo-specialized bag is equipped (same predicate
@@ -1635,7 +1635,7 @@ function Shell:ConfigureFooter()
     shell.footerBagRow:SetPrimaryColor(color.r, color.g, color.b)
     ResizeFooterMetric(shell.footerBagRow)
 
-    shell.footerGoldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(GetMoney()))
+    shell.footerGoldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
     ResizeFooterMetric(shell.footerGoldRow)
     shell.footerGoldRow:ClearAllPoints()
     -- Same gap the Gold icon already keeps against ITS OWN text

@@ -196,3 +196,26 @@ TestRunner:Register("BindingsAPI: SaveBindings set is always 1 or 2 (Forever usa
     local ok = N(1) == 1 and N(2) == 2 and N(0) == 1 and N(3) == 1 and N(nil) == 1
     return ok, ok and "OK" or "binding set not normalized"
 end)
+
+TestRunner:Register("TooltipAPI: ExtractItem reads id/hyperlink, rejects secret and non-numeric ids", function()
+    local E = TooltipAPI.ExtractItem
+    local id, link = E({ id = 6948, hyperlink = "|Hitem:6948|h" })
+    local noSecret = function() return false end
+    local allSecret = function() return true end
+    local ok = id == 6948 and link == "|Hitem:6948|h"
+        and E(nil) == nil and E({ id = "x" }) == nil
+        and E({ id = 6948 }, allSecret) == nil
+        and E({ id = 6948 }, noSecret) == 6948
+    return ok, ok and "OK" or "bad ExtractItem"
+end)
+
+TestRunner:Register("TooltipAPI: modern pipeline detected only when fully present", function()
+    local full = WithGlobals({
+        TooltipDataProcessor = { AddTooltipPostCall = function() end },
+        Enum = { TooltipDataType = { Item = 0 } },
+    }, function() return TooltipAPI:HasModernPipeline() == true end)
+    local none = WithGlobals({ TooltipDataProcessor = false },
+        function() return TooltipAPI:HasModernPipeline() == false end)
+    local ok = full and none
+    return ok, ok and "OK" or "bad pipeline detection"
+end)

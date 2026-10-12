@@ -107,6 +107,21 @@ end
 -- runtime values instead of guessed at. Existing as a slash command (not
 -- an ad-hoc /run) specifically because a long inline /run script can
 -- exceed the chat edit box's line-length limit.
+-- Client/adapter diagnostic (Forever M3 §22): which client, which adapter
+-- paths are live, and whether tooltip/binding integration took.
+function Debug:DumpClient()
+    local C = Pockets.Adapters.ClientAPI
+    local T = Pockets.Adapters.TooltipAPI
+    print(COLOR_YELLOW .. "=== Pockets Client ===" .. COLOR_RESET)
+    print(string.format("  client=%s interface=%s build=%s", C:GetClientType(),
+        tostring(C:GetInterfaceNumber()), tostring(GetBuildInfo and select(2, GetBuildInfo()))))
+    print(string.format("  tooltip: supported=%s mode=%s modernPipeline=%s", tostring(T.supported),
+        tostring(T.mode), tostring(T:HasModernPipeline())))
+    print(string.format("  binding SHIFT-B action key=%s", tostring(GetBindingKey and GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY"))))
+    print(string.format("  C_Container=%s C_Item=%s issecretvalue=%s", tostring(C_Container ~= nil),
+        tostring(C_Item ~= nil), tostring(issecretvalue ~= nil)))
+end
+
 function Debug:DumpSecureButtons()
     print(COLOR_YELLOW .. "=== Pockets Item Buttons ===" .. COLOR_RESET)
     print(string.format("  CursorHasItem: %s", tostring(CursorHasItem and CursorHasItem())))
@@ -216,10 +231,12 @@ function Debug:HandleCommand(args)
         self:DumpBags()
     elseif subCmd == "secure" then
         self:DumpSecureButtons()
+    elseif subCmd == "client" then
+        self:DumpClient()
     elseif subCmd == "regions" then
         self:DumpButtonRegions()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, regions")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, regions")
     end
 end
 

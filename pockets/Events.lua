@@ -190,21 +190,30 @@ local function InitializeAddon()
     print(string.format("|cff00ff00[Pockets]|r Version %s loaded. Type /pockets help for commands.", version))
 end
 
-mainFrame:RegisterEvent("ADDON_LOADED")
-mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-mainFrame:RegisterEvent("BAG_UPDATE")
-mainFrame:RegisterEvent("BAG_UPDATE_DELAYED")
-mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
-mainFrame:RegisterEvent("PLAYER_MONEY")
-mainFrame:RegisterEvent("LOOT_OPENED")
-mainFrame:RegisterEvent("LOOT_CLOSED")
-mainFrame:RegisterEvent("QUEST_COMPLETE")
-mainFrame:RegisterEvent("QUEST_FINISHED")
-mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-mainFrame:RegisterEvent("MAIL_CLOSED")
-mainFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
-mainFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+-- Registering an event a client doesn't know errors; degrade per event
+-- instead of failing the whole file (Forever M3 §23).
+local function RegisterEventSafe(event)
+    local ok, err = pcall(mainFrame.RegisterEvent, mainFrame, event)
+    if not ok and Pockets.Debug then
+        Pockets.Debug:LogError("RegisterEvent " .. event .. " failed: " .. tostring(err))
+    end
+end
+
+RegisterEventSafe("ADDON_LOADED")
+RegisterEventSafe("PLAYER_ENTERING_WORLD")
+RegisterEventSafe("BAG_UPDATE")
+RegisterEventSafe("BAG_UPDATE_DELAYED")
+RegisterEventSafe("ITEM_LOCK_CHANGED")
+RegisterEventSafe("PLAYER_MONEY")
+RegisterEventSafe("LOOT_OPENED")
+RegisterEventSafe("LOOT_CLOSED")
+RegisterEventSafe("QUEST_COMPLETE")
+RegisterEventSafe("QUEST_FINISHED")
+RegisterEventSafe("GET_ITEM_INFO_RECEIVED")
+RegisterEventSafe("MAIL_CLOSED")
+RegisterEventSafe("AUCTION_HOUSE_CLOSED")
+RegisterEventSafe("PLAYER_REGEN_DISABLED")
+RegisterEventSafe("PLAYER_REGEN_ENABLED")
 
 mainFrame:SetScript("OnEvent", function(_, event, addonName)
     if event == "ADDON_LOADED" then
@@ -274,6 +283,7 @@ local function ShowDevHelp()
     print("|cffffff00/pockets debug events|r - Dump EventBus subscriber counts")
     print("|cffffff00/pockets debug bags|r - Dump equipped bags (family/slots/Ammo classification)")
     print("|cffffff00/pockets debug secure|r - Dump active item buttons' bagID/slotID + resolved bag-index/slot IDs + cursor state")
+    print("|cffffff00/pockets debug client|r - Dump client type, interface, tooltip mode, binding key")
     print("|cffffff00/pockets debug regions|r - Dump a pooled item button's visual regions (name/type/shown/size)")
     print("|cffffff00/pockets test run|r - Run automated test suite")
     print("|cffffff00/pockets test sample <used> <total> <secondsAgo>|r - Inject a capacity sample")

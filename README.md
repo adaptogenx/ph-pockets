@@ -8,6 +8,14 @@ just pick up" without opening a traditional bag window.
 **Current status**: Phase 0 (repository/foundation) complete. See
 `Pockets_TDD.md` §29 for the phased implementation plan.
 
+## Supported Clients
+
+One addon, one TOC (`## Interface: 11509, 20504, 16001`):
+
+- WoW Classic Anniversary (11509) - primary
+- WoW TBC Classic (20504)
+- WoW Forever beta (16001)
+
 ## Installation
 
 ### macOS (Automated)
@@ -22,8 +30,8 @@ Installs to every detected Anniversary (`_anniversary_`) and Forever beta
 ### Manual Installation (macOS & Windows)
 
 1. Copy the `pockets/` directory to your WoW AddOns folder:
-   - **Windows**: `World of Warcraft/_anniversary_/Interface/AddOns/` (or `_classic_` for TBC)
-   - **Mac**: `/Applications/World of Warcraft/_anniversary_/Interface/AddOns/` (or `_classic_` for TBC)
+   - **Windows**: `World of Warcraft/_anniversary_/Interface/AddOns/` (`_classic_` for TBC, `_classic_beta_` for Forever)
+   - **Mac**: `/Applications/World of Warcraft/_anniversary_/Interface/AddOns/` (`_classic_` for TBC, `_classic_beta_` for Forever)
 2. Restart WoW or `/reload` if already in-game.
 3. Type `/pockets help`.
 
@@ -34,6 +42,10 @@ Installs to every detected Anniversary (`_anniversary_`) and Forever beta
 Shift-B           - Toggle the full categorized inventory view
 /pockets help     - List commands
 ```
+
+Shift-B is bound on first login only if unbound; reassign it under
+Key Bindings > AddOns > Pockets. Known client limitations:
+[FOREVER_LIMITATIONS.md](FOREVER_LIMITATIONS.md).
 
 Hover or click the HUD outside combat to see the category summary; click
 works in combat too. Hovering or clicking a category reveals its items.

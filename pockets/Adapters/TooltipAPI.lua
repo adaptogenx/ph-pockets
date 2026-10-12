@@ -6,16 +6,47 @@
     (TDD §22 Error Handling).
 ]]
 
+-- luacheck: globals TooltipDataProcessor Enum ItemRefTooltip
+
 local _, Pockets = ...
 
 Pockets.Adapters.TooltipAPI = Pockets.Adapters.TooltipAPI or {}
 local TooltipAPI = Pockets.Adapters.TooltipAPI
 
 TooltipAPI.hooked = false
--- False when the client has no legacy item-tooltip handler (WoW Forever /
--- modern tooltip pipeline). The carried-count line is then unavailable;
--- modern TooltipDataProcessor integration is deferred to M3 (Forever §26).
+-- True when some item-tooltip integration is active (legacy script hook or
+-- modern TooltipDataProcessor post-call); false when neither is available.
 TooltipAPI.supported = nil
+-- "modern" | "legacy" | nil. Diagnostic only (Forever M3 §22).
+TooltipAPI.mode = nil
+
+-- Pure-ish: is the modern tooltip-data pipeline present?
+function TooltipAPI:HasModernPipeline()
+    return TooltipDataProcessor ~= nil
+        and TooltipDataProcessor.AddTooltipPostCall ~= nil
+        and Enum ~= nil
+        and Enum.TooltipDataType ~= nil
+        and Enum.TooltipDataType.Item ~= nil
+end
+
+-- Pure: pull a usable itemID/itemLink out of tooltip data. Secret or
+-- non-numeric ids yield nil (never unwrapped). Split out for tests.
+function TooltipAPI.ExtractItem(data, isSecret)
+    if type(data) ~= "table" then
+        return nil
+    end
+    local id, link = data.id, data.hyperlink
+    if isSecret and (isSecret(id) or isSecret(link)) then
+        return nil
+    end
+    if type(id) ~= "number" then
+        return nil
+    end
+    if type(link) ~= "string" then
+        link = nil
+    end
+    return id, link
+end
 
 -- Pure-ish feature check: does this tooltip still have the legacy handler?
 function TooltipAPI:HasLegacyItemHandler(tooltip)
@@ -37,6 +68,34 @@ function TooltipAPI:OnItemTooltipShow(callback)
         return
     end
     self.hooked = true
+
+    if self:HasModernPipeline() then
+        local isSecret = function(v)
+            return Pockets.Adapters.ClientAPI:IsSecret(v)
+        end
+        local addOk, addErr = pcall(TooltipDataProcessor.AddTooltipPostCall, Enum.TooltipDataType.Item, function(tooltip, data)
+            -- Only the main/ref tooltips; skip shopping/comparison and
+            -- every other tooltip that renders item data.
+            if tooltip ~= GameTooltip and tooltip ~= ItemRefTooltip then
+                return
+            end
+            local ok, err = pcall(function()
+                local itemID, itemLink = TooltipAPI.ExtractItem(data, isSecret)
+                if itemID then
+                    callback(tooltip, itemID, itemLink)
+                end
+            end)
+            if not ok and Pockets.Debug then
+                Pockets.Debug:LogError("TooltipAPI callback failed: " .. tostring(err))
+            end
+        end)
+        self.supported = addOk
+        self.mode = addOk and "modern" or nil
+        if not addOk and Pockets.Debug then
+            Pockets.Debug:LogError("TooltipAPI modern hook unavailable: " .. tostring(addErr))
+        end
+        return
+    end
 
     if not self:HasLegacyItemHandler(GameTooltip) then
         self.supported = false
@@ -60,6 +119,7 @@ function TooltipAPI:OnItemTooltipShow(callback)
         end
     end)
     self.supported = hookOk
+    self.mode = hookOk and "legacy" or nil
     if not hookOk and Pockets.Debug then
         Pockets.Debug:LogError("TooltipAPI hook unavailable: " .. tostring(hookErr))
     end
