@@ -84,17 +84,20 @@ end
 function Debug:DumpBags()
     print(COLOR_YELLOW .. "=== Pockets Equipped Bags ===" .. COLOR_RESET)
     local BagAPI = Pockets.Adapters.BagAPI
+    print(string.format("  reagentBagID=%s scannedBagIDs=%s", tostring(BagAPI:GetReagentBagID()),
+        table.concat(BagAPI:GetScannedBagIDs(), ",")))
     for _, bag in ipairs(BagAPI:GetEquippedBags()) do
         local invSlot = BagAPI:ContainerIDToInventoryID(bag.bagID)
         local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
         local bagName = bagLink and Pockets.Adapters.ItemAPI:RawGetItemInfo(bagLink)
         local bagFamily = bagLink and Pockets.Adapters.ItemAPI:GetItemFamily(bagLink)
         local used = BagAPI:CountUsedSlots(bag.bagID, bag.slotCount)
-        local isAmmo = BagAPI:IsAmmoBag(bag.bagID)
+        local bagClass = BagAPI:GetBagClass(bag.bagID)
+        local classID, subClassID = Pockets.Adapters.ItemAPI:GetInstantClass(bagLink)
         print(string.format(
-            "  bag %d: %s | family=%s | slots=%d/%d | classified=%s",
+            "  bag %d: %s | family=%s | itemClass=%s/%s | slots=%d/%d | class=%s",
             bag.bagID, tostring(bagName or "(backpack/none)"), tostring(bagFamily),
-            used, bag.slotCount, isAmmo and "AMMO" or "GENERAL"))
+            tostring(classID), tostring(subClassID), used, bag.slotCount, tostring(bagClass or "general")))
     end
     print(COLOR_YELLOW .. "==============================" .. COLOR_RESET)
 end
