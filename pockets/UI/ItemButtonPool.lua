@@ -251,12 +251,15 @@ local function CreateItemButton(parent)
 
     buttonSerial = buttonSerial + 1
     local name = "PocketsItemButton" .. buttonSerial
-    local button = CreateFrame(
-        "Button",
-        name,
-        bagIndexFrame,
-        "ContainerFrameItemButtonTemplate,BackdropTemplate"
-    )
+    -- SecureActionButtonTemplate goes LAST so its secure OnClick replaces
+    -- the Container template's insecure one (right-click use is then
+    -- driven purely by the type2/item2 attributes set in BindSecure).
+    local template = "ContainerFrameItemButtonTemplate,BackdropTemplate"
+    if BagAPI:UsesSecureItemAttributes() then
+        template = template .. ",SecureActionButtonTemplate"
+    end
+    local button = CreateFrame("Button", name, bagIndexFrame, template)
+    button.usesSecureAttributes = BagAPI:UsesSecureItemAttributes()
     for key, suffix in pairs(REGION_SUFFIXES) do
         if button[key] == nil then
             button[key] = _G[name .. suffix]
@@ -432,8 +435,33 @@ function ItemButtonPool:IsStructurallyBlocked()
     return CombatAPI:IsInCombat() and self.templateProtected == true
 end
 
+-- Secure right-click target. Modified right-clicks are explicitly
+-- neutralised so shift/ctrl/alt-right-click never also "use" the item
+-- (Pockets' own PreClick handles those). Only called when mutation is
+-- allowed (out of combat, or the button isn't protected).
+local MODIFIER_PREFIXES = { "shift-", "ctrl-", "alt-" }
+local function SetSecureAttributes(button, bagID, slotID)
+    if not (button.usesSecureAttributes and button.SetAttribute) then
+        return
+    end
+    if bagID then
+        button:SetAttribute("type2", "item")
+        button:SetAttribute("item2", bagID .. " " .. slotID)
+        for _, prefix in ipairs(MODIFIER_PREFIXES) do
+            button:SetAttribute(prefix .. "type2", "none")
+        end
+    else
+        button:SetAttribute("type2", nil)
+        button:SetAttribute("item2", nil)
+        for _, prefix in ipairs(MODIFIER_PREFIXES) do
+            button:SetAttribute(prefix .. "type2", nil)
+        end
+    end
+end
+
 local function BindSecure(button, bagID, slotID, itemID)
     button.secureBagID, button.secureSlotID, button.secureItemID = bagID, slotID, itemID
+    SetSecureAttributes(button, bagID, slotID)
     button.bagIndexFrame:SetID(bagID)
     button:SetID(slotID)
     button.bagID, button.slotID = bagID, slotID
@@ -447,6 +475,7 @@ end
 -- unavailable button can never resolve to a previous item's slot.
 function ItemButtonPool:UnbindSecure(button)
     button.secureBagID, button.secureSlotID, button.secureItemID = nil, nil, nil
+    SetSecureAttributes(button, nil, nil)
     button.bagIndexFrame:SetID(0)
     button:SetID(0)
     button.secureBindingValid = false

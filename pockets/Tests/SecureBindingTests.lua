@@ -188,3 +188,19 @@ TestRunner:Register("SecureBinding: smallest-stack resolution (3 stacks, lock, r
     local ok = a.slotID == 3 and b.slotID == 8 and c.slotID == 4 and d == nil
     return ok, ok and "OK" or "resolver order wrong"
 end)
+
+TestRunner:Register("SecureBinding: Forever secure attributes follow bind/unbind (type2=item, item2='bag slot')", function()
+    local items = { ["0:4"] = Rec(0, 4, 123, 5) }
+    return Scenario(items, false, function(parent)
+        local b = Configured(parent, 0, 4, 123)
+        if not b.usesSecureAttributes then
+            return true -- Classic/TBC keep the template's own OnClick path
+        end
+        local bound = b:GetAttribute("type2") == "item" and b:GetAttribute("item2") == "0 4"
+            and b:GetAttribute("shift-type2") == "none"
+        items["0:4"] = nil
+        Pool:ValidateAll()
+        local cleared = b:GetAttribute("type2") == nil and b:GetAttribute("item2") == nil
+        return bound and cleared
+    end)
+end)

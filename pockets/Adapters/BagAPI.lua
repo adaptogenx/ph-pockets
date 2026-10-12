@@ -316,6 +316,16 @@ end
 -- allowed to reach into bag APIs (keeps the rule in the file header true).
 --------------------------------------------------
 
+-- True when item buttons must run right-click use through Blizzard's
+-- SECURE action handler (type2="item", item2="<bag> <slot>") instead of
+-- ContainerFrameItemButtonTemplate's own Lua OnClick. On WoW Forever the
+-- latter is blocked for protected item use ("Pockets has been blocked from
+-- an action only available to the Blizzard UI" on consumables). Classic/
+-- TBC keep the existing, working template path.
+function BagAPI:UsesSecureItemAttributes()
+    return Pockets.Adapters.ClientAPI:IsForever()
+end
+
 -- Left-click/drag-start behavior: picks the item up onto the cursor (or
 -- swaps with whatever's already on the cursor) - identical to Blizzard's
 -- own ContainerFrameItemButton_OnClick/OnDragStart.
