@@ -2063,14 +2063,19 @@ RegisterWithItems("CategoryView: repeated Grid<->List toggling does not accumula
     WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
+        -- List rows are long-lived and shared across tests, so earlier
+        -- tests may already have grown the pool; what matters is that
+        -- toggling never grows it beyond what one List render needs.
+        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
+        local baseline = #Shell.frame.shell.categoryListRows
+        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
         for _ = 1, 5 do
             Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
             Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
         end
-        local itemCount = #Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.OTHER)
         local rowCount = #Shell.frame.shell.categoryListRows
-        if rowCount > itemCount then
-            error(string.format("expected at most %d pooled List rows, got %d", itemCount, rowCount), 0)
+        if rowCount > baseline then
+            error(string.format("expected at most %d pooled List rows, got %d", baseline, rowCount), 0)
         end
     end)
     ResetToGlance()
@@ -2593,15 +2598,18 @@ Pockets.Tests.TestRunner:Register("Shell: changing the SEARCH query updates resu
         local rows = Shell.frame.shell.searchRows
 
         panel.editBox:SetText("linen")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local afterLinen = rows[1]:IsShown() and rows[1].name:GetText() == "Linen Cloth"
 
         panel.editBox:SetText("cloth") -- broadens to 2 matches
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local shownAfterCloth = 0
         for _, row in ipairs(rows) do
             if row:IsShown() then shownAfterCloth = shownAfterCloth + 1 end
         end
 
         panel.editBox:SetText("") -- clearing goes back to the blank/no-persistent-height state
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local anyShownAfterClear = false
         for _, row in ipairs(rows) do
             if row:IsShown() then anyShownAfterClear = true end
