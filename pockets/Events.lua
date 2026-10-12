@@ -148,11 +148,7 @@ local function EnsureDefaultBinding()
     defaultBindingApplied = true
 
     local ok, err = pcall(function()
-        if GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY") then
-            return
-        end
-        SetBinding("SHIFT-B", "POCKETS_TOGGLE_FULL_INVENTORY")
-        SaveBindings(GetCurrentBindingSet() or 1)
+        Pockets.Adapters.BindingsAPI:EnsureDefaultBinding("SHIFT-B", "POCKETS_TOGGLE_FULL_INVENTORY")
     end)
     if not ok and Pockets.Debug then
         Pockets.Debug:LogError("EnsureDefaultBinding failed: " .. tostring(err))

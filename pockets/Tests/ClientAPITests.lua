@@ -190,3 +190,9 @@ TestRunner:Register("TooltipAPI: legacy item handler detected only when present"
         and TooltipAPI:HasLegacyItemHandler(here) == true
     return r, r and "OK" or "legacy handler detection wrong"
 end)
+
+TestRunner:Register("BindingsAPI: SaveBindings set is always 1 or 2 (Forever usage error)", function()
+    local N = Pockets.Adapters.BindingsAPI.NormalizeBindingSet
+    local ok = N(1) == 1 and N(2) == 2 and N(0) == 1 and N(3) == 1 and N(nil) == 1
+    return ok, ok and "OK" or "binding set not normalized"
+end)
