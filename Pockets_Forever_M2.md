@@ -8,6 +8,13 @@ They inherit `ContainerFrameItemButtonTemplate`, whose own Blizzard `OnClick` re
 `bagIndexFrame:GetID()` / `button:GetID()`. Pockets never replaces `OnClick`; `PreClick` only handles
 split / modified-click / pickup. So the "secure target" is those two IDs. This architecture was kept.
 
+## Runtime probe result (Forever beta, `/pockets debug secure`)
+`templateProtected=false`, every button `protected=false`, `type2=nil`. So the item buttons are NOT
+combat-protected on Forever and carry no secure item attribute: the combat deferral paths stay inert
+(everything mutates normally in combat), stale targets rebind immediately, and open risks 1-2 below
+do not apply. Still unverified: whether Blizzard's inherited OnClick can actually *use* items
+(consumables/containers) from this non-secure button, in and out of combat.
+
 ## Not yet runtime-tested (needs the Forever client)
 I cannot run the client here, so nothing below is verified in game. Run `/pockets debug secure`
 (DumpSecureButtons) with a category open and report:
