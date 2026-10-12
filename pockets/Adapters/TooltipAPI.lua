@@ -69,12 +69,12 @@ function TooltipAPI:OnItemTooltipShow(callback)
     end
     self.hooked = true
 
-    -- Opt-in until verified on Forever: /pockets debug tooltip on
+    -- On by default; /pockets debug tooltip off disables (after /reload).
     -- TooltipDataProcessor.AddTooltipPostCall is NOT used: its callbacks run
     -- inside Blizzard's shared tooltip pipeline and taint it (nameplate
     -- secret-value errors, then a client freeze). hooksecurefunc post-hooks
     -- run after Blizzard's code and do not taint it.
-    local optedIn = PocketsDB and PocketsDB.settings and PocketsDB.settings.modernTooltips == true
+    local optedIn = not (PocketsDB and PocketsDB.settings and PocketsDB.settings.modernTooltips == false)
     if optedIn and not self:HasLegacyItemHandler(GameTooltip) and hooksecurefunc then
         local isSecret = function(v)
             return Pockets.Adapters.ClientAPI:IsSecret(v)
