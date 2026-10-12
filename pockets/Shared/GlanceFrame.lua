@@ -38,11 +38,11 @@ GlanceFrame.TOKENS = {
     HEADER_BUTTON_GAP = 6,
     ETA_GAP = 14,
     ETA_WIDTH = 56,
-    TAB_HEIGHT = 28,
+    TAB_HEIGHT = 34,
     TAB_MIN_WIDTH = 84,
     TAB_MAX_WIDTH = 140,
     TAB_GAP = 6,
-    TAB_OFFSET_Y = 6,
+    TAB_OFFSET_Y = -1, -- negative: overlaps the HUD bottom border 1px (reads as attached)
     TAB_ICON = 16,
     TAB_BAR_HEIGHT = 3,
 }
@@ -208,18 +208,18 @@ function GlanceFrame:CreateTab(frame)
     PHUI.ApplyBackdrop(tab, { backdrop = PHUI.Backdrops.ICON_BUTTON })
 
     tab.icon = PHUI.CreateNativeIcon(tab, T.TAB_ICON, nil)
-    tab.icon:SetPoint("LEFT", tab, "LEFT", T.PAD_X, 1)
+    tab.icon:SetPoint("LEFT", tab, "LEFT", T.PAD_X, 0)
 
     -- Value above, small label below; fill bar along the bottom edge.
     tab.valueText = PHUI.CreateLabel(tab, "primary", nil, PHUI.Fonts.TAB_VALUE)
-    tab.valueText:SetPoint("TOPLEFT", tab.icon, "TOPRIGHT", 6, 4)
+    tab.valueText:SetPoint("TOPLEFT", tab, "TOPLEFT", T.PAD_X + T.TAB_ICON + 6, -7)
     tab.valueText:SetJustifyH("LEFT")
     tab.labelText = PHUI.CreateLabel(tab, "muted", nil, PHUI.Fonts.TAB_LABEL)
-    tab.labelText:SetPoint("TOPLEFT", tab.valueText, "BOTTOMLEFT", 0, 0)
+    tab.labelText:SetPoint("TOPLEFT", tab.valueText, "BOTTOMLEFT", 0, -1)
     tab.labelText:SetJustifyH("LEFT")
 
     tab.bar = self:CreateBar(tab, T.TAB_MIN_WIDTH - T.PAD_X * 2, T.TAB_BAR_HEIGHT)
-    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", T.PAD_X, 2)
+    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", T.PAD_X, 5)
 
     -- data: { texture, value, label, fraction, color = {r,g,b} }
     function tab:SetData(data)
