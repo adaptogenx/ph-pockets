@@ -56,11 +56,14 @@ future pH integration (`Pockets_TDD.md` §4). Sub-tables: `Pockets.API`,
 
 ### Capacity model
 
-Exactly two capacity classes in v1 (`Pockets_TDD.md` §7):
-`Constants.CAPACITY_CLASS.GENERAL` (backpack + normal bags) and `.AMMO`
-(quivers/ammo pouches). An ammo item in a normal bag still occupies a
-general slot but displays under the Ammo category - capacity class and
-display category are tracked independently.
+General capacity is plain bags only (`Constants.CAPACITY_CLASS.GENERAL`).
+Every specialized bag class is its own separate pool, detected from the
+equipped bag item itself (`BagAPI:GetBagClass`): `ammo`, `reagents` (the
+dedicated reagent slot, `Enum.BagIndex.ReagentBag`, feature-detected),
+and profession bags (herbs, mining, skinning, ...). They are shown as
+Glance tabs and never counted in the main bag count or ETA. An ammo item in
+a normal bag still occupies a general slot but displays under the Ammo
+category - capacity class and display category are tracked independently.
 
 ### Categorization precedence (`Pockets_TDD.md` §10)
 
