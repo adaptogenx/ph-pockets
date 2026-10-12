@@ -30,6 +30,14 @@ end
 
 function Debug:LogError(message)
     print(COLOR_RED .. "[Pockets Error] " .. COLOR_RESET .. message)
+    -- Keep the last few errors in SavedVariables so they can be read from
+    -- disk after /reload (PocketsDB.errorLog), not just seen in chat.
+    if _G.PocketsDB then
+        local log = _G.PocketsDB.errorLog or {}
+        table.insert(log, tostring(message))
+        while #log > 20 do table.remove(log, 1) end
+        _G.PocketsDB.errorLog = log
+    end
 end
 
 --------------------------------------------------
@@ -79,8 +87,8 @@ function Debug:DumpBags()
     for _, bag in ipairs(BagAPI:GetEquippedBags()) do
         local invSlot = BagAPI:ContainerIDToInventoryID(bag.bagID)
         local bagLink = invSlot and GetInventoryItemLink and GetInventoryItemLink("player", invSlot)
-        local bagName = bagLink and GetItemInfo(bagLink)
-        local bagFamily = bagLink and GetItemFamily and GetItemFamily(bagLink)
+        local bagName = bagLink and Pockets.Adapters.ItemAPI:RawGetItemInfo(bagLink)
+        local bagFamily = bagLink and Pockets.Adapters.ItemAPI:GetItemFamily(bagLink)
         local used = BagAPI:CountUsedSlots(bag.bagID, bag.slotCount)
         local isAmmo = BagAPI:IsAmmoBag(bag.bagID)
         print(string.format(
@@ -99,17 +107,55 @@ end
 -- runtime values instead of guessed at. Existing as a slash command (not
 -- an ad-hoc /run) specifically because a long inline /run script can
 -- exceed the chat edit box's line-length limit.
+-- Client/adapter diagnostic (Forever M3 §22): which client, which adapter
+-- paths are live, and whether tooltip/binding integration took.
+function Debug:DumpClient()
+    local C = Pockets.Adapters.ClientAPI
+    local T = Pockets.Adapters.TooltipAPI
+    print(COLOR_YELLOW .. "=== Pockets Client ===" .. COLOR_RESET)
+    print(string.format("  client=%s interface=%s build=%s", C:GetClientType(),
+        tostring(C:GetInterfaceNumber()), tostring(GetBuildInfo and select(2, GetBuildInfo()))))
+    print(string.format("  tooltip: supported=%s mode=%s modernPipeline=%s", tostring(T.supported),
+        tostring(T.mode), tostring(T:HasModernPipeline())))
+    print(string.format("  binding SHIFT-B action key=%s", tostring(GetBindingKey and GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY"))))
+    print(string.format("  C_Container=%s C_Item=%s issecretvalue=%s", tostring(C_Container ~= nil),
+        tostring(C_Item ~= nil), tostring(issecretvalue ~= nil)))
+end
+
+function Debug:DumpShell()
+    local Shell = Pockets.UI.Shell
+    local Pool = Pockets.UI.ItemButtonPool
+    print(COLOR_YELLOW .. "=== Pockets Shell ===" .. COLOR_RESET)
+    print(string.format("  state=%s laidOut=%s displayed=%s expandedVisible=%s deferred=%s",
+        tostring(Shell.state), tostring(Shell.laidOutState), tostring(Shell.displayedState),
+        tostring(Shell.expandedVisible), tostring(Shell.renderDeferred)))
+    print(string.format("  root shown=%s expanded shown=%s templateProtected=%s blocked=%s prewarmPending=%s",
+        tostring(Shell.root:IsShown()), tostring(Shell.expanded:IsShown()),
+        tostring(Pool.templateProtected), tostring(Shell:IsCombatBlocked()), tostring(Shell.prewarmPending)))
+end
+
 function Debug:DumpSecureButtons()
     print(COLOR_YELLOW .. "=== Pockets Item Buttons ===" .. COLOR_RESET)
     print(string.format("  CursorHasItem: %s", tostring(CursorHasItem and CursorHasItem())))
+    print(string.format("  templateProtected=%s inCombat=%s dirty=%s",
+        tostring(Pockets.UI.ItemButtonPool.templateProtected),
+        tostring(Pockets.Adapters.CombatAPI:IsInCombat()),
+        tostring(Pockets.UI.ItemButtonPool.dirty)))
     local count = 0
     for _, pool in pairs(Pockets.UI.ItemButtonPool.pools) do
         for _, button in ipairs(pool.active) do
             count = count + 1
             print(string.format(
-                "  #%d bagID=%s slotID=%s interactive=%s resolvedBagID=%s resolvedSlotID=%s",
+                "  #%d bagID=%s slotID=%s interactive=%s resolvedBagID=%s resolvedSlotID=%s secure=%s:%s item=%s valid=%s protected=%s type2=%s",
                 count, tostring(button.bagID), tostring(button.slotID), tostring(button.interactive),
-                tostring(button.bagIndexFrame and button.bagIndexFrame:GetID()), tostring(button:GetID())))
+                tostring(button.bagIndexFrame and button.bagIndexFrame:GetID()), tostring(button:GetID()),
+                tostring(button.secureBagID), tostring(button.secureSlotID), tostring(button.secureItemID),
+                tostring(button.secureBindingValid), tostring(button.IsProtected and button:IsProtected()),
+                tostring(button.GetAttribute and button:GetAttribute("type2"))))
+            print(string.format("     item2=%s useOnKeyDown=%s OnClickIsSecure=%s",
+                tostring(button.GetAttribute and button:GetAttribute("item2")),
+                tostring(button.GetAttribute and button:GetAttribute("useOnKeyDown")),
+                tostring(SecureActionButton_OnClick ~= nil and button:GetScript("OnClick") == SecureActionButton_OnClick)))
         end
     end
     if count == 0 then
@@ -197,10 +243,18 @@ function Debug:HandleCommand(args)
         self:DumpBags()
     elseif subCmd == "secure" then
         self:DumpSecureButtons()
+    elseif subCmd == "tooltip" then
+        local on = (args[3] or ""):lower() == "on"
+        PocketsDB.settings.modernTooltips = on
+        print("[Pockets] modernTooltips=" .. tostring(on) .. " (applies after /reload)")
+    elseif subCmd == "shell" then
+        self:DumpShell()
+    elseif subCmd == "client" then
+        self:DumpClient()
     elseif subCmd == "regions" then
         self:DumpButtonRegions()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, regions")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions")
     end
 end
 
@@ -246,8 +300,21 @@ function Debug:HandleTestCommand(args)
             Pockets.Services.RecentItems:Record({ itemID = itemID, quantity = quantity, timestamp = GetTime() })
             print(string.format("[Pockets] Recorded recent item %d x%d", itemID, quantity))
         end
+    elseif subCmd == "loot" then
+        local kind = args[3]
+        if kind == "item" and tonumber(args[4]) then
+            local itemID, quantity = tonumber(args[4]), tonumber(args[5]) or 1
+            local _, link = Pockets.Adapters.ItemAPI:RawGetItemInfo(itemID)
+            Pockets.Services.LootLog:RecordItem(itemID, quantity, link)
+            print(string.format("[Pockets] Logged item %d x%d", itemID, quantity))
+        elseif kind == "money" and tonumber(args[4]) then
+            Pockets.Services.LootLog:RecordMoney(tonumber(args[4]))
+            print(string.format("[Pockets] Logged money %d", tonumber(args[4])))
+        else
+            print("[Pockets] Usage: /pockets test loot item <itemID> <quantity> | money <copper>")
+        end
     else
-        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>")
+        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>, loot item|money ...")
     end
 end
 

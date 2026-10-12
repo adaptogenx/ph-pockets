@@ -14,6 +14,44 @@ local ItemAPI = Pockets.Adapters.ItemAPI
 -- ItemCache[itemID] = { status = "ready" | "pending", name, quality, classID, subclassID, maxStack, texture, itemLink }
 ItemAPI.ItemCache = ItemAPI.ItemCache or {}
 
+-- Raw item-info lookup: C_Item on modern clients (Forever), legacy global
+-- on Classic/TBC. Same return order on both. Returns nothing when the
+-- client hasn't cached the item yet.
+function ItemAPI:RawGetItemInfo(itemLinkOrID)
+    if C_Item and C_Item.GetItemInfo then
+        return C_Item.GetItemInfo(itemLinkOrID)
+    end
+    if GetItemInfo then
+        return GetItemInfo(itemLinkOrID)
+    end
+    return nil
+end
+
+-- Item family bitmask (bag type for bag items). Nil when unavailable.
+function ItemAPI:GetItemFamily(itemLinkOrID)
+    if not itemLinkOrID then
+        return nil
+    end
+    local family
+    if C_Item and C_Item.GetItemFamily then
+        family = C_Item.GetItemFamily(itemLinkOrID)
+    elseif GetItemFamily then
+        family = GetItemFamily(itemLinkOrID)
+    end
+    if Pockets.Adapters.ClientAPI:IsSecret(family) then
+        return nil
+    end
+    return family
+end
+
+-- Asks the client to load item data; the answer arrives later via
+-- GET_ITEM_INFO_RECEIVED. Legacy GetItemInfo already queues the request.
+function ItemAPI:RequestItemData(itemID)
+    if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(itemID)
+    end
+end
+
 -- Returns cached metadata for an item, requesting it from the WoW API if
 -- not already cached. Never blocks; returns a pending entry when the
 -- client hasn't cached the item yet.
@@ -28,9 +66,19 @@ function ItemAPI:GetItemMetadata(itemID, itemLink)
     end
 
     local name, link, quality, _, _, itemClass, itemSubClass, maxStack, _, texture, _, classID, subclassID,
-        _, _, _, isCraftingReagent = GetItemInfo(itemLink or itemID)
+        _, _, _, isCraftingReagent = self:RawGetItemInfo(itemLink or itemID)
+
+    -- A Secret Value anywhere in the fields Pockets compares/sorts/indexes
+    -- means the metadata is unusable: stay pending rather than error.
+    local ClientAPI = Pockets.Adapters.ClientAPI
+    if name and (ClientAPI:IsSecret(name) or ClientAPI:IsSecret(quality)
+        or ClientAPI:IsSecret(classID) or ClientAPI:IsSecret(subclassID)
+        or ClientAPI:IsSecret(maxStack)) then
+        name = nil
+    end
 
     if not name then
+        self:RequestItemData(itemID)
         if not cached then
             self.ItemCache[itemID] = { status = "pending" }
         end
@@ -60,9 +108,26 @@ function ItemAPI:IsPending(itemID)
     return cached == nil or cached.status == "pending"
 end
 
+-- Icon texture for an item, or nil if the client can't resolve it yet.
+-- Prefers already-cached metadata; GetItemIcon needs no item-cache round
+-- trip for most items, so Loot Log rows get their icon immediately.
+function ItemAPI:GetIcon(itemID)
+    if not itemID then
+        return nil
+    end
+    local cached = self.ItemCache[itemID]
+    if cached and cached.status == "ready" and cached.texture then
+        return cached.texture
+    end
+    if C_Item and C_Item.GetItemIconByID then
+        return C_Item.GetItemIconByID(itemID)
+    end
+    return GetItemIcon and GetItemIcon(itemID) or nil
+end
+
 -- Returns whether an item is currently a quest item (WoW Classic quest flag).
 function ItemAPI:IsQuestItem(itemID, itemLink)
-    local _, _, _, _, _, itemClass = GetItemInfo(itemLink or itemID)
+    local _, _, _, _, _, itemClass = self:RawGetItemInfo(itemLink or itemID)
     return itemClass == (ITEM_CLASS_QUEST or "Quest")
 end
 

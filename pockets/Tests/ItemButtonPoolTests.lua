@@ -90,6 +90,40 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: Configure clears IDs to 0/0 o
         "expected cleared IDs 0/0, got bagID=%s slotID=%s", tostring(bagID), tostring(slotID))
 end)
 
+Pockets.Tests.TestRunner:Register("ItemButtonPool: non-Recent item tooltip anchors to the HUD's top-right", function()
+    local button = ItemButtonPool:Acquire(UIParent)
+    ItemButtonPool:Configure(button, {
+        itemID = 1, texture = 1, quantity = 1, bagID = 0, slotID = 5,
+    })
+
+    button:GetScript("OnEnter")(button)
+    local point, relativeTo, relativePoint = GameTooltip:GetPoint()
+    GameTooltip:Hide()
+    ItemButtonPool:ReleaseAll(UIParent)
+
+    local ok = point == "TOPLEFT" and relativeTo == Pockets.UI.Shell:GetActiveFrame() and relativePoint == "TOPRIGHT"
+    return ok, ok and "OK" or string.format(
+        "expected TOPLEFT anchored to the HUD's TOPRIGHT, got point=%s relativeToHud=%s relativePoint=%s",
+        tostring(point), tostring(relativeTo == Pockets.UI.Shell:GetActiveFrame()), tostring(relativePoint))
+end)
+
+Pockets.Tests.TestRunner:Register("ItemButtonPool: Recent-item tooltip keeps its own per-button anchor (not the HUD's)", function()
+    local button = ItemButtonPool:Acquire(UIParent)
+    ItemButtonPool:Configure(button, {
+        itemID = 1, texture = 1, quantity = 1, bagID = 0, slotID = 5,
+    })
+    button.isRecentItem = true
+
+    button:GetScript("OnEnter")(button)
+    local _, relativeTo = GameTooltip:GetPoint()
+    GameTooltip:Hide()
+    button.isRecentItem = nil -- this pool button is reused by later tests - don't leak the flag
+    ItemButtonPool:ReleaseAll(UIParent)
+
+    local ok = relativeTo ~= Pockets.UI.Shell:GetActiveFrame()
+    return ok, ok and "OK" or "expected a Recent item's tooltip to stay anchored to itself, not redirected to the HUD"
+end)
+
 Pockets.Tests.TestRunner:Register("ItemButtonPool: HandleInsecureClick pickups on left-click and does not UseItem on right-click", function()
     local previousItems = InventoryState.items
     InventoryState.items = {
@@ -134,4 +168,14 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: HandleInsecureClick pickups o
     return ok, ok and "OK" or string.format(
         "right-click used=%s picked=%s; left-click bag=%s slot=%s used=%s",
         tostring(rightUsed), tostring(rightPicked), tostring(pickedBag), tostring(pickedSlot), tostring(used))
+end)
+
+Pockets.Tests.TestRunner:Register("ItemButtonPool: pooled buttons are uniquely named (modern templates resolve _G[name..'Count'])", function()
+    local parent = CreateFrame("Frame")
+    local a = Pockets.UI.ItemButtonPool:Acquire(parent)
+    local b = Pockets.UI.ItemButtonPool:Acquire(parent)
+    local nameA, nameB = a:GetName(), b:GetName()
+    Pockets.UI.ItemButtonPool:ReleaseAll(parent)
+    local ok = nameA ~= nil and nameB ~= nil and nameA ~= nameB
+    return ok, ok and "OK" or string.format("names: %s / %s", tostring(nameA), tostring(nameB))
 end)

@@ -68,18 +68,30 @@ end
 -- acquisitions in RecentItems (TDD §8.2). Negative deltas are ignored here;
 -- they only matter for capacity/ETA which Refresh() handles separately.
 local function RecordAcquisitions(oldTotals, newTotals, itemsByID)
+    -- Collected and sorted by itemID before recording: pairs() order is
+    -- unspecified, and simultaneous Loot Log entries must keep a
+    -- deterministic insertion order.
+    local gained = {}
     for itemID, newTotal in pairs(newTotals) do
-        local oldTotal = oldTotals and oldTotals[itemID] or 0
-        local delta = newTotal - oldTotal
+        local delta = newTotal - (oldTotals and oldTotals[itemID] or 0)
         if delta > 0 then
-            local sample = itemsByID[itemID]
-            Pockets.Services.RecentItems:Record({
-                itemID = itemID,
-                quantity = delta,
-                timestamp = GetTime(),
-                itemLink = sample and sample.itemLink,
-            })
+            gained[#gained + 1] = { itemID = itemID, quantity = delta }
         end
+    end
+    table.sort(gained, function(a, b) return a.itemID < b.itemID end)
+
+    for _, acquisition in ipairs(gained) do
+        local sample = itemsByID[acquisition.itemID]
+        local itemLink = sample and sample.itemLink
+        Pockets.Services.RecentItems:Record({
+            itemID = acquisition.itemID,
+            quantity = acquisition.quantity,
+            timestamp = GetTime(),
+            itemLink = itemLink,
+        })
+        -- Loot Log's item feed (see Core/LootLog.lua for why this diff is
+        -- its single item source).
+        Pockets.Services.LootLog:ObserveAcquisition(acquisition.itemID, acquisition.quantity, itemLink)
     end
 end
 

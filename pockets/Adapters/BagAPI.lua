@@ -21,7 +21,7 @@ BagAPI.GENERAL_BAG_IDS = { 0, 1, 2, 3, 4 }
 -- cannot collapse from e.g. 66/76 down to a single remaining bag.
 BagAPI.lastSlotCount = BagAPI.lastSlotCount or {}
 
--- Container family bits (GetItemFamily's return value is a bitmask, not
+-- Container family bits (ItemAPI:GetItemFamily's return value is a bitmask, not
 -- an enum) for the two specialized ammo-storage bag types Classic/TBC
 -- actually ship: Quiver (bit 0x2) and Ammo Pouch (bit 0x4). Either one
 -- creates an Ammo capacity pool.
@@ -32,6 +32,7 @@ local AMMO_BAG_FAMILY_MASK = 2 + 4
 -- auction-house interaction one of the two can briefly report 0 for bags
 -- that are still equipped.
 function BagAPI:GetBagSlotCount(bagID)
+    local ClientAPI = Pockets.Adapters.ClientAPI
     local modern = 0
     if C_Container and C_Container.GetContainerNumSlots then
         modern = C_Container.GetContainerNumSlots(bagID) or 0
@@ -39,6 +40,14 @@ function BagAPI:GetBagSlotCount(bagID)
     local legacy = 0
     if GetContainerNumSlots then
         legacy = GetContainerNumSlots(bagID) or 0
+    end
+    -- Secret/non-numeric counts are unusable: report 0 (unknown) so the
+    -- existing cached-size / incomplete-scan protection takes over.
+    if type(modern) ~= "number" or ClientAPI:IsSecret(modern) then
+        modern = 0
+    end
+    if type(legacy) ~= "number" or ClientAPI:IsSecret(legacy) then
+        legacy = 0
     end
     if modern > legacy then
         return modern
@@ -129,6 +138,13 @@ function BagAPI:GetSlotInfo(bagID, slotIndex)
         return nil
     end
 
+    -- Secret Values can't be summed/compared/indexed. Treat such a slot
+    -- as unreadable (skipped) instead of erroring in aggregation.
+    local ClientAPI = Pockets.Adapters.ClientAPI
+    if ClientAPI:IsSecret(itemID) or ClientAPI:IsSecret(quantity) or ClientAPI:IsSecret(quality) then
+        return nil
+    end
+
     return {
         itemID = itemID,
         itemLink = itemLink,
@@ -186,7 +202,7 @@ function BagAPI:IsAmmoBag(bagID)
         return false
     end
 
-    local bagFamily = GetItemFamily and GetItemFamily(bagLink)
+    local bagFamily = Pockets.Adapters.ItemAPI:GetItemFamily(bagLink)
     return self:IsAmmoFamily(bagFamily)
 end
 
@@ -300,6 +316,16 @@ end
 -- allowed to reach into bag APIs (keeps the rule in the file header true).
 --------------------------------------------------
 
+-- True when item buttons must run right-click use through Blizzard's
+-- SECURE action handler (type2="item", item2="<bag> <slot>") instead of
+-- ContainerFrameItemButtonTemplate's own Lua OnClick. On WoW Forever the
+-- latter is blocked for protected item use ("Pockets has been blocked from
+-- an action only available to the Blizzard UI" on consumables). Classic/
+-- TBC keep the existing, working template path.
+function BagAPI:UsesSecureItemAttributes()
+    return Pockets.Adapters.ClientAPI:IsForever()
+end
+
 -- Left-click/drag-start behavior: picks the item up onto the cursor (or
 -- swaps with whatever's already on the cursor) - identical to Blizzard's
 -- own ContainerFrameItemButton_OnClick/OnDragStart.
@@ -328,6 +354,40 @@ function BagAPI:SplitStack(bagID, slotIndex, amount)
     else
         SplitContainerItem(bagID, slotIndex, amount)
     end
+end
+
+-- True while a chat edit box is open/focused (shift-click should link).
+-- Tries the legacy global, the modern ChatFrameUtil, then the keyboard
+-- focus itself (chat edit boxes carry a .chatFrame field).
+function BagAPI:IsChatEditActive()
+    if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then
+        return true
+    end
+    if ChatFrameUtil and ChatFrameUtil.GetActiveWindow and ChatFrameUtil.GetActiveWindow() then
+        return true
+    end
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus ~= nil and focus.chatFrame ~= nil
+end
+
+function BagAPI:CanSplit()
+    return OpenStackSplitFrame ~= nil or (StackSplitFrame ~= nil and StackSplitFrame.OpenStackSplitFrame ~= nil)
+end
+
+-- Opens Blizzard's stack-split dialog for `owner` (which must implement
+-- :SplitStack(amount)). The bare OpenStackSplitFrame global is gone on
+-- modern clients (Forever); the dialog is a method on StackSplitFrame.
+-- Returns false when no split dialog is available.
+function BagAPI:OpenSplitFrame(maxQuantity, owner, anchor, anchorTo)
+    if OpenStackSplitFrame then
+        OpenStackSplitFrame(maxQuantity, owner, anchor, anchorTo)
+        return true
+    end
+    if StackSplitFrame and StackSplitFrame.OpenStackSplitFrame then
+        StackSplitFrame:OpenStackSplitFrame(maxQuantity, owner, anchor, anchorTo)
+        return true
+    end
+    return false
 end
 
 -- Shift-click/ctrl-click/etc: delegates to Blizzard's own modified-click

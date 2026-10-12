@@ -20,3 +20,24 @@ function Pockets_ToggleFullInventory()
         Pockets.API.ToggleFullInventory()
     end
 end
+
+-- Pure: SaveBindings only accepts 1 (account) or 2 (character). Modern
+-- clients can report another value (or nothing) from GetCurrentBindingSet,
+-- which made SaveBindings throw "Usage: SaveBindings(1|2)" on Forever.
+function Pockets.Adapters.BindingsAPI.NormalizeBindingSet(set)
+    if set == 1 or set == 2 then
+        return set
+    end
+    return 1
+end
+
+-- Binds `key` to `action` unless the action already has a key. Returns
+-- true if a binding was added. Errors propagate (caller pcalls).
+function Pockets.Adapters.BindingsAPI:EnsureDefaultBinding(key, action)
+    if GetBindingKey(action) then
+        return false
+    end
+    SetBinding(key, action)
+    SaveBindings(self.NormalizeBindingSet(GetCurrentBindingSet and GetCurrentBindingSet()))
+    return true
+end

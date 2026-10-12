@@ -18,6 +18,8 @@
     data (§14 Performance).
 ]]
 
+-- luacheck: globals SecureHandlerWrapScript RegisterStateDriver UISpecialFrames
+
 local _, Pockets = ...
 
 Pockets.UI.Shell = Pockets.UI.Shell or {}
@@ -39,6 +41,11 @@ Shell.STATE = {
     -- inventory browsing - deliberately excluded from MENU/CATEGORY/ALL's
     -- shared footer/scrollbar body contract (see RenderSearch).
     SEARCH = "SEARCH",
+    -- Loot Log: a peer view reached from Glance/Menu/Category chrome
+    -- (scroll icon), not an inventory category. Back returns to wherever
+    -- it was opened from (context.returnState), so it has no fixed
+    -- ESCAPE_PARENT entry.
+    LOOT = "LOOT",
 }
 
 -- Back (`<`) hierarchy (§4): CATEGORY/ALL -> MENU -> GLANCE, SEARCH ->
@@ -126,66 +133,18 @@ local function MaxListContentHeight()
     return L.MAX_VISIBLE_LIST_ROWS * L.LIST_ROW_HEIGHT
 end
 
--- Conditional scrollbar (UI polish pass §4): shows/hides the REAL
--- Blizzard scrollbar widget UIPanelScrollFrameTemplate creates as
--- "<name>ScrollBar", AND re-anchors the scrollFrame's own right edge to
--- match. UIPanelScrollFrameTemplate's scrollbar anchors itself just
--- OUTSIDE the scrollFrame's own rect (not inside `content`) - narrowing
--- only `content` while leaving the scrollFrame full-width left the real
--- scrollbar widget rendering past the panel's right border entirely.
--- Pulling the scrollFrame's own right edge in by SCROLLBAR_RESERVE when
--- shown puts the native scrollbar back inside that reserved gap, where
--- it visually belongs. Never just disabled/left as an empty track -
--- hidden entirely means zero layout width consumed.
---
--- UIPanelScrollFrameTemplate's OnScrollRangeChanged re-Shows the bar
--- whenever it thinks yrange > 0 (and can lag a frame behind our Hide),
--- which left a no-overflow list with the native widget sitting outside
--- the panel. We record the intended visibility and re-assert it after
--- every range change; SetPoint stays out of that path so the hook cannot
--- recurse.
-local function ApplyScrollBarVisibility(shell)
-    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
-    if not scrollBar then
-        return
-    end
-    if shell.scrollBarShown then
-        scrollBar:Show()
-    else
-        scrollBar:Hide()
-    end
-end
-
-local function SetScrollBarShown(shell, shown)
-    shell.scrollBarShown = shown and true or false
-
-    local scrollFrame = shell.scrollFrame
-    local extraInset = shell.scrollBarShown and L.SCROLLBAR_RESERVE or 0
-    scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(L.SHELL_PADDING + extraInset), L.SHELL_PADDING)
-    ApplyScrollBarVisibility(shell)
-end
-
--- Sets the scrollbar's travel range from OUR own numbers instead of
--- trusting the engine's OnScrollRangeChanged recalculation (fired off
--- content:SetHeight/scrollFrame resize) to land before the player can
--- interact - on this client that recalculation can lag a frame behind,
--- letting the thumb travel one row past the real end of content ("space
--- below the last list item when scrolled to bottom" bug). Call AFTER
--- content:SetHeight() so contentHeight/usedContentHeight are final.
-local function SyncScrollRange(shell, contentHeight, usedContentHeight)
-    local scrollBar = _G[shell.scrollFrame:GetName() .. "ScrollBar"]
-    if not scrollBar then
-        return
-    end
-    local maxScroll = math.max(contentHeight - usedContentHeight, 0)
-    scrollBar:SetMinMaxValues(0, maxScroll)
-    if scrollBar:GetValue() > maxScroll then
-        scrollBar:SetValue(maxScroll)
-    end
-    shell.scrollFrame:SetVerticalScroll(scrollBar:GetValue())
-    -- SetMinMaxValues can trigger OnScrollRangeChanged, which would
-    -- otherwise re-Show a bar we just decided to hide.
-    ApplyScrollBarVisibility(shell)
+-- Thin wrapper around the shared UI/ScrollBar.lua component (scrollbar
+-- redesign pass): scrollFrame's own rect NEVER changes based on whether
+-- the bar is shown - it lives in the panel's existing right-edge padding
+-- gutter instead of a reserved column. Callers just hand over the
+-- contentHeight/usedContentHeight they already computed for
+-- ApplyDimensions - the component itself decides show/hide and thumb
+-- size/range from those two numbers; no caller narrows its own
+-- rowWidth/usableWidth based on whether a scrollbar ends up showing
+-- (that reservation was the old bulky Blizzard scrollbar's whole
+-- "changes column count when it appears" problem).
+local function SetScrollBarShown(shell, contentHeight, usedContentHeight)
+    Pockets.UI.ScrollBar:Update(shell.scrollBar, contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
@@ -268,26 +227,56 @@ end
 -- dimension known can resolve to a fully indeterminate position, which
 -- is exactly what silently blanked every earlier version of this HUD.
 function Shell:BuildGlance()
-    local frame = self.frame
+    local frame = self.root
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
     frame.glance = glance
+    self.frame.glance = glance
 
     local contentWidth = L.GLANCE_WIDTH - L.GLANCE_PADDING * 2
 
-    -- Header (HEADER spec): "pockets" left-aligned, Search right-aligned
-    -- and sized like a metric icon, not an oversized button. Search
-    -- click behavior is unchanged - the ONLY way into SEARCH.
+    -- Header (HEADER spec): "pockets (8m)" left-aligned - the time-to-
+    -- full subtitle lives here now, not on the Bag row below (moved off
+    -- it so Bag only ever shows the capacity count) - then Search and a
+    -- "+" All-Items shortcut. Both icon buttons use
+    -- GLANCE_HEADER_ICON_SIZE (= PHUI.Spacing.ICON_BUTTON_SIZE), the
+    -- SAME size as Shell's expanded-header back/close/+ buttons - not
+    -- GLANCE_METRIC_ICON_SIZE, which is for plain unbordered icons
+    -- (Bag/Gold/Ammo), a different kind of element. Search click
+    -- behavior is unchanged - the ONLY way into SEARCH. "+" mirrors the
+    -- expanded Shell header's own + button (Shell.STATE.ALL) exactly,
+    -- down to the icon size, giving Glance a direct jump there too.
     glance.header = Pockets.UI.Header:Create(glance, {
         width = contentWidth,
         height = L.GLANCE_HEADER_HEIGHT,
         title = "pockets",
-        iconSize = L.GLANCE_SEARCH_ICON_SIZE,
-        iconTexture = "Interface\\Common\\UI-Searchbox-Icon",
-        tooltipText = "Quick Search",
-        onIconClick = function() Shell:SetState(Shell.STATE.SEARCH) end,
+        titleGap = L.GLANCE_HEADER_TITLE_GAP,
+        iconGap = L.GLANCE_HEADER_ICON_GAP,
+        icons = {
+            {
+                size = L.GLANCE_HEADER_ICON_SIZE,
+                texture = "Interface\\Common\\UI-Searchbox-Icon",
+                tooltipText = "Quick Search",
+                onClick = function() Shell:SetState(Shell.STATE.SEARCH) end,
+            },
+            {
+                size = L.GLANCE_HEADER_ICON_SIZE,
+                texture = PHUI.Icons.SCROLL,
+                tooltipText = "Loot Log",
+                onClick = function() Shell:OpenLootLog() end,
+            },
+            {
+                size = L.GLANCE_HEADER_ICON_SIZE,
+                texture = PHUI.Icons.PLUS,
+                native = true,
+                tooltipText = "All Items",
+                onClick = function() Shell:SetState(Shell.STATE.ALL) end,
+            },
+        },
     })
     glance.header:SetPoint("TOPLEFT", glance, "TOPLEFT", L.GLANCE_PADDING, -L.GLANCE_PADDING)
+    glance.header.lootButton = glance.header.icons[2]
+    glance.header.plusButton = glance.header.icons[3]
 
     -- One shared row geometry for Bag/Gold/Ammo (METRIC ROW SYSTEM spec)
     -- - only texture/text/style ever varies between them.
@@ -305,9 +294,10 @@ function Shell:BuildGlance()
     end
 
     -- Bag (BAG ROW spec): capacity is the strongest text in the section
-    -- ("primary" style); ETA is the row's right-aligned secondary value.
+    -- ("primary" style). Time-to-full moved into the header's subtitle
+    -- ("pockets (8m)") - this row no longer carries a secondary value.
     -- Constants.HUD_ICON is already clean backpack art - no texcoord crop.
-    glance.bagRow = BuildMetricRow(Constants.HUD_ICON, { insetTexCoord = false }, true, "primary")
+    glance.bagRow = BuildMetricRow(Constants.HUD_ICON, { insetTexCoord = false }, false, "primary")
     glance.bagRow:SetPoint("TOPLEFT", glance.header, "BOTTOMLEFT", 0, -L.GLANCE_HEADER_GAP)
 
     -- Gold (GOLD spec): always present, immediately below Bag. "muted"
@@ -331,19 +321,27 @@ function Shell:BuildGlance()
         width = contentWidth,
         iconSize = L.GLANCE_RECENT_ICON_SIZE,
         gap = L.GLANCE_RECENT_ICON_GAP,
+        -- ">>" after the last Recent icon: opens the Loot Log. Takes
+        -- one icon slot, so Glance's size never changes for it.
+        moreButton = {
+            size = L.GLANCE_RECENT_MORE_SIZE,
+            tooltipText = "Loot Log",
+            onClick = function() Shell:OpenLootLog() end,
+        },
     })
     glance.recentStrip:SetPoint("TOPLEFT", glance.goldRow, "BOTTOMLEFT", 0, -L.GLANCE_RECENT_GAP)
 end
 
 function Shell:BuildShell()
-    local frame = self.frame
+    local frame = self.expanded
     local shell = CreateFrame("Frame", nil, frame)
     -- shell fills frame's rect exactly - frame itself is the one thing
     -- Shell:ApplyDimensions ever resizes (§3 "one logical root frame").
     shell:SetAllPoints(frame)
     frame.shell = shell
+    self.frame.shell = shell
     shell.menuRows = {}
-    shell.categoryLabels = {}
+    shell.categoryHeaders = {}
     shell.categoryListRows = {}
 
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
@@ -385,21 +383,39 @@ function Shell:BuildShell()
 
     -- Contextual action (+ / search) sits immediately LEFT of the
     -- always-present X, never in the far-right slot itself.
-    header.plusButton = PHUI.CreateIconButton(header, 20, nil, {
+    header.plusButton = PHUI.CreateNativeIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.PLUS, {
         tooltipText = "All Items",
         onClick = function() Shell:SetState(Shell.STATE.ALL) end,
     })
     header.plusButton:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
-    header.plusButton.glyph = PHUI.CreateLabel(header.plusButton, "primary", "+", PHUI.Fonts.SMALL)
-    header.plusButton.glyph:SetPoint("CENTER", 0, 0)
+
+    -- Loot Log entry, immediately left of "+" (same boxed icon-button
+    -- style/size as Glance's Search). Hidden wherever "+"'s slot is taken
+    -- by something else (All's search box) or where it's already open.
+    header.lootButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.SCROLL, {
+        tooltipText = "Loot Log",
+        onClick = function() Shell:OpenLootLog() end,
+    })
+    header.lootButton:SetPoint("RIGHT", header.plusButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
 
     header.searchBox = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
-    header.searchBox:SetHeight(18)
+    -- Same height as Quick Search's own editBox (SEARCH_INPUT_HEIGHT) so
+    -- both search inputs read as the same control, not two different sizes.
+    header.searchBox:SetHeight(L.SEARCH_INPUT_HEIGHT)
     header.searchBox:SetWidth(L.SHELL_HEADER_RIGHT_WIDTH - 6)
     header.searchBox:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
     header.searchBox:SetAutoFocus(false)
     header.searchBox:SetScript("OnTextChanged", function(box)
         Shell:RenderAll(box:GetText())
+    end)
+    -- Same reasoning as searchPanel.editBox's own OnEscapePressed below -
+    -- this editbox must resolve Escape itself (clear focus, then dismiss)
+    -- rather than leaving it to the raw keydown bubbling up to frame's
+    -- OnKeyDown, since that handler now bails out entirely while any
+    -- editbox holds keyboard focus (see EnableKeyboard note there).
+    header.searchBox:SetScript("OnEscapePressed", function(box)
+        box:ClearFocus()
+        Shell:HandleEscape()
     end)
     header.searchBox:Hide()
 
@@ -414,39 +430,58 @@ function Shell:BuildShell()
     shell.footer:SetHeight(L.SHELL_FOOTER_HEIGHT)
     PHUI.ApplyBackdrop(shell.footer, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
 
-    shell.footerBagsText = PHUI.CreateLabel(shell.footer, "primary", nil, PHUI.Fonts.SMALL)
-    shell.footerBagsText:SetPoint("LEFT", shell.footer, "LEFT", L.SHELL_PADDING, 0)
+    -- Footer metrics (Full Inventory redesign): reuse the SAME MetricRow/
+    -- MoneyFormat components Glance's Bag/Gold/Ammo rows already use,
+    -- rather than duplicated FontString formatting - icon/gap/font sizes
+    -- are the same verified pH-sized defaults (GLANCE_METRIC_ICON_SIZE),
+    -- just laid out horizontally instead of stacked. width starts at 1
+    -- (unknown until text is set) - Shell:ConfigureFooter resizes each to
+    -- its own measured content width every render, same pattern
+    -- EnsureCategoryHeader/CategoryLabel already used.
+    local function BuildFooterMetric(texture, iconOpts, primaryStyle)
+        return Pockets.UI.MetricRow:Create(shell.footer, {
+            width = 1,
+            height = L.GLANCE_METRIC_ROW_HEIGHT,
+            iconSize = L.GLANCE_METRIC_ICON_SIZE,
+            gap = L.GLANCE_METRIC_ICON_TEXT_GAP,
+            texture = texture,
+            iconOpts = iconOpts,
+            hasSecondary = false,
+            primaryStyle = primaryStyle,
+        })
+    end
 
-    shell.footerEtaText = PHUI.CreateLabel(shell.footer, "muted", nil, PHUI.Fonts.SMALL)
-    shell.footerEtaText:SetPoint("LEFT", shell.footerBagsText, "RIGHT", 4, 0)
+    shell.footerBagRow = BuildFooterMetric(Constants.HUD_ICON, { insetTexCoord = false }, "primary")
+    shell.footerBagRow:SetPoint("LEFT", shell.footer, "LEFT", L.SHELL_PADDING, 0)
 
-    shell.footerAmmoText = PHUI.CreateLabel(shell.footer, "primary", nil, PHUI.Fonts.SMALL)
-    shell.footerAmmoText:SetPoint("RIGHT", shell.footer, "RIGHT", -L.SHELL_PADDING, 0)
-    shell.footerAmmoText:Hide()
+    shell.footerGoldRow = BuildFooterMetric(Constants.GOLD_ICON, { insetTexCoord = false }, "muted")
+
+    -- Ammo is always the far-right metric, independent of Bag/Gold's
+    -- measured widths (§ "Ammo disappears completely when irrelevant") -
+    -- fixed to the footer's own right edge rather than chained after Gold.
+    shell.footerAmmoRow = BuildFooterMetric(Constants.CATEGORY_ICON.ammo, nil, "primary")
+    shell.footerAmmoRow:SetPoint("RIGHT", shell.footer, "RIGHT", -L.SHELL_PADDING, 0)
+    shell.footerAmmoRow:Hide()
 
     -- Body: the ONE region whose height actually varies by state - it
     -- fills whatever space is left between header and footer once
     -- Shell:ApplyDimensions resizes the root frame (§8), so nothing here
     -- ever needs to be repositioned by hand per state. One scrolling
     -- viewport reused by Menu/Category/All (§3 "consistent body bounds").
-    -- Named (not nil) so the real Blizzard scrollbar child can be looked
-    -- up by name and shown/hidden - the scrollFrame's own outer rect
-    -- never reserves gutter width; SetScrollBarShown/each RenderX
-    -- function decide `content`'s width per §4's conditional-scrollbar
-    -- rule instead.
-    shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell, "UIPanelScrollFrameTemplate")
+    --
+    -- Plain ScrollFrame, no template (scrollbar redesign pass) - Blizzard's
+    -- UIPanelScrollFrameTemplate drags in a wide dedicated scrollbar column
+    -- with big up/down arrow buttons, which read as a second toolbar next
+    -- to the item grid and forced every RenderX function to narrow its own
+    -- content width whenever a scrollbar appeared (reflowing the grid).
+    -- The scrollFrame's own rect is now fixed - always inset by exactly
+    -- SHELL_PADDING, regardless of whether a scrollbar is showing - and
+    -- UI/ScrollBar.lua's compact custom Slider lives in that same existing
+    -- padding gutter as a sibling, never reserving extra width itself.
+    shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell)
     shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
     shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
-    -- Without this, OnScrollRangeChanged leaves the bar visible at
-    -- yrange 0; with it, Blizzard hides the bar when there is nothing
-    -- to scroll. Combined with ApplyScrollBarVisibility so a stale
-    -- non-zero range cannot push the widget back outside the panel.
-    shell.scrollFrame.scrollBarHideable = true
-    shell.scrollBarShown = false
-    ApplyScrollBarVisibility(shell)
-    shell.scrollFrame:HookScript("OnScrollRangeChanged", function()
-        ApplyScrollBarVisibility(shell)
-    end)
+    shell.scrollBar = Pockets.UI.ScrollBar:Create(shell.scrollFrame)
 
     shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
     shell.content:SetWidth(L.SHELL_WIDTH - L.SHELL_PADDING * 2)
@@ -466,6 +501,10 @@ function Shell:BuildShell()
     -- past the panel and even the footer once a category had more items
     -- than fit the visible viewport.
     shell.categoryListPoolAnchor = CreateFrame("Frame", nil, shell.content)
+
+    -- Loot Log rows (UI/LootLog.lua) live in the same scroll content, so
+    -- they get the shared ScrollBar and clipping like every other body.
+    shell.lootView = Pockets.UI.LootLog:Create(shell.content)
 
     -- SEARCH body (Glance Quick Search pass) - deliberately NOT the
     -- scrollFrame/content above: no footer, no scrollbar, capped at
@@ -491,7 +530,10 @@ function Shell:BuildShell()
     -- keystroke re-renders from API.GetAllAggregatedItems(), never a bag
     -- rescan or categorization pass.
     shell.searchPanel.editBox:SetScript("OnTextChanged", function()
-        Shell:RenderSearch()
+        local ok, err = pcall(Shell.RenderSearch, Shell)
+        if not ok and Pockets.Debug then
+            Pockets.Debug:LogError("RenderSearch failed: " .. tostring(err))
+        end
     end)
     shell.searchPanel.editBox:SetScript("OnEscapePressed", function(box)
         box:ClearFocus()
@@ -510,6 +552,14 @@ function Shell:BuildShell()
         "TOP", shell.searchPanel.feedbackPrimary, "BOTTOM", 0, -L.SEARCH_FEEDBACK_LINE_GAP)
     shell.searchPanel.feedbackSecondary:Hide()
 
+    -- "and N more" trailer line, shown only when totalCount exceeds the
+    -- SEARCH_MAX_RESULT_ROWS rows actually rendered (still under
+    -- SEARCH_OVERFLOW_LIMIT, so real rows ARE showing) - anchored fresh
+    -- every render in RenderSearch since which row it trails depends on
+    -- how many rows are currently shown.
+    shell.searchPanel.overflowLabel = PHUI.CreateLabel(shell.searchPanel, "muted", nil, PHUI.Fonts.SMALL)
+    shell.searchPanel.overflowLabel:Hide()
+
     -- Result rows reuse the exact same List row / ItemButtonPool
     -- component Category List uses (CreateCategoryListRow) - real secure
     -- item buttons, not a second interaction implementation. Own pool key
@@ -524,28 +574,68 @@ function Shell:Initialize()
         return
     end
 
-    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, "BackdropTemplate")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    PHUI.ApplyBackdrop(frame)
+    -- Where item buttons are secure (Forever), both top-level frames are
+    -- secure handlers too, so a restricted snippet can show/hide them in
+    -- combat. Insecure code may still show/hide them out of combat.
+    self.useSecure = Pockets.Adapters.BagAPI:UsesSecureItemAttributes() == true
+    local frameTemplate = self.useSecure and "SecureHandlerBaseTemplate,BackdropTemplate" or "BackdropTemplate"
+    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, frameTemplate)
+    self.root = frame
 
-    frame:SetScript("OnDragStart", function(self)
-        if not Pockets.SavedSettings.hud.locked then
-            Shell.isDragging = true
-            self:StartMoving()
-        end
-    end)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        Shell.isDragging = false
-        Shell:SavePosition()
-        -- Render() no-ops while isDragging is true (see Render's guard),
-        -- so any state change requested by the SAME click (WoW fires
-        -- OnDragStart/OnDragStop on every click, moving or not - see
-        -- OnClick's note below) never got drawn. Flush it now.
-        Shell:Render()
-    end)
+    -- The expanded view (Menu/Category/All/Search/Loot) is its OWN top-level
+    -- frame, not a child of the Glance root. Item buttons are protected in
+    -- combat, and a frame in a protected button's anchor chain cannot be
+    -- re-anchored or resized then. Keeping the expanded item buttons under a
+    -- separate chain means Glance can still be touched, and the expanded
+    -- frame is only ever shown/hidden in combat (never resized/re-anchored).
+    local expanded = CreateFrame("Button", "PocketsExpandedFrame", UIParent, frameTemplate)
+    expanded:Hide()
+    self.expanded = expanded
+
+    -- Legacy single-frame facade: `Shell.frame` forwards methods to whichever
+    -- frame is currently on screen (expanded for non-Glance states) and
+    -- carries the .glance/.shell fields. Use GetActiveFrame() whenever a real
+    -- frame is required (anchoring, parenting).
+    self.frame = setmetatable({}, {
+        __index = function(_, key)
+            return function(_, ...)
+                local target = Shell:GetActiveFrame()
+                return target[key](target, ...)
+            end
+        end,
+    })
+
+    for _, f in ipairs({ frame, expanded }) do
+        f:SetMovable(true)
+        f:EnableMouse(true)
+        f:RegisterForDrag("LeftButton")
+        PHUI.ApplyBackdrop(f)
+
+        f:SetScript("OnDragStart", function(self)
+            -- StartMoving on a frame in a protected button's anchor chain
+            -- is blocked in combat.
+            if Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
+                return
+            end
+            if not Pockets.CharDB.hud.locked then
+                Shell.isDragging = true
+                self:StartMoving()
+            end
+        end)
+        f:SetScript("OnDragStop", function(self)
+            if not Shell.isDragging then
+                return
+            end
+            self:StopMovingOrSizing()
+            Shell.isDragging = false
+            Shell:SavePosition(self)
+            -- Render() no-ops while isDragging is true (see Render's guard),
+            -- so any state change requested by the SAME click (WoW fires
+            -- OnDragStart/OnDragStop on every click, moving or not - see
+            -- OnClick's note below) never got drawn. Flush it now.
+            Shell:Render()
+        end)
+    end
     -- Growing DOWN/RIGHT from a fixed TOPLEFT must never depend on the
     -- frame's SIZE - no OnSizeChanged handler here re-anchors anything.
     -- Position is only ever written by a user drag (SavePosition) and
@@ -574,36 +664,40 @@ function Shell:Initialize()
     end)
 
     -- Escape dismisses straight to Glance (HandleEscape), never stepping
-    -- backward through the hierarchy. Keyboard capture is only enabled
-    -- outside GLANCE (see Render) so Escape never fights other UI while
-    -- collapsed, and any other key just propagates through untouched. Not
-    -- calling SetPropagateKeyboardInput(true) for ESCAPE consumes the key
-    -- so it never also opens the WoW Game Menu.
-    --
-    -- HandleEscape is pcall'd defensively (combat-safety hardening pass):
-    -- if it (or anything it calls - SetState/Render) ever throws, this
-    -- still falls through to SetPropagateKeyboardInput(true) rather than
-    -- silently trapping every future keypress on this frame - action-bar
-    -- keybinds must never get stuck behind an unrelated render bug.
-    frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            local ok = pcall(Shell.HandleEscape, Shell)
-            if not ok then
-                self:SetPropagateKeyboardInput(true)
-            end
-        else
-            self:SetPropagateKeyboardInput(true)
+    -- backward through the hierarchy. Done with the standard WoW mechanism
+    -- - a hidden frame registered in UISpecialFrames that is only SHOWN
+    -- while an expanded state is open - so Escape closes it (and does not
+    -- also open the Game Menu) and Pockets never captures the keyboard.
+    -- The old approach (EnableKeyboard + SetPropagateKeyboardInput) kept
+    -- Enter/typing from reaching chat on WoW Forever.
+    local catcher = CreateFrame("Frame", "PocketsEscapeCatcher", UIParent)
+    catcher:Hide()
+    catcher:SetScript("OnHide", function(self)
+        if not self.suppress then
+            Shell:HandleEscape()
         end
     end)
+    table.insert(UISpecialFrames, "PocketsEscapeCatcher")
+    Shell.escapeCatcher = catcher
 
-    self.frame = frame
     self:BuildGlance()
     self:BuildShell()
+    self:BuildSecureControls()
     self:RestorePosition()
 
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.CAPACITY_CHANGED, function() self:OnDataChanged() end, self)
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.ETA_CHANGED, function() self:OnDataChanged() end, self)
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.INVENTORY_CHANGED, function() self:OnDataChanged() end, self)
+    Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.LOOT_LOGGED, function() self:RefreshLootLog() end, self)
+
+    Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, function(payload)
+        if payload and payload.inCombat == false then
+            self:OnCombatEnded()
+        end
+    end, self)
+
+    -- Learn (out of combat) whether item buttons are combat-protected.
+    Pockets.UI.ItemButtonPool:Probe(UIParent)
 
     self.state = self.STATE.GLANCE
     self.context = {}
@@ -615,7 +709,22 @@ end
 -- afterward touches SetSize only, so the anchor set here is what pins
 -- Glance's TOPLEFT and every expanded state's TOPLEFT to the same point.
 function Shell:RestorePosition()
-    PositionStrategy:ApplyRootPosition(self.frame, Pockets.SavedSettings.hud)
+    -- Re-anchoring is blocked in combat for frames in a protected button's
+    -- anchor chain; the saved position only changes via a drag anyway.
+    if Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
+        return
+    end
+    PositionStrategy:ApplyRootPosition(self.root, Pockets.CharDB.hud)
+    PositionStrategy:ApplyRootPosition(self.expanded, Pockets.CharDB.hud)
+end
+
+-- The frame currently on screen for the current state (Glance root, or the
+-- expanded frame for every other state).
+function Shell:GetActiveFrame()
+    if self.state == nil or self.state == self.STATE.GLANCE then
+        return self.root
+    end
+    return self.expanded
 end
 
 -- OnDragStart/OnDragStop fire on every click (moving or not), so this
@@ -624,9 +733,9 @@ end
 -- stationary click can never persist a fresh (and possibly slightly
 -- different, e.g. from float rounding) value over a perfectly good one.
 local NO_OP_MOVE_THRESHOLD = 0.5
-function Shell:SavePosition()
-    local hud = Pockets.SavedSettings.hud
-    local captured = PositionStrategy:CaptureSavedPosition(self.frame)
+function Shell:SavePosition(source)
+    local hud = Pockets.CharDB.hud
+    local captured = PositionStrategy:CaptureSavedPosition(source or self:GetActiveFrame())
 
     if math.abs(captured.x - (hud.x or 0)) < NO_OP_MOVE_THRESHOLD
         and math.abs(captured.y - (hud.y or 0)) < NO_OP_MOVE_THRESHOLD then
@@ -651,16 +760,36 @@ end
 -- Render* function below only reads already-computed domain state (§14).
 function Shell:SetState(state, context)
     local previousState = self.state
+    -- In combat nothing may be re-laid-out: hand straight to Render, which
+    -- opens/closes the already laid-out view (RenderInCombat).
+    if self:IsCombatBlocked() then
+        self.state = state
+        self.context = context or {}
+        self:Render()
+        return
+    end
     local enteringSearch = state == self.STATE.SEARCH and previousState ~= self.STATE.SEARCH
 
     -- Cleared BEFORE Render() (not after) so the very first RenderSearch
     -- this transition triggers already reflects a blank query - Quick
     -- Search always starts fresh from Glance, never carrying over a
     -- previous session's leftover text/results.
+    --
+    -- ClearBody() also belongs ONLY here, on the actual state transition -
+    -- not inside RenderSearch itself, which OnTextChanged also calls on
+    -- every keystroke. ClearBody() hides searchPanel (see its own body),
+    -- and hiding a frame that contains a focused EditBox drops its
+    -- keyboard focus - doing that on every keystroke silently unfocused
+    -- the box after the very first typed character, so every key after
+    -- that fell through to normal keybinding dispatch instead of typing.
     if enteringSearch and self.frame then
         self.frame.shell.searchPanel.editBox:SetText("")
+        self:ClearBody()
     end
 
+    if previousState ~= state then
+        self.lootRendered = false
+    end
     self.state = state
     self.context = context or {}
     self:Render()
@@ -674,6 +803,13 @@ function Shell:SetState(state, context)
 end
 
 function Shell:GoBack()
+    if self.state == self.STATE.LOOT then
+        -- Back to wherever Loot Log was opened from, with its context
+        -- (e.g. the category being viewed).
+        local returnState = self.context.returnState or self.STATE.GLANCE
+        self:SetState(returnState, self.context.returnContext)
+        return
+    end
     local parent = self:GetParentState(self.state)
     if parent then
         self:SetState(parent)
@@ -686,6 +822,22 @@ end
 -- through Category -> Menu -> Glance the way GoBack/Back does. A no-op
 -- from Glance is handled upstream - keyboard capture is only enabled
 -- outside GLANCE (see Render), so Pockets never even sees this key there.
+-- Shown only while an expanded state is open (see Initialize). Hiding it
+-- programmatically must not count as an Escape press.
+function Shell:SetEscapeCatcherShown(shown)
+    local catcher = self.escapeCatcher
+    if not catcher then
+        return
+    end
+    if shown then
+        catcher:Show()
+    else
+        catcher.suppress = true
+        catcher:Hide()
+        catcher.suppress = false
+    end
+end
+
 function Shell:HandleEscape()
     self:SetState(self.STATE.GLANCE)
 end
@@ -700,7 +852,7 @@ end
 -- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
 -- right/down from that fixed point.
 function Shell:ApplyDimensions(bodyHeight, includeFooter)
-    self.frame:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
+    self.expanded:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
 end
 
 -- Explicit body-clear lifecycle step (§7): hides every kind of body
@@ -715,7 +867,7 @@ function Shell:ClearBody()
     for _, row in ipairs(shell.menuRows) do
         row:Hide()
     end
-    for _, widget in ipairs(shell.categoryLabels) do
+    for _, widget in ipairs(shell.categoryHeaders) do
         widget:Hide()
     end
     -- Category List rows are long-lived real item buttons (created once
@@ -725,8 +877,9 @@ function Shell:ClearBody()
     for _, row in ipairs(shell.categoryListRows) do
         row:Hide()
     end
+    Pockets.UI.LootLog:Hide(shell.lootView)
     Pockets.UI.ItemButtonPool:ReleaseAll(shell.content)
-    shell.scrollFrame:SetVerticalScroll(0)
+    Pockets.UI.ScrollBar:ScrollToTop(shell.scrollBar)
     shell.content:SetHeight(1)
 
     -- Search rows are long-lived (same reasoning as categoryListRows
@@ -741,6 +894,236 @@ end
 -- Cheap and idempotent - every Render* function below only reads
 -- already-computed domain state (§14), so it's always safe to just call
 -- this again rather than trying to patch up a half-drawn state.
+-- Combat lockdown + protected item buttons: showing/hiding/anchoring/
+-- re-binding them is forbidden, so layout work cannot happen in combat
+-- (M2 §11-§17). The expanded view therefore works like a bag in combat:
+-- it can be opened and closed (the frame is only shown/hidden) and items
+-- can be used, but it shows the LAST laid-out view (kept ready by Prewarm
+-- while idle). Navigation/search/layout changes wait for combat to end.
+function Shell:IsCombatBlocked()
+    return Pockets.UI.ItemButtonPool:IsStructurallyBlocked()
+end
+
+-- Guard for every layout function: in combat none of them may run (they
+-- hide/anchor/resize frames in the protected buttons' chains). Marks a
+-- re-render for combat end and keeps counts/stale flags fresh meanwhile.
+-- Returns true when the caller must stop.
+function Shell:DeferIfItemsBlocked()
+    if not self:IsCombatBlocked() then
+        return false
+    end
+    local pool = Pockets.UI.ItemButtonPool
+    self.renderDeferred = true
+    pool:ValidateAll()
+    pool:RefreshCounts()
+    return true
+end
+
+-- PLAYER_REGEN_ENABLED: repair secure bindings from current state, then
+-- paint whatever was deferred.
+function Shell:OnCombatEnded()
+    self:UpdateCombatBindings()
+    local pool = Pockets.UI.ItemButtonPool
+    local hadDeferred = pool:Reconcile()
+    if self.renderDeferred or hadDeferred then
+        self.renderDeferred = false
+        self:Render()
+    end
+end
+
+-- Shows exactly one of root (Glance) / expanded for the current state.
+-- Plain Show/Hide only - allowed in combat.
+function Shell:ApplyVisibility()
+    local showExpanded = self.state ~= self.STATE.GLANCE
+    -- Insecure show/hide of these frames is blocked in combat; there only
+    -- the secure controls (BuildSecureControls) change visibility.
+    if self:IsCombatBlocked() then
+        return
+    end
+    -- Expanded is hidden BEFORE root: its secure OnHide wrap shows root.
+    if self.userHidden then
+        self.expanded:Hide()
+        self.root:Hide()
+        return
+    end
+    if showExpanded then
+        self.expanded:Show()
+        self.root:Hide()
+    else
+        self.expanded:Hide()
+        self.root:Show()
+    end
+end
+
+-- In combat, visibility is changed only by the secure controls; state just
+-- follows what is actually on screen.
+function Shell:SyncStateFromVisibility()
+    if self.expanded:IsShown() then
+        local shown = self.displayedState
+        if not shown or shown == self.STATE.GLANCE then
+            shown = self.STATE.ALL
+        end
+        self.state = shown
+        self.context = self.displayedContext or {}
+        self.userHidden = false
+        self.expandedVisible = true
+    else
+        self.state = self.STATE.GLANCE
+        self.expandedVisible = false
+    end
+    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
+end
+
+function Shell:RenderInCombat()
+    local pool = Pockets.UI.ItemButtonPool
+    self.renderDeferred = true
+    pool:ValidateAll()
+    pool:RefreshCounts()
+    self:SyncStateFromVisibility()
+end
+
+-- Secure show/hide controls (Forever, protected item buttons). Restricted
+-- snippets may show/hide protected frames in combat; insecure code may not.
+--   * PocketsSecureToggle: bound to the Toggle Full Inventory key(s) while
+--     in combat (state driver below).
+--   * "+" on Glance (open) and X on the expanded header (close): secure
+--     overlays that exist only in combat, over the normal buttons.
+--   * Escape: the expanded frame is in UISpecialFrames, so Blizzard's own
+--     secure code hides it.
+local TOGGLE_SNIPPET = [[
+    local e = self:GetFrameRef("expanded")
+    local r = self:GetFrameRef("root")
+    local action = self:GetAttribute("pocketsaction") or "toggle"
+    local open
+    if action == "open" then
+        open = true
+    elseif action == "close" then
+        open = false
+    else
+        open = not e:IsShown()
+    end
+    if open then
+        e:Show()
+        r:Hide()
+    else
+        e:Hide()
+        r:Show()
+    end
+]]
+
+function Shell:OnSecureToggle()
+    self:SyncStateFromVisibility()
+    self:Render()
+end
+
+local function MakeSecureClicker(name, parent, action)
+    local b = CreateFrame("Button", name, parent, "SecureHandlerClickTemplate")
+    b:SetFrameRef("expanded", Shell.expanded)
+    b:SetFrameRef("root", Shell.root)
+    b:SetAttribute("pocketsaction", action)
+    b:SetAttribute("_onclick", TOGGLE_SNIPPET)
+    b:RegisterForClicks("AnyUp")
+    b:HookScript("PostClick", function() Shell:OnSecureToggle() end)
+    return b
+end
+
+function Shell:BuildSecureControls()
+    if not self.useSecure or not SecureHandlerWrapScript then
+        return
+    end
+
+    local toggle = MakeSecureClicker("PocketsSecureToggle", UIParent, "toggle")
+    toggle:SetSize(1, 1)
+    self.secureToggle = toggle
+
+    -- Whenever the expanded frame hides (X, Escape, toggle), Glance returns.
+    SecureHandlerWrapScript(self.expanded, "OnHide", toggle,
+        [[ local r = owner:GetFrameRef("root") if r then r:Show() end ]])
+    self.expanded:HookScript("OnHide", function()
+        if Shell:IsCombatBlocked() then
+            Shell:Render()
+        end
+    end)
+    table.insert(UISpecialFrames, "PocketsExpandedFrame")
+
+    local function Overlay(target, action)
+        if not target then
+            return
+        end
+        local o = MakeSecureClicker(nil, target, action)
+        o:SetAllPoints(target)
+        o:SetFrameLevel(target:GetFrameLevel() + 10)
+        o:Hide()
+        RegisterStateDriver(o, "visibility", "[combat] show; hide")
+    end
+    Overlay(self.frame.glance.header.plusButton, "open")
+    Overlay(self.frame.shell.header.closeButton, "close")
+    -- Back would need a re-layout to Menu; in combat it closes instead.
+    Overlay(self.frame.shell.header.backButton, "close")
+
+    -- Key binding -> secure toggle, active only in combat; out of combat
+    -- the normal binding runs Pockets_ToggleFullInventory (full behavior).
+    local driver = CreateFrame("Frame", "PocketsBindingDriver", UIParent, "SecureHandlerStateTemplate")
+    driver:SetAttribute("_onstate-pcombat", [[
+        if newstate == "combat" then
+            for i = 1, 2 do
+                local key = self:GetAttribute("key" .. i)
+                if key then
+                    self:SetBindingClick(true, key, "PocketsSecureToggle", "LeftButton")
+                end
+            end
+        else
+            self:ClearBindings()
+        end
+    ]])
+    RegisterStateDriver(driver, "pcombat", "[combat] combat; nocombat")
+    self.bindingDriver = driver
+    self:UpdateCombatBindings()
+end
+
+-- Out of combat only (SetAttribute on a protected frame).
+function Shell:UpdateCombatBindings()
+    if not self.bindingDriver or Pockets.Adapters.CombatAPI:IsInCombat() then
+        return
+    end
+    local key1, key2 = GetBindingKey("POCKETS_TOGGLE_FULL_INVENTORY")
+    self.bindingDriver:SetAttribute("key1", key1)
+    self.bindingDriver:SetAttribute("key2", key2)
+end
+
+-- Out-of-combat only: lay out All Items into the (hidden) expanded frame so
+-- it is ready to be shown in combat. Cheap to skip; coalesced by
+-- SchedulePrewarm.
+function Shell:Prewarm()
+    if self.state ~= self.STATE.GLANCE or self:IsCombatBlocked() or self.isDragging then
+        return
+    end
+    local savedState, savedContext = self.state, self.context
+    self.state, self.context = self.STATE.ALL, {}
+    local ok, err = pcall(function()
+        self:RenderExpandedContent(self.STATE.ALL)
+    end)
+    self.state, self.context = savedState, savedContext
+    if ok then
+        self.laidOutState, self.laidOutContext = self.STATE.ALL, {}
+    elseif Pockets.Debug then
+        Pockets.Debug:LogError("Shell Prewarm failed: " .. tostring(err))
+    end
+end
+
+function Shell:SchedulePrewarm()
+    if self.prewarmPending or not C_Timer then
+        return
+    end
+    self.prewarmPending = true
+    C_Timer.After(0.4, function()
+        self.prewarmPending = false
+        if self.state == self.STATE.GLANCE then
+            self:Prewarm()
+        end
+    end)
+end
+
 function Shell:Render()
     -- Fully deferred while a drag is in progress (§1/§2/§15): WoW's
     -- StartMoving() is live-updating the frame's screen position from the
@@ -753,9 +1136,17 @@ function Shell:Render()
     if self.isDragging then
         return
     end
+    -- The Escape catcher is a plain (non-protected) frame, so it follows
+    -- the state even in combat - Escape keeps working.
+    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
 
-    local frame = self.frame
+    if self:IsCombatBlocked() then
+        self:RenderInCombat()
+        return
+    end
+
     local state = self.state
+    self.renderDeferred = false
 
     -- Single root position ownership (§1/§2): every state - GLANCE
     -- included - reapplies the exact same saved TOPLEFT anchor through
@@ -763,20 +1154,28 @@ function Shell:Render()
     -- The rest of Render only ever calls SetSize afterward, so a state
     -- transition can resize the frame but can never drift its origin.
     self:RestorePosition()
+    self:ApplyVisibility()
+    self.expandedVisible = state ~= self.STATE.GLANCE and not self.userHidden
 
     if state == self.STATE.GLANCE then
-        frame.shell:Hide()
-        frame.glance:Show()
-        frame:EnableKeyboard(false)
-        PHUI.ApplyBackdrop(frame, { bgAlpha = L.GLANCE_ALPHA })
+        self:SetEscapeCatcherShown(false)
+        PHUI.ApplyBackdrop(self.root, { bgAlpha = L.GLANCE_ALPHA })
         self:RenderGlance()
+        self:SchedulePrewarm()
         return
     end
 
-    frame.glance:Hide()
-    frame.shell:Show()
-    frame:EnableKeyboard(true)
-    PHUI.ApplyBackdrop(frame, { bgAlpha = L.EXPANDED_BODY_ALPHA })
+    self:SetEscapeCatcherShown(true)
+    self:RenderExpandedContent(state)
+    self.displayedState, self.displayedContext = state, self.context
+    self.laidOutState, self.laidOutContext = state, self.context
+end
+
+-- Lays out one expanded state into the expanded frame. Does not touch
+-- visibility; used by Render and Prewarm.
+function Shell:RenderExpandedContent(state)
+    local frame = self.frame
+    PHUI.ApplyBackdrop(self.expanded, { bgAlpha = L.EXPANDED_BODY_ALPHA })
 
     self:ConfigureHeader()
 
@@ -791,15 +1190,27 @@ function Shell:Render()
         self:RenderAll(frame.shell.header.searchBox:GetText())
     elseif state == self.STATE.SEARCH then
         self:RenderSearch()
+    elseif state == self.STATE.LOOT then
+        self:RenderLoot()
     end
 
     -- "No footer" is Quick Search's own explicit layout rule (product
     -- intent - it must never look like another inventory-browsing
     -- surface); every other expanded state keeps the shared footer.
+    --
+    -- scrollFrame (and our own compact scrollbar it owns) is hidden right
+    -- alongside it - Search uses its own non-scrolling searchPanel
+    -- instead, but scrollFrame's rect overlaps that panel (both anchored
+    -- under header), and a scrollbar left shown from a previous Menu/
+    -- Category/All visit rendered its thumb straight over Search's
+    -- header/input (native scrollbar bug pass).
     if state == self.STATE.SEARCH then
         frame.shell.footer:Hide()
+        frame.shell.scrollFrame:Hide()
+        Pockets.UI.ScrollBar:Update(frame.shell.scrollBar, 0, 0)
     else
         frame.shell.footer:Show()
+        frame.shell.scrollFrame:Show()
         self:ConfigureFooter()
     end
 end
@@ -809,26 +1220,32 @@ end
 --------------------------------------------------
 
 function Shell:RenderGlance()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local glance = self.frame.glance
     local InventoryState = Pockets.Services.InventoryState
 
-    -- Bag row: capacity is the strongest text (VISUAL HIERARCHY spec),
-    -- ETA is the row's secondary/right-aligned value.
+    -- Bag row: capacity is the strongest text (VISUAL HIERARCHY spec).
     local capacity = InventoryState:GetGeneralCapacity()
     local color = Layout:GetCapacityColor(capacity.utilization)
     glance.bagRow:SetPrimary(string.format("%d / %d", capacity.used, capacity.total))
     glance.bagRow:SetPrimaryColor(color.r, color.g, color.b)
 
+    -- Header subtitle: time-to-full, parenthesized right after "pockets"
+    -- (HEADER spec). Moved off the Bag row itself so that row only ever
+    -- shows the capacity count.
     local estimator = Pockets.Services.CapacityEstimator
     local estimatorState = estimator:GetState()
     local confidenceOK = estimator:GetConfidence() >= 0.5
     if estimatorState == Constants.ESTIMATOR_STATE.FULL then
-        glance.bagRow:SetSecondary("Full")
+        glance.header:SetSubtitle("(Full)")
     elseif estimatorState == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
         -- Prefer omission to a noisy/fabricated number (§2, §9).
-        glance.bagRow:SetSecondary(Layout:FormatCompactETA(estimator:GetETA()) or "")
+        local eta = Layout:FormatCompactETA(estimator:GetETA())
+        glance.header:SetSubtitle(eta and ("(" .. eta .. ")") or "")
     else
-        glance.bagRow:SetSecondary("")
+        glance.header:SetSubtitle("")
     end
 
     -- Gold (GOLD spec): always present, second row. GetMoney() is a
@@ -836,7 +1253,7 @@ function Shell:RenderGlance()
     -- it isn't restricted to Adapters/ (TDD §3) - read here and handed to
     -- the standalone MoneyFormat component, never Blizzard's MoneyFrame
     -- or pH's own Ledger module.
-    glance.goldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(GetMoney()))
+    glance.goldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
 
     -- Ammo (AMMO ROW spec): optional, always the final metric row - shown
     -- only when a real ammo-specialized bag is equipped (same predicate
@@ -865,7 +1282,7 @@ function Shell:RenderGlance()
     -- specs) - never a runtime GetHeight()/GetBottom() query. Width is
     -- fixed; height grows by exactly one metric row when Ammo is shown,
     -- shrinks back by exactly that when it isn't.
-    self.frame:SetSize(L.GLANCE_WIDTH, Constants:GlanceContentHeight(showAmmo))
+    self.root:SetSize(L.GLANCE_WIDTH, Constants:GlanceContentHeight(showAmmo))
 end
 
 --------------------------------------------------
@@ -907,15 +1324,24 @@ function Shell:ConfigureHeader()
     if state == self.STATE.MENU then
         header.titleText:SetText("Pockets")
         header.plusButton:Show()
+        header.lootButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.CATEGORY then
         header.titleText:SetText(Constants.CATEGORY_LABEL[self.context.categoryID] or "")
         header.plusButton:Show()
+        header.lootButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.ALL then
         header.titleText:SetText("All")
         header.plusButton:Hide() -- already in All Items - its slot becomes Search (§3)
+        header.lootButton:Hide() -- the search box occupies that zone
         header.searchBox:Show()
+    elseif state == self.STATE.LOOT then
+        -- Just [ < ] Loot Log [ X ] - nothing contextual.
+        header.titleText:SetText("Loot Log")
+        header.plusButton:Hide()
+        header.lootButton:Hide()
+        header.searchBox:Hide()
     elseif state == self.STATE.SEARCH then
         -- No contextual action here (Glance Quick Search pass) - just
         -- [ < ] Search [ X ]. header.searchBox is All Items' OWN search
@@ -923,6 +1349,7 @@ function Shell:ConfigureHeader()
         -- EditBox in searchPanel (see RenderSearch).
         header.titleText:SetText("Search")
         header.plusButton:Hide()
+        header.lootButton:Hide()
         header.searchBox:Hide()
     end
 end
@@ -932,6 +1359,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderMenu()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
@@ -947,14 +1377,12 @@ function Shell:RenderMenu()
         end
     end
 
-    local viewportWidth = BodyViewportWidth()
+    local rowWidth = BodyViewportWidth()
     local contentHeight = #visible * L.LIST_ROW_HEIGHT
-    local usedContentHeight, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
-    local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
 
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
-    SetScrollBarShown(shell, needsScrollbar)
 
     local y = 0
     for index, entry in ipairs(visible) do
@@ -980,12 +1408,7 @@ function Shell:RenderMenu()
     end
 
     content:SetHeight(math.max(contentHeight, 1))
-    SyncScrollRange(shell, contentHeight, usedContentHeight)
-    -- OnScrollRangeChanged (from SetHeight/SetMinMaxValues) can copy the
-    -- scrollFrame's pre-inset width back onto the scroll child. Re-assert
-    -- the reclaimed width and bar visibility after that has run.
-    content:SetWidth(rowWidth)
-    SetScrollBarShown(shell, needsScrollbar)
+    SetScrollBarShown(shell, contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
@@ -1001,6 +1424,9 @@ end
 -- Grid<->List (or Menu/All -> Category) never leaves the other
 -- presentation's widgets on screen.
 function Shell:RenderCategory(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     if Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
         self:RenderCategoryList(categoryID)
@@ -1026,46 +1452,32 @@ end
 -- Grid: unchanged from before this pass (§4 "preserve exactly") - same
 -- pooled real item-button component All Items uses.
 function Shell:RenderCategoryGrid(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
 
     local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
 
-    -- Conditional scrollbar (§4): FlowLayout:PlanFlat is a pure geometry
-    -- function (no widget creation), so it's cheap to try at the full
-    -- viewport width first and only redo it narrower - once - if that
-    -- would actually overflow the MAX body height. Real item buttons
-    -- only ever get created/positioned once, from whichever plan is
-    -- final. Width is a constant (BodyViewportWidth), not read off the
-    -- live frame, so this can run before the frame is sized for this
-    -- render at all (dynamic height pass - ApplyDimensions runs below,
-    -- once the actual content height is known).
-    local viewportWidth = BodyViewportWidth()
+    -- Width is a constant (BodyViewportWidth) regardless of whether a
+    -- scrollbar ends up showing (scrollbar redesign pass - our compact bar
+    -- lives in the existing padding gutter, never a reserved column), so
+    -- column count/grid width never changes when one appears.
+    local usableWidth = BodyViewportWidth()
 
-    local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
-    local needsScrollbar = plan.contentHeight > MaxContentHeight()
-    local usableWidth = viewportWidth
-    if needsScrollbar then
-        usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
-        plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
-    end
+    local plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
 
-    local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
-    SetScrollBarShown(shell, needsScrollbar)
 
-    for _, placement in ipairs(plan.itemPlacements) do
-        local button = pool:Acquire(content)
-        button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", content, "TOPLEFT", placement.x, -placement.y)
-        pool:Configure(button, items[placement.index])
-        button:Show()
-    end
+    Pockets.UI.ItemGrid:Render(pool, content, items,
+        { x = 0, y = 0, width = usableWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
 
     content:SetHeight(math.max(plan.contentHeight, 1))
-    ApplyScrollBarVisibility(shell)
+    SetScrollBarShown(shell, plan.contentHeight, usedContentHeight)
 end
 
 -- List: one row per aggregate item - [icon] [full name] [total qty] -
@@ -1122,13 +1534,14 @@ local function CreateCategoryListRow(poolAnchor)
         row.name:SetJustifyH("LEFT")
         row.name:SetWordWrap(false)
 
-        -- Reserves the same trailing CHEVRON column Menu rows use, left
-        -- empty here (item rows never navigate deeper - §7), so the
-        -- count/qty column sits at the exact same X coordinate in both
-        -- row types regardless of the chevron only existing in one of
-        -- them.
+        -- Item rows never navigate deeper (§7), so - unlike Menu rows -
+        -- they don't reserve a trailing chevron column: that was 20px of
+        -- permanently dead space on every row, worse once a scrollbar
+        -- narrows the row further (wasted-space pass). qty sits flush
+        -- against the row's own right edge instead, reclaiming that
+        -- width for the name column.
         row.qty = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
-        row.qty:SetPoint("RIGHT", row, "RIGHT", -(L.LIST_ROW_PADDING + L.LIST_ROW_CHEVRON_WIDTH + L.LIST_ROW_GAP), 0)
+        row.qty:SetPoint("RIGHT", row, "RIGHT", -L.LIST_ROW_PADDING, 0)
         row.qty:SetWidth(L.LIST_ROW_COUNT_WIDTH)
         row.qty:SetJustifyH("RIGHT")
 
@@ -1139,6 +1552,9 @@ local function CreateCategoryListRow(poolAnchor)
 end
 
 function Shell:RenderCategoryList(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
 
@@ -1151,14 +1567,12 @@ function Shell:RenderCategoryList(categoryID)
     -- to fit under an unrelated pixel cap. Fixed row height makes this
     -- pure arithmetic, no FlowLayout call needed. Width is a constant
     -- (dynamic height pass - see RenderCategoryGrid's note).
-    local viewportWidth = BodyViewportWidth()
+    local rowWidth = BodyViewportWidth()
     local contentHeight = #items * L.LIST_ROW_HEIGHT
-    local usedContentHeight, bodyHeight, needsScrollbar = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
-    local rowWidth = needsScrollbar and (viewportWidth - L.SCROLLBAR_RESERVE) or viewportWidth
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
 
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
-    SetScrollBarShown(shell, needsScrollbar)
 
     for index, item in ipairs(items) do
         local row = shell.categoryListRows[index]
@@ -1192,12 +1606,7 @@ function Shell:RenderCategoryList(categoryID)
     end
 
     content:SetHeight(math.max(contentHeight, 1))
-    SyncScrollRange(shell, contentHeight, usedContentHeight)
-    -- OnScrollRangeChanged (from SetHeight/SetMinMaxValues) can copy the
-    -- scrollFrame's pre-inset width back onto the scroll child. Re-assert
-    -- the reclaimed width and bar visibility after that has run.
-    content:SetWidth(rowWidth)
-    SetScrollBarShown(shell, needsScrollbar)
+    SetScrollBarShown(shell, contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
@@ -1211,6 +1620,17 @@ end
 --------------------------------------------------
 
 function Shell:RenderSearch()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
+    -- GLANCE's own transition just hides the whole `shell` frame (§1/§2 -
+    -- see Render) rather than releasing its children, so Menu/Category/
+    -- All content from an earlier visit stays :Show()n underneath and
+    -- reappears the moment `shell` is shown again for Search unless it's
+    -- explicitly cleared - done once in SetState's enteringSearch branch
+    -- (not here - this runs on every keystroke too, and re-clearing the
+    -- body on every keystroke drops the search box's own keyboard focus,
+    -- see SetState's comment).
     local shell = self.frame.shell
     local panel = shell.searchPanel
     panel:Show()
@@ -1233,6 +1653,7 @@ function Shell:RenderSearch()
     end
     panel.feedbackPrimary:Hide()
     panel.feedbackSecondary:Hide()
+    panel.overflowLabel:Hide()
 
     local extraHeight
     if query == "" then
@@ -1243,8 +1664,20 @@ function Shell:RenderSearch()
         panel.feedbackPrimary:SetText("No items found")
         panel.feedbackPrimary:Show()
         extraHeight = L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
-    elseif totalCount <= L.SEARCH_MAX_RESULT_ROWS then
-        for index, item in ipairs(matches) do
+    elseif totalCount > L.SEARCH_OVERFLOW_LIMIT then
+        -- Too many matches even to list a trailer count usefully -
+        -- deliberately restrictive (product intent) - nudge the player to
+        -- narrow the query instead of ever becoming another item grid.
+        panel.feedbackPrimary:SetText(string.format("%d items found", totalCount))
+        panel.feedbackSecondary:SetText("Keep typing...")
+        panel.feedbackPrimary:Show()
+        panel.feedbackSecondary:Show()
+        extraHeight = L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+            + L.SEARCH_FEEDBACK_LINE_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+    else
+        local shownCount = math.min(totalCount, L.SEARCH_MAX_RESULT_ROWS)
+        for index = 1, shownCount do
+            local item = matches[index]
             local row = shell.searchRows[index]
             if not row then
                 row = CreateCategoryListRow(shell.searchPoolAnchor)
@@ -1274,17 +1707,17 @@ function Shell:RenderSearch()
                 -(L.SEARCH_INPUT_HEIGHT + L.SEARCH_ROW_GAP + (index - 1) * L.LIST_ROW_HEIGHT))
             row:Show()
         end
-        extraHeight = L.SEARCH_ROW_GAP + totalCount * L.LIST_ROW_HEIGHT
-    else
-        -- 3+ matches: deliberately restrictive (product intent) - a
-        -- match count nudging the player to narrow the query, never
-        -- another item grid.
-        panel.feedbackPrimary:SetText(string.format("%d items found", totalCount))
-        panel.feedbackSecondary:SetText("Keep typing...")
-        panel.feedbackPrimary:Show()
-        panel.feedbackSecondary:Show()
-        extraHeight = L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
-            + L.SEARCH_FEEDBACK_LINE_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+
+        extraHeight = L.SEARCH_ROW_GAP + shownCount * L.LIST_ROW_HEIGHT
+        local remaining = totalCount - shownCount
+        if remaining > 0 then
+            panel.overflowLabel:SetText(string.format("and %d more. Keep typing to filter.", remaining))
+            panel.overflowLabel:ClearAllPoints()
+            panel.overflowLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", L.LIST_ROW_PADDING,
+                -(L.SEARCH_INPUT_HEIGHT + L.SEARCH_ROW_GAP + shownCount * L.LIST_ROW_HEIGHT + L.SEARCH_ROW_GAP))
+            panel.overflowLabel:Show()
+            extraHeight = extraHeight + L.SEARCH_ROW_GAP + L.SEARCH_FEEDBACK_LINE_HEIGHT
+        end
     end
 
     local contentHeight = L.SEARCH_INPUT_HEIGHT + extraHeight
@@ -1297,44 +1730,83 @@ end
 -- from the previous FullInventory window onto Shell's shared body.
 --------------------------------------------------
 
-local function EnsureCategoryLabel(content, labels, index)
-    local widget = labels[index]
+-- OnClick is NOT set here - a pooled index's categoryID can change
+-- between renders (categories appear/disappear), so the caller must
+-- reassign it every render (same reasoning CreateMenuRow's onClick gets
+-- reassigned in RenderMenu, not just at creation).
+local function EnsureCategoryHeader(content, headers, index)
+    local widget = headers[index]
     if widget then
         return widget
     end
 
-    widget = CreateFrame("Frame", nil, content)
-    widget:SetHeight(L.FULL_INVENTORY_LABEL_HEIGHT)
-
-    widget.icon = widget:CreateTexture(nil, "ARTWORK")
-    widget.icon:SetSize(L.FULL_INVENTORY_LABEL_ICON_SIZE, L.FULL_INVENTORY_LABEL_ICON_SIZE)
-    widget.icon:SetPoint("LEFT", widget, "LEFT", 0, 0)
-
-    widget.text = PHUI.CreateLabel(widget, "muted", nil, PHUI.Fonts.SMALL)
-    widget.text:SetPoint("LEFT", widget.icon, "RIGHT", L.FULL_INVENTORY_LABEL_ICON_GAP, 0)
-
-    function widget:Measure()
-        return L.FULL_INVENTORY_LABEL_ICON_SIZE + L.FULL_INVENTORY_LABEL_ICON_GAP + (self.text:GetStringWidth() or 0)
-    end
-
-    labels[index] = widget
+    widget = Pockets.UI.CategoryHeader:Create(content, {
+        width = BodyViewportWidth(),
+        height = L.CATEGORY_HEADER_HEIGHT,
+    })
+    headers[index] = widget
     return widget
 end
 
+-- Recent is capped tighter than every other category (§ "what did I just
+-- pick up", not another full category to browse) - API.GetAggregatedCategoryItems
+-- already returns Recent newest-first/deduped-by-itemID, so this is a
+-- plain slice, not a re-sort.
 local function BuildCategorySections()
     local sections = {}
     for _, categoryID in ipairs(Constants.CATEGORY_ORDER) do
         local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
+        if categoryID == Constants.CATEGORY.RECENT and #items > L.FULL_INVENTORY_RECENT_LIMIT then
+            local capped = {}
+            for i = 1, L.FULL_INVENTORY_RECENT_LIMIT do
+                capped[i] = items[i]
+            end
+            items = capped
+        end
         if #items > 0 then
             table.insert(sections, {
                 categoryID = categoryID,
                 label = Constants.CATEGORY_LABEL[categoryID],
-                icon = Constants.CATEGORY_ICON[categoryID],
                 buttonRecords = items,
             })
         end
     end
     return sections
+end
+
+-- Pure sequential layout (no widget creation): every category always
+-- starts a fresh row (Full Inventory redesign - the old <50%-inline
+-- packing heuristic is gone). Header -> ITEM_BUTTON_GAP -> its own grid
+-- (if expanded) -> PHUI.Spacing.PANEL_PADDING -> next header.
+local function PlanCategorySections(sections, collapsedByID, rowWidth)
+    local cursorY = 0
+    local placements = {}
+    for i, section in ipairs(sections) do
+        if i > 1 then
+            cursorY = cursorY + PHUI.Spacing.PANEL_PADDING
+        end
+        local headerY = cursorY
+        cursorY = cursorY + L.CATEGORY_HEADER_HEIGHT
+
+        local collapsed = collapsedByID[section.categoryID] and true or false
+        local gridY, gridHeight, gridPlan
+        if not collapsed then
+            gridY = cursorY + L.ITEM_BUTTON_GAP
+            gridPlan = FlowLayout:PlanFlat(#section.buttonRecords,
+                { rowWidth = rowWidth, itemSize = L.ITEM_BUTTON_SIZE, gap = L.ITEM_BUTTON_GAP })
+            gridHeight = gridPlan.contentHeight
+            cursorY = gridY + gridHeight
+        end
+
+        table.insert(placements, {
+            categoryID = section.categoryID,
+            headerY = headerY,
+            collapsed = collapsed,
+            gridY = gridY,
+            gridHeight = gridHeight,
+        })
+    end
+    return { contentHeight = cursorY, placements = placements }
 end
 
 -- Flat, name-matching aggregate list across every category (no
@@ -1355,6 +1827,9 @@ local function BuildFlatSearchResults(query)
 end
 
 function Shell:RenderAll(query)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
@@ -1364,112 +1839,80 @@ function Shell:RenderAll(query)
     local gap = L.ITEM_BUTTON_GAP
     local hasQuery = query ~= nil and query ~= ""
 
-    -- Conditional scrollbar (§4): try the full viewport width first (both
-    -- FlowLayout functions are pure geometry, no widget creation), redo
-    -- once narrower only if that would actually overflow the MAX body
-    -- height. Real widgets only ever get created/positioned once, from
-    -- the final plan. Width is a constant, not read off the live frame
+    -- Width is a constant (BodyViewportWidth), not read off the live frame
     -- (dynamic height pass - RenderAll can also be called directly from
     -- the search box, bypassing Shell:Render(), so it must be able to
-    -- size itself unconditionally here too).
-    local viewportWidth = BodyViewportWidth()
+    -- size itself unconditionally here too) - and, since the scrollbar
+    -- redesign pass, it never narrows based on whether a scrollbar ends up
+    -- showing (our compact bar lives in the existing padding gutter, never
+    -- a reserved column), so column count/grid width never changes when
+    -- one appears.
+    local usableWidth = BodyViewportWidth()
 
     if hasQuery then
         local items = BuildFlatSearchResults(query)
-        local plan = FlowLayout:PlanFlat(#items, { rowWidth = viewportWidth, itemSize = itemSize, gap = gap })
-        local needsScrollbar = plan.contentHeight > MaxContentHeight()
-        local usableWidth = viewportWidth
-        if needsScrollbar then
-            usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
-            plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = itemSize, gap = gap })
-        end
-        local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+        local plan = FlowLayout:PlanFlat(#items, { rowWidth = usableWidth, itemSize = itemSize, gap = gap })
+        local usedContentHeight, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
         self:ApplyDimensions(bodyHeight)
         content:SetWidth(usableWidth)
-        SetScrollBarShown(shell, needsScrollbar)
 
-        for _, placement in ipairs(plan.itemPlacements) do
-            local button = pool:Acquire(content)
-            button:ClearAllPoints()
-            button:SetPoint("TOPLEFT", content, "TOPLEFT", placement.x, -placement.y)
-            pool:Configure(button, items[placement.index])
-            button:Show()
-        end
+        Pockets.UI.ItemGrid:Render(pool, content, items, { x = 0, y = 0, width = usableWidth, itemSize = itemSize, gap = gap })
         content:SetHeight(math.max(plan.contentHeight, 1))
-        ApplyScrollBarVisibility(shell)
+        SetScrollBarShown(shell, plan.contentHeight, usedContentHeight)
         return
     end
 
+    -- Categorized flow (Full Inventory redesign): every category always
+    -- starts a fresh row (no <50%-width inline packing).
     local sections = BuildCategorySections()
+    local collapsedByID = Pockets.CharDB.collapsedCategories
 
-    local labelIndex = 0
-    local planCategories = {}
-    local labelWidgetByCategoryID = {}
-    for _, section in ipairs(sections) do
-        labelIndex = labelIndex + 1
-        local widget = EnsureCategoryLabel(content, shell.categoryLabels, labelIndex)
-        widget.icon:SetTexture(section.icon)
-        widget.text:SetText(string.format("%s (%d)", section.label, #section.buttonRecords))
-        labelWidgetByCategoryID[section.categoryID] = widget
-
-        table.insert(planCategories, {
-            categoryID = section.categoryID,
-            labelWidth = widget:Measure(),
-            itemCount = #section.buttonRecords,
-        })
-    end
-
-    local plan = FlowLayout:Plan(planCategories, {
-        rowWidth = viewportWidth,
-        itemSize = itemSize,
-        gap = gap,
-        labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
-    })
-    local needsScrollbar = plan.contentHeight > MaxContentHeight()
-    local usableWidth = viewportWidth
-    if needsScrollbar then
-        usableWidth = viewportWidth - L.SCROLLBAR_RESERVE
-        plan = FlowLayout:Plan(planCategories, {
-            rowWidth = usableWidth,
-            itemSize = itemSize,
-            gap = gap,
-            labelHeight = L.FULL_INVENTORY_LABEL_HEIGHT,
-        })
-    end
-    local _, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
+    local plan = PlanCategorySections(sections, collapsedByID, usableWidth)
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(plan.contentHeight)
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(usableWidth)
-    SetScrollBarShown(shell, needsScrollbar)
 
     local buttonRecordsByCategoryID = {}
     for _, section in ipairs(sections) do
         buttonRecordsByCategoryID[section.categoryID] = section.buttonRecords
     end
 
-    for _, categoryPlacement in ipairs(plan.categoryPlacements) do
-        local widget = labelWidgetByCategoryID[categoryPlacement.categoryID]
-        widget:ClearAllPoints()
-        widget:SetPoint("TOPLEFT", content, "TOPLEFT", categoryPlacement.labelX, -categoryPlacement.labelY)
-        widget:SetWidth(categoryPlacement.labelWidth)
-        widget:Show()
+    for index, placement in ipairs(plan.placements) do
+        local categoryID = placement.categoryID
+        local section = sections[index]
+        local header = EnsureCategoryHeader(content, shell.categoryHeaders, index)
+        header:SetScript("OnClick", function()
+            collapsedByID[categoryID] = not collapsedByID[categoryID]
+            Shell:RenderAll(query)
+        end)
+        header:SetWidth(usableWidth)
+        header:SetLabel(section.label, #section.buttonRecords)
+        header:SetCollapsed(placement.collapsed)
+        header:ClearAllPoints()
+        header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -placement.headerY)
+        header:Show()
 
-        local buttonRecords = buttonRecordsByCategoryID[categoryPlacement.categoryID]
-        for _, itemPlacement in ipairs(categoryPlacement.itemPlacements) do
-            local button = pool:Acquire(content)
-            button:ClearAllPoints()
-            button:SetPoint("TOPLEFT", content, "TOPLEFT", itemPlacement.x, -itemPlacement.y)
-            pool:Configure(button, buttonRecords[itemPlacement.index])
-            button:Show()
+        if not placement.collapsed then
+            Pockets.UI.ItemGrid:Render(pool, content, buttonRecordsByCategoryID[categoryID],
+                { x = 0, y = placement.gridY, width = usableWidth, itemSize = itemSize, gap = gap })
         end
     end
 
     content:SetHeight(math.max(plan.contentHeight, 1))
-    ApplyScrollBarVisibility(shell)
+    SetScrollBarShown(shell, plan.contentHeight, usedContentHeight)
 end
 
 --------------------------------------------------
 -- Footer (shared by MENU/CATEGORY/ALL)
 --------------------------------------------------
+
+-- Measure-after-set + resize, same pattern established elsewhere
+-- (EnsureCategoryHeader/the old EnsureCategoryLabel) - a MetricRow's
+-- width isn't known until its text is set, and footer metrics are laid
+-- out left-to-right by actual measured width, not a fixed column.
+local function ResizeFooterMetric(row)
+    row:SetWidth(L.GLANCE_METRIC_ICON_SIZE + L.GLANCE_METRIC_ICON_TEXT_GAP + (row.primaryText:GetStringWidth() or 0))
+end
 
 function Shell:ConfigureFooter()
     local shell = self.frame.shell
@@ -1477,27 +1920,87 @@ function Shell:ConfigureFooter()
 
     local capacity = InventoryState:GetGeneralCapacity()
     local color = Layout:GetCapacityColor(capacity.utilization)
-    shell.footerBagsText:SetText(string.format("%d/%d", capacity.used, capacity.total))
-    shell.footerBagsText:SetTextColor(color.r, color.g, color.b)
+    shell.footerBagRow:SetPrimary(string.format("%d/%d", capacity.used, capacity.total))
+    shell.footerBagRow:SetPrimaryColor(color.r, color.g, color.b)
+    ResizeFooterMetric(shell.footerBagRow)
 
-    local estimator = Pockets.Services.CapacityEstimator
-    local estimatorState = estimator:GetState()
-    local confidenceOK = estimator:GetConfidence() >= 0.5
-    if estimatorState == Constants.ESTIMATOR_STATE.FULL then
-        shell.footerEtaText:SetText(" \194\183 Full")
-    elseif estimatorState == Constants.ESTIMATOR_STATE.FILLING and confidenceOK then
-        shell.footerEtaText:SetText(Layout:FormatETASuffix(estimator:GetETA()))
-    else
-        shell.footerEtaText:SetText("")
-    end
+    shell.footerGoldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
+    ResizeFooterMetric(shell.footerGoldRow)
+    shell.footerGoldRow:ClearAllPoints()
+    -- Same gap the Gold icon already keeps against ITS OWN text
+    -- (GLANCE_METRIC_ICON_TEXT_GAP) - using the smaller ACTION_GAP here
+    -- left the coin sitting lopsided: barely any breathing room after
+    -- Bag's count, then a bigger gap before Gold's own text.
+    shell.footerGoldRow:SetPoint("LEFT", shell.footerBagRow, "RIGHT", L.GLANCE_METRIC_ICON_TEXT_GAP, 0)
 
     local ammoCapacity = InventoryState:GetAmmoCapacity()
     if self:ShouldShowAmmoRow(ammoCapacity) then
-        shell.footerAmmoText:SetText(string.format("%d/%d", ammoCapacity.used, ammoCapacity.total))
-        shell.footerAmmoText:Show()
+        shell.footerAmmoRow:SetPrimary(string.format("%d/%d", ammoCapacity.used, ammoCapacity.total))
+        ResizeFooterMetric(shell.footerAmmoRow)
+        shell.footerAmmoRow:Show()
     else
-        shell.footerAmmoText:Hide()
+        shell.footerAmmoRow:Hide()
     end
+end
+
+--------------------------------------------------
+-- LOOT LOG
+--------------------------------------------------
+
+-- Opens Loot Log from the current state, remembering where to return.
+-- Opened from Loot Log itself is a no-op (button is hidden there anyway).
+function Shell:OpenLootLog()
+    if self.state == self.STATE.LOOT then
+        return
+    end
+    self:SetState(self.STATE.LOOT, { returnState = self.state, returnContext = self.context })
+end
+
+function Shell:RenderLoot()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
+    local shell = self.frame.shell
+    local content = shell.content
+
+    -- A re-render while already viewing the log (new event, item cache
+    -- resolved) keeps the player's scroll position; opening starts at the
+    -- top, i.e. the newest entries. At offset 0 a new entry therefore
+    -- stays visible by construction.
+    local keepOffset = self.lootRendered and shell.scrollFrame:GetVerticalScroll() or 0
+
+    self:ClearBody()
+
+    local rowWidth = BodyViewportWidth()
+    local entries = Pockets.Services.LootLog:GetEntries()
+    local contentHeight = Pockets.UI.LootLog:Render(shell.lootView, entries, rowWidth)
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(contentHeight)
+
+    self:ApplyDimensions(bodyHeight)
+    content:SetWidth(rowWidth)
+    content:SetHeight(math.max(contentHeight, 1))
+    SetScrollBarShown(shell, contentHeight, usedContentHeight)
+    if keepOffset > 0 then
+        Pockets.UI.ScrollBar:SetScroll(shell.scrollBar, keepOffset)
+    end
+    self.lootRendered = true
+end
+
+-- Coalesces bursts (AoE loot, container opens, quest turn-ins) into one
+-- re-render shortly after the last event, and does nothing at all while
+-- Loot Log isn't the visible state - the log stays lightweight hidden.
+local LOOT_REFRESH_DELAY = 0.1
+function Shell:RefreshLootLog()
+    if not self.frame or self.state ~= self.STATE.LOOT or self.lootRefreshPending then
+        return
+    end
+    self.lootRefreshPending = true
+    C_Timer.After(LOOT_REFRESH_DELAY, function()
+        self.lootRefreshPending = false
+        if self.state == self.STATE.LOOT then
+            self:Render()
+        end
+    end)
 end
 
 --------------------------------------------------
@@ -1505,14 +2008,17 @@ end
 --------------------------------------------------
 
 function Shell:Show()
-    if self.frame then
-        self.frame:Show()
+    if self.frame and not self:IsCombatBlocked() then
+        self.userHidden = false
+        self:ApplyVisibility()
     end
 end
 
 function Shell:Hide()
-    if self.frame then
-        self.frame:Hide()
+    if self.frame and not self:IsCombatBlocked() then
+        self.userHidden = true
+        self:ApplyVisibility()
+        self.expandedVisible = false
     end
 end
 
@@ -1520,18 +2026,21 @@ function Shell:Toggle()
     if not self.frame then
         return
     end
-    if self.frame:IsShown() then
-        self:Hide()
-    else
+    if self.userHidden then
         self:Show()
+    else
+        self:Hide()
     end
 end
 
 -- Shift-B / the old "expand" action jump directly to All Items (§4),
--- toggling back to Menu if All Items is already open.
+-- closing to Glance if All Items is already open.
 function Shell:ToggleAllItems()
-    if self.state == self.STATE.ALL then
-        self:SetState(self.STATE.MENU)
+    -- In combat there is no re-layout to step back to Menu: toggling closes.
+    if self:IsCombatBlocked() and self.state ~= self.STATE.GLANCE then
+        self:SetState(self.STATE.GLANCE)
+    elseif self.state == self.STATE.ALL then
+        self:SetState(self.STATE.GLANCE)
     else
         self:SetState(self.STATE.ALL)
     end

@@ -79,3 +79,52 @@ Pockets.Tests.TestRunner:Register("RecentItems: rejects zero/negative quantity",
     local ok = count == 0
     return ok, ok and "OK" or string.format("expected 0 entries, got %d", count)
 end)
+
+--------------------------------------------------
+-- Persistence (Recent Items persistence pass)
+--------------------------------------------------
+
+Pockets.Tests.TestRunner:Register("RecentItems: LoadPersisted restores a previous session's saved entries", function()
+    local originalEntries = RecentItems.entries
+    local saved = { { itemID = 42, quantity = 3, timestamp = 1, itemLink = "item:42" } }
+
+    RecentItems:LoadPersisted(saved)
+    local recent = RecentItems:GetRecent(1)
+    local ok = recent[1] and recent[1].itemID == 42 and recent[1].quantity == 3
+
+    RecentItems.entries = originalEntries
+    return ok, ok and "OK" or "expected LoadPersisted to restore the saved entry"
+end)
+
+Pockets.Tests.TestRunner:Register("RecentItems: LoadPersisted drops corrupted entries (missing itemID/quantity)", function()
+    local originalEntries = RecentItems.entries
+    local saved = {
+        { itemID = 1, quantity = 1 },
+        { itemID = 2 }, -- missing quantity
+        { quantity = 5 }, -- missing itemID
+        "not a table",
+    }
+
+    RecentItems:LoadPersisted(saved)
+    local recent = RecentItems:GetRecent(10)
+    local ok = #recent == 1 and recent[1].itemID == 1
+
+    RecentItems.entries = originalEntries
+    return ok, ok and "OK" or string.format("expected only the 1 valid entry to survive, got %d", #recent)
+end)
+
+Pockets.Tests.TestRunner:Register("RecentItems: after LoadPersisted, Record/Clear mutate the SAME saved table (never replace it)", function()
+    local originalEntries = RecentItems.entries
+    local saved = {}
+
+    RecentItems:LoadPersisted(saved)
+    RecentItems:Record({ itemID = 7, quantity = 1, timestamp = 1 })
+    local sameTableAfterRecord = RecentItems.entries == saved and #saved == 1
+
+    RecentItems:Clear()
+    local sameTableAfterClear = RecentItems.entries == saved and #saved == 0
+
+    RecentItems.entries = originalEntries
+    local ok = sameTableAfterRecord and sameTableAfterClear
+    return ok, ok and "OK" or "expected Record/Clear to keep mutating the exact table LoadPersisted was given"
+end)

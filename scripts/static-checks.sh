@@ -99,6 +99,7 @@ BAG_API_PATTERN='C_Container\.|GetContainerNumSlots|GetContainerItemInfo|GetCont
 # that merely mention these API names don't false-positive.
 LEAKED_BAG_CALLS=$(grep -rnE "$BAG_API_PATTERN" "$ADDON_DIR" --include='*.lua' 2>/dev/null \
     | grep -v 'Adapters/BagAPI.lua' \
+    | grep -v '/Tests/' \
     | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--' || true)
 if [ -n "$LEAKED_BAG_CALLS" ]; then
     fail "Direct bag/container API access outside Adapters/BagAPI.lua:"
