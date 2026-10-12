@@ -871,7 +871,11 @@ function Shell:Render()
     -- the state even when the item-button render below must wait for
     -- combat to end - Escape keeps working in combat.
     self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
-    if self:DeferIfItemsBlocked() then
+    -- Returning to Glance must always work, in combat too: it only hides
+    -- the (non-protected) expanded container and shows Glance; any item
+    -- buttons it can't recycle are left for ItemButtonPool's deferred
+    -- release.
+    if self.state ~= self.STATE.GLANCE and self:DeferIfItemsBlocked() then
         return
     end
 

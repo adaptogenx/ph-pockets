@@ -2684,3 +2684,23 @@ Pockets.Tests.TestRunner:Register("Shell: entering SEARCH never opens Menu or Al
     ResetToGlance()
     return ok, ok and "OK" or string.format("expected SEARCH only, got %s", tostring(Shell:GetState()))
 end)
+
+Pockets.Tests.TestRunner:Register("Shell: closing the expanded view works during combat even with protected item buttons", function()
+    local CombatAPI = Pockets.Adapters.CombatAPI
+    local Pool = Pockets.UI.ItemButtonPool
+    local originalCombat, originalProtected = CombatAPI.IsInCombat, Pool.templateProtected
+    ResetToGlance()
+    Shell:SetState(Shell.STATE.MENU)
+    CombatAPI.IsInCombat = function() return true end
+    Pool.templateProtected = true
+
+    Shell:HandleEscape() -- same path as Escape and the X button
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
+        and not Shell.frame.shell:IsShown() and Shell.frame.glance:IsShown()
+        and not Shell.escapeCatcher:IsShown()
+
+    CombatAPI.IsInCombat, Pool.templateProtected = originalCombat, originalProtected
+    Pool.dirty = false
+    ResetToGlance()
+    return ok, ok and "OK" or "expanded view did not close in combat"
+end)
