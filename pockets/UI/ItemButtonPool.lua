@@ -218,7 +218,7 @@ local function WireItemButtonScripts(button)
         end
         if not self.isRecentItem then
             GameTooltip:ClearAllPoints()
-            GameTooltip:SetPoint("TOPLEFT", Pockets.UI.Shell.frame, "TOPRIGHT", 4, 0)
+            GameTooltip:SetPoint("TOPLEFT", Pockets.UI.Shell:GetActiveFrame(), "TOPRIGHT", 4, 0)
         end
         GameTooltip:Show()
     end)

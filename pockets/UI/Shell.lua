@@ -225,10 +225,11 @@ end
 -- dimension known can resolve to a fully indeterminate position, which
 -- is exactly what silently blanked every earlier version of this HUD.
 function Shell:BuildGlance()
-    local frame = self.frame
+    local frame = self.root
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
     frame.glance = glance
+    self.frame.glance = glance
 
     local contentWidth = L.GLANCE_WIDTH - L.GLANCE_PADDING * 2
 
@@ -330,12 +331,13 @@ function Shell:BuildGlance()
 end
 
 function Shell:BuildShell()
-    local frame = self.frame
+    local frame = self.expanded
     local shell = CreateFrame("Frame", nil, frame)
     -- shell fills frame's rect exactly - frame itself is the one thing
     -- Shell:ApplyDimensions ever resizes (§3 "one logical root frame").
     shell:SetAllPoints(frame)
     frame.shell = shell
+    self.frame.shell = shell
     shell.menuRows = {}
     shell.categoryHeaders = {}
     shell.categoryListRows = {}
@@ -571,27 +573,62 @@ function Shell:Initialize()
     end
 
     local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, "BackdropTemplate")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    PHUI.ApplyBackdrop(frame)
+    self.root = frame
 
-    frame:SetScript("OnDragStart", function(self)
-        if not Pockets.CharDB.hud.locked then
-            Shell.isDragging = true
-            self:StartMoving()
-        end
-    end)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        Shell.isDragging = false
-        Shell:SavePosition()
-        -- Render() no-ops while isDragging is true (see Render's guard),
-        -- so any state change requested by the SAME click (WoW fires
-        -- OnDragStart/OnDragStop on every click, moving or not - see
-        -- OnClick's note below) never got drawn. Flush it now.
-        Shell:Render()
-    end)
+    -- The expanded view (Menu/Category/All/Search/Loot) is its OWN top-level
+    -- frame, not a child of the Glance root. Item buttons are protected in
+    -- combat, and a frame in a protected button's anchor chain cannot be
+    -- re-anchored or resized then. Keeping the expanded item buttons under a
+    -- separate chain means Glance can still be touched, and the expanded
+    -- frame is only ever shown/hidden in combat (never resized/re-anchored).
+    local expanded = CreateFrame("Button", "PocketsExpandedFrame", UIParent, "BackdropTemplate")
+    expanded:Hide()
+    self.expanded = expanded
+
+    -- Legacy single-frame facade: `Shell.frame` forwards methods to whichever
+    -- frame is currently on screen (expanded for non-Glance states) and
+    -- carries the .glance/.shell fields. Use GetActiveFrame() whenever a real
+    -- frame is required (anchoring, parenting).
+    self.frame = setmetatable({}, {
+        __index = function(_, key)
+            return function(_, ...)
+                local target = Shell:GetActiveFrame()
+                return target[key](target, ...)
+            end
+        end,
+    })
+
+    for _, f in ipairs({ frame, expanded }) do
+        f:SetMovable(true)
+        f:EnableMouse(true)
+        f:RegisterForDrag("LeftButton")
+        PHUI.ApplyBackdrop(f)
+
+        f:SetScript("OnDragStart", function(self)
+            -- StartMoving on a frame in a protected button's anchor chain
+            -- is blocked in combat.
+            if Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
+                return
+            end
+            if not Pockets.CharDB.hud.locked then
+                Shell.isDragging = true
+                self:StartMoving()
+            end
+        end)
+        f:SetScript("OnDragStop", function(self)
+            if not Shell.isDragging then
+                return
+            end
+            self:StopMovingOrSizing()
+            Shell.isDragging = false
+            Shell:SavePosition(self)
+            -- Render() no-ops while isDragging is true (see Render's guard),
+            -- so any state change requested by the SAME click (WoW fires
+            -- OnDragStart/OnDragStop on every click, moving or not - see
+            -- OnClick's note below) never got drawn. Flush it now.
+            Shell:Render()
+        end)
+    end
     -- Growing DOWN/RIGHT from a fixed TOPLEFT must never depend on the
     -- frame's SIZE - no OnSizeChanged handler here re-anchors anything.
     -- Position is only ever written by a user drag (SavePosition) and
@@ -636,7 +673,6 @@ function Shell:Initialize()
     table.insert(UISpecialFrames, "PocketsEscapeCatcher")
     Shell.escapeCatcher = catcher
 
-    self.frame = frame
     self:BuildGlance()
     self:BuildShell()
     self:RestorePosition()
@@ -665,7 +701,22 @@ end
 -- afterward touches SetSize only, so the anchor set here is what pins
 -- Glance's TOPLEFT and every expanded state's TOPLEFT to the same point.
 function Shell:RestorePosition()
-    PositionStrategy:ApplyRootPosition(self.frame, Pockets.CharDB.hud)
+    -- Re-anchoring is blocked in combat for frames in a protected button's
+    -- anchor chain; the saved position only changes via a drag anyway.
+    if Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
+        return
+    end
+    PositionStrategy:ApplyRootPosition(self.root, Pockets.CharDB.hud)
+    PositionStrategy:ApplyRootPosition(self.expanded, Pockets.CharDB.hud)
+end
+
+-- The frame currently on screen for the current state (Glance root, or the
+-- expanded frame for every other state).
+function Shell:GetActiveFrame()
+    if self.state == nil or self.state == self.STATE.GLANCE then
+        return self.root
+    end
+    return self.expanded
 end
 
 -- OnDragStart/OnDragStop fire on every click (moving or not), so this
@@ -674,9 +725,9 @@ end
 -- stationary click can never persist a fresh (and possibly slightly
 -- different, e.g. from float rounding) value over a perfectly good one.
 local NO_OP_MOVE_THRESHOLD = 0.5
-function Shell:SavePosition()
+function Shell:SavePosition(source)
     local hud = Pockets.CharDB.hud
-    local captured = PositionStrategy:CaptureSavedPosition(self.frame)
+    local captured = PositionStrategy:CaptureSavedPosition(source or self:GetActiveFrame())
 
     if math.abs(captured.x - (hud.x or 0)) < NO_OP_MOVE_THRESHOLD
         and math.abs(captured.y - (hud.y or 0)) < NO_OP_MOVE_THRESHOLD then
@@ -701,6 +752,14 @@ end
 -- Render* function below only reads already-computed domain state (§14).
 function Shell:SetState(state, context)
     local previousState = self.state
+    -- In combat nothing may be re-laid-out: hand straight to Render, which
+    -- opens/closes the already laid-out view (RenderInCombat).
+    if self:IsCombatBlocked() then
+        self.state = state
+        self.context = context or {}
+        self:Render()
+        return
+    end
     local enteringSearch = state == self.STATE.SEARCH and previousState ~= self.STATE.SEARCH
 
     -- Cleared BEFORE Render() (not after) so the very first RenderSearch
@@ -785,7 +844,7 @@ end
 -- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
 -- right/down from that fixed point.
 function Shell:ApplyDimensions(bodyHeight, includeFooter)
-    self.frame:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
+    self.expanded:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
 end
 
 -- Explicit body-clear lifecycle step (§7): hides every kind of body
@@ -827,17 +886,25 @@ end
 -- Cheap and idempotent - every Render* function below only reads
 -- already-computed domain state (§14), so it's always safe to just call
 -- this again rather than trying to patch up a half-drawn state.
--- Combat lockdown + protected item buttons: acquiring/showing/hiding/
--- anchoring them is forbidden, so item-bearing renders wait for
--- PLAYER_REGEN_ENABLED (M2 §11-§17). Meanwhile the existing buttons stay
--- visible, counts keep following inventory, and any secure target that
--- went stale is flagged unavailable (ItemButtonPool:ValidateAll).
--- Returns true when the caller must not render now.
+-- Combat lockdown + protected item buttons: showing/hiding/anchoring/
+-- re-binding them is forbidden, so layout work cannot happen in combat
+-- (M2 §11-§17). The expanded view therefore works like a bag in combat:
+-- it can be opened and closed (the frame is only shown/hidden) and items
+-- can be used, but it shows the LAST laid-out view (kept ready by Prewarm
+-- while idle). Navigation/search/layout changes wait for combat to end.
+function Shell:IsCombatBlocked()
+    return Pockets.UI.ItemButtonPool:IsStructurallyBlocked()
+end
+
+-- Guard for every layout function: in combat none of them may run (they
+-- hide/anchor/resize frames in the protected buttons' chains). Marks a
+-- re-render for combat end and keeps counts/stale flags fresh meanwhile.
+-- Returns true when the caller must stop.
 function Shell:DeferIfItemsBlocked()
-    local pool = Pockets.UI.ItemButtonPool
-    if not pool:IsStructurallyBlocked() then
+    if not self:IsCombatBlocked() then
         return false
     end
+    local pool = Pockets.UI.ItemButtonPool
     self.renderDeferred = true
     pool:ValidateAll()
     pool:RefreshCounts()
@@ -855,6 +922,93 @@ function Shell:OnCombatEnded()
     end
 end
 
+-- Shows exactly one of root (Glance) / expanded for the current state.
+-- Plain Show/Hide only - allowed in combat.
+function Shell:ApplyVisibility()
+    local showExpanded = self.state ~= self.STATE.GLANCE
+    if self.userHidden then
+        self.root:Hide()
+        self.expanded:Hide()
+        return
+    end
+    self.root:SetShown(not showExpanded)
+    self.expanded:SetShown(showExpanded)
+end
+
+-- Views whose layout can be re-shown in combat as-is.
+local COMBAT_REOPENABLE = {
+    [Shell.STATE.MENU] = true,
+    [Shell.STATE.CATEGORY] = true,
+    [Shell.STATE.ALL] = true,
+}
+
+function Shell:RenderInCombat()
+    local pool = Pockets.UI.ItemButtonPool
+    self.renderDeferred = true
+    pool:ValidateAll()
+    pool:RefreshCounts()
+
+    if self.state == self.STATE.GLANCE then
+        self:SetEscapeCatcherShown(false)
+        self:ApplyVisibility()
+        self.expandedVisible = false
+        return
+    end
+
+    if self.expandedVisible then
+        -- Already open: navigation needs a re-layout, which waits. Keep
+        -- showing (and clicking) what is on screen.
+        self.state = self.displayedState or self.state
+        self.context = self.displayedContext or self.context
+        self:SetEscapeCatcherShown(true)
+        return
+    end
+
+    if COMBAT_REOPENABLE[self.laidOutState] then
+        self.state = self.laidOutState
+        self.context = self.laidOutContext or {}
+        self.displayedState, self.displayedContext = self.state, self.context
+        self:SetEscapeCatcherShown(true)
+        self:ApplyVisibility()
+        self.expandedVisible = not self.userHidden
+        return
+    end
+    -- Nothing laid out to show: opens after combat (renderDeferred).
+end
+
+-- Out-of-combat only: lay out All Items into the (hidden) expanded frame so
+-- it is ready to be shown in combat. Cheap to skip; coalesced by
+-- SchedulePrewarm.
+function Shell:Prewarm()
+    if self.state ~= self.STATE.GLANCE or self:IsCombatBlocked() or self.isDragging then
+        return
+    end
+    local savedState, savedContext = self.state, self.context
+    self.state, self.context = self.STATE.ALL, {}
+    local ok, err = pcall(function()
+        self:RenderExpandedContent(self.STATE.ALL)
+    end)
+    self.state, self.context = savedState, savedContext
+    if ok then
+        self.laidOutState, self.laidOutContext = self.STATE.ALL, {}
+    elseif Pockets.Debug then
+        Pockets.Debug:LogError("Shell Prewarm failed: " .. tostring(err))
+    end
+end
+
+function Shell:SchedulePrewarm()
+    if self.prewarmPending or not C_Timer then
+        return
+    end
+    self.prewarmPending = true
+    C_Timer.After(0.4, function()
+        self.prewarmPending = false
+        if self.state == self.STATE.GLANCE then
+            self:Prewarm()
+        end
+    end)
+end
+
 function Shell:Render()
     -- Fully deferred while a drag is in progress (§1/§2/§15): WoW's
     -- StartMoving() is live-updating the frame's screen position from the
@@ -868,33 +1022,16 @@ function Shell:Render()
         return
     end
     -- The Escape catcher is a plain (non-protected) frame, so it follows
-    -- the state even when the item-button render below must wait for
-    -- combat to end - Escape keeps working in combat.
+    -- the state even in combat - Escape keeps working.
     self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
-    -- Returning to Glance must always work, in combat too: it only hides
-    -- the (non-protected) expanded container and shows Glance; any item
-    -- buttons it can't recycle are left for ItemButtonPool's deferred
-    -- release.
-    if self.state ~= self.STATE.GLANCE and self:DeferIfItemsBlocked() then
+
+    if self:IsCombatBlocked() then
+        self:RenderInCombat()
         return
     end
 
-    local frame = self.frame
     local state = self.state
-
-    -- Closing in combat with protected item buttons: the root frame is in
-    -- their anchor chain, so SetPoint/SetSize on it (and re-laying-out
-    -- Glance's Recent strip) are blocked. Only do the allowed part - hide
-    -- the expanded container, show Glance, drop the backdrop - and finish
-    -- the layout when combat ends (OnCombatEnded re-renders).
-    if state == self.STATE.GLANCE and Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
-        frame.shell:Hide()
-        frame.glance:Show()
-        self:SetEscapeCatcherShown(false)
-        PHUI.ApplyBackdrop(frame, { bgAlpha = 0 })
-        self.renderDeferred = true
-        return
-    end
+    self.renderDeferred = false
 
     -- Single root position ownership (§1/§2): every state - GLANCE
     -- included - reapplies the exact same saved TOPLEFT anchor through
@@ -902,20 +1039,32 @@ function Shell:Render()
     -- The rest of Render only ever calls SetSize afterward, so a state
     -- transition can resize the frame but can never drift its origin.
     self:RestorePosition()
+    self:ApplyVisibility()
+    self.expandedVisible = state ~= self.STATE.GLANCE and not self.userHidden
 
     if state == self.STATE.GLANCE then
-        frame.shell:Hide()
-        frame.glance:Show()
         self:SetEscapeCatcherShown(false)
-        PHUI.ApplyBackdrop(frame, { bgAlpha = L.GLANCE_ALPHA })
+        PHUI.ApplyBackdrop(self.root, { bgAlpha = L.GLANCE_ALPHA })
         self:RenderGlance()
+        self:SchedulePrewarm()
         return
     end
 
-    frame.glance:Hide()
-    frame.shell:Show()
     self:SetEscapeCatcherShown(true)
-    PHUI.ApplyBackdrop(frame, { bgAlpha = L.EXPANDED_BODY_ALPHA })
+    self:RenderExpandedContent(state)
+    self.displayedState, self.displayedContext = state, self.context
+    if COMBAT_REOPENABLE[state] then
+        self.laidOutState, self.laidOutContext = state, self.context
+    else
+        self.laidOutState, self.laidOutContext = nil, nil
+    end
+end
+
+-- Lays out one expanded state into the expanded frame. Does not touch
+-- visibility; used by Render and Prewarm.
+function Shell:RenderExpandedContent(state)
+    local frame = self.frame
+    PHUI.ApplyBackdrop(self.expanded, { bgAlpha = L.EXPANDED_BODY_ALPHA })
 
     self:ConfigureHeader()
 
@@ -960,6 +1109,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderGlance()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local glance = self.frame.glance
     local InventoryState = Pockets.Services.InventoryState
 
@@ -1019,7 +1171,7 @@ function Shell:RenderGlance()
     -- specs) - never a runtime GetHeight()/GetBottom() query. Width is
     -- fixed; height grows by exactly one metric row when Ammo is shown,
     -- shrinks back by exactly that when it isn't.
-    self.frame:SetSize(L.GLANCE_WIDTH, Constants:GlanceContentHeight(showAmmo))
+    self.root:SetSize(L.GLANCE_WIDTH, Constants:GlanceContentHeight(showAmmo))
 end
 
 --------------------------------------------------
@@ -1096,6 +1248,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderMenu()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content
@@ -1158,6 +1313,9 @@ end
 -- Grid<->List (or Menu/All -> Category) never leaves the other
 -- presentation's widgets on screen.
 function Shell:RenderCategory(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     if Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
         self:RenderCategoryList(categoryID)
@@ -1183,6 +1341,9 @@ end
 -- Grid: unchanged from before this pass (§4 "preserve exactly") - same
 -- pooled real item-button component All Items uses.
 function Shell:RenderCategoryGrid(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
@@ -1280,6 +1441,9 @@ local function CreateCategoryListRow(poolAnchor)
 end
 
 function Shell:RenderCategoryList(categoryID)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
 
@@ -1682,6 +1846,9 @@ function Shell:OpenLootLog()
 end
 
 function Shell:RenderLoot()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
 
@@ -1731,13 +1898,16 @@ end
 
 function Shell:Show()
     if self.frame then
-        self.frame:Show()
+        self.userHidden = false
+        self:ApplyVisibility()
     end
 end
 
 function Shell:Hide()
     if self.frame then
-        self.frame:Hide()
+        self.userHidden = true
+        self:ApplyVisibility()
+        self.expandedVisible = false
     end
 end
 
@@ -1745,17 +1915,20 @@ function Shell:Toggle()
     if not self.frame then
         return
     end
-    if self.frame:IsShown() then
-        self:Hide()
-    else
+    if self.userHidden then
         self:Show()
+    else
+        self:Hide()
     end
 end
 
 -- Shift-B / the old "expand" action jump directly to All Items (§4),
 -- toggling back to Menu if All Items is already open.
 function Shell:ToggleAllItems()
-    if self.state == self.STATE.ALL then
+    -- In combat there is no re-layout to step back to Menu: toggling closes.
+    if self:IsCombatBlocked() and self.state ~= self.STATE.GLANCE then
+        self:SetState(self.STATE.GLANCE)
+    elseif self.state == self.STATE.ALL then
         self:SetState(self.STATE.MENU)
     else
         self:SetState(self.STATE.ALL)

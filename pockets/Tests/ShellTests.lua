@@ -2706,3 +2706,28 @@ Pockets.Tests.TestRunner:Register("Shell: closing the expanded view works during
     ResetToGlance()
     return ok, ok and "OK" or "expanded view did not close in combat"
 end)
+
+Pockets.Tests.TestRunner:Register("Shell: expanded view opens in combat from the pre-laid-out All Items, and nav waits", function()
+    local CombatAPI = Pockets.Adapters.CombatAPI
+    local Pool = Pockets.UI.ItemButtonPool
+    local originalCombat, originalProtected = CombatAPI.IsInCombat, Pool.templateProtected
+    ResetToGlance()
+    Shell:Prewarm() -- same as the idle prewarm; synchronous here
+    CombatAPI.IsInCombat = function() return true end
+    Pool.templateProtected = true
+
+    Shell:SetState(Shell.STATE.MENU) -- Glance click in combat
+    local opened = Shell.expanded:IsShown() and not Shell.root:IsShown()
+        and Shell:GetState() == Shell.STATE.ALL
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = "consumable" }) -- needs re-layout
+    local navRejected = Shell:GetState() == Shell.STATE.ALL and Shell.expanded:IsShown()
+    Shell:SetState(Shell.STATE.GLANCE)
+    local closed = not Shell.expanded:IsShown() and Shell.root:IsShown()
+
+    CombatAPI.IsInCombat, Pool.templateProtected = originalCombat, originalProtected
+    Pool.dirty = false
+    ResetToGlance()
+    local ok = opened and navRejected and closed
+    return ok, ok and "OK" or string.format("opened=%s navRejected=%s closed=%s",
+        tostring(opened), tostring(navRejected), tostring(closed))
+end)

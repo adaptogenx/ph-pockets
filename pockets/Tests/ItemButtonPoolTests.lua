@@ -101,10 +101,10 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: non-Recent item tooltip ancho
     GameTooltip:Hide()
     ItemButtonPool:ReleaseAll(UIParent)
 
-    local ok = point == "TOPLEFT" and relativeTo == Pockets.UI.Shell.frame and relativePoint == "TOPRIGHT"
+    local ok = point == "TOPLEFT" and relativeTo == Pockets.UI.Shell:GetActiveFrame() and relativePoint == "TOPRIGHT"
     return ok, ok and "OK" or string.format(
         "expected TOPLEFT anchored to the HUD's TOPRIGHT, got point=%s relativeToHud=%s relativePoint=%s",
-        tostring(point), tostring(relativeTo == Pockets.UI.Shell.frame), tostring(relativePoint))
+        tostring(point), tostring(relativeTo == Pockets.UI.Shell:GetActiveFrame()), tostring(relativePoint))
 end)
 
 Pockets.Tests.TestRunner:Register("ItemButtonPool: Recent-item tooltip keeps its own per-button anchor (not the HUD's)", function()
@@ -120,7 +120,7 @@ Pockets.Tests.TestRunner:Register("ItemButtonPool: Recent-item tooltip keeps its
     button.isRecentItem = nil -- this pool button is reused by later tests - don't leak the flag
     ItemButtonPool:ReleaseAll(UIParent)
 
-    local ok = relativeTo ~= Pockets.UI.Shell.frame
+    local ok = relativeTo ~= Pockets.UI.Shell:GetActiveFrame()
     return ok, ok and "OK" or "expected a Recent item's tooltip to stay anchored to itself, not redirected to the HUD"
 end)
 
