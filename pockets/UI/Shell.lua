@@ -1058,6 +1058,8 @@ function Shell:BuildSecureControls()
     end
     Overlay(self.frame.glance.header.plusButton, "open")
     Overlay(self.frame.shell.header.closeButton, "close")
+    -- Back would need a re-layout to Menu; in combat it closes instead.
+    Overlay(self.frame.shell.header.backButton, "close")
 
     -- Key binding -> secure toggle, active only in combat; out of combat
     -- the normal binding runs Pockets_ToggleFullInventory (full behavior).
