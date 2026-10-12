@@ -55,5 +55,12 @@ function TestRunner:RunAll()
         print(COLOR_RED .. "===================================" .. COLOR_RESET)
     end
 
+    -- Persist the outcome so it can be read from the SavedVariables file
+    -- (WTF/.../SavedVariables/Pockets.lua) after /reload, instead of
+    -- screenshotting chat.
+    if _G.PocketsDB then
+        _G.PocketsDB.lastTestRun = { passed = passed, failed = failed, failures = failures }
+    end
+
     return passed, failed
 end
