@@ -10,12 +10,30 @@ local _, Pockets = ...
 Pockets.UI.TooltipCounts = Pockets.UI.TooltipCounts or {}
 local TooltipCounts = Pockets.UI.TooltipCounts
 
+local inCallback = false
+
 function TooltipCounts:Initialize()
     Pockets.Adapters.TooltipAPI:OnItemTooltipShow(function(tooltip, itemID)
-        local quantity = Pockets.Services.InventoryState:GetCarriedQuantity(itemID)
-        if quantity > 0 then
-            tooltip:AddLine(string.format("Pockets: %d", quantity), 0.6, 0.8, 1.0)
-            tooltip:Show()
+        -- Re-entrancy guard: tooltip:Show() re-runs tooltip data processing
+        -- on modern clients, which re-enters this callback (freeze).
+        if inCallback then
+            return
+        end
+        inCallback = true
+        local ok, err = pcall(function()
+            local quantity = Pockets.Services.InventoryState:GetCarriedQuantity(itemID)
+            if quantity > 0 then
+                tooltip:AddLine(string.format("Pockets: %d", quantity), 0.6, 0.8, 1.0)
+                -- Legacy tooltips need a Show() to resize after AddLine;
+                -- modern post-call tooltips resize themselves.
+                if Pockets.Adapters.TooltipAPI.mode == "legacy" then
+                    tooltip:Show()
+                end
+            end
+        end)
+        inCallback = false
+        if not ok and Pockets.Debug then
+            Pockets.Debug:LogError("TooltipCounts failed: " .. tostring(err))
         end
     end)
 end
