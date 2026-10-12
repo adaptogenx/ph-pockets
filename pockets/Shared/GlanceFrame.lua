@@ -35,7 +35,9 @@ GlanceFrame.TOKENS = {
     ICON_MAIN = PHUI.Spacing.ICON_MAIN,
     ICON_RECENT = PHUI.Spacing.ICON_MAIN,
     ICON_GAP = PHUI.Spacing.ICON_SPACING,
-    HEADER_BUTTON = PHUI.Spacing.ICON_BUTTON_SIZE,
+    HEADER_BUTTON_W = PHUI.Spacing.HEADER_BUTTON_W,
+    HEADER_BUTTON_H = PHUI.Spacing.HEADER_BUTTON_H,
+    HEADER_BUTTON_ICON = PHUI.Spacing.HEADER_BUTTON_ICON,
     HEADER_BUTTON_GAP = PHUI.Spacing.ICON_SPACING,
     ETA_GAP = 14,
     ETA_WIDTH = 72,
@@ -148,13 +150,19 @@ function GlanceFrame:Build(frame, opts)
         local spec = list[i]
         local button
         if spec.native then
-            button = PHUI.CreateNativeIconButton(header, T.HEADER_BUTTON, spec.texture, {
+            -- Native Blizzard button face (the texture IS the box): square.
+            button = PHUI.CreateNativeIconButton(header, T.HEADER_BUTTON_H, spec.texture, {
                 tooltipText = spec.tooltipText, onClick = spec.onClick,
             })
         else
-            button = PHUI.CreateIconButton(header, T.HEADER_BUTTON, spec.texture, {
+            button = PHUI.CreateIconButton(header, T.HEADER_BUTTON_H, spec.texture, {
                 tooltipText = spec.tooltipText, onClick = spec.onClick,
             })
+            -- Wider box with the icon padded inside it (mockup).
+            button:SetSize(T.HEADER_BUTTON_W, T.HEADER_BUTTON_H)
+            button.icon:ClearAllPoints()
+            button.icon:SetSize(T.HEADER_BUTTON_ICON, T.HEADER_BUTTON_ICON)
+            button.icon:SetPoint("CENTER", button, "CENTER", 0, 0)
         end
         if previous then
             button:SetPoint("RIGHT", previous, "LEFT", -T.HEADER_BUTTON_GAP, 0)

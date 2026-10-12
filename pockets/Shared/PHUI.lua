@@ -116,6 +116,12 @@ PHUI.Spacing = {
     SECTION_SPACING = 12,  -- between content groups (divider centered in it)
     ICON_MAIN = 20,        -- main-row icons (bag, Recent)
     ICON_TAB = 16,         -- attached-tab icons
+    -- Glance header action buttons (Search / Log): wider boxed buttons with
+    -- the icon padded inside, per the mockup. The native "+" button is
+    -- square at HEADER_BUTTON_H.
+    HEADER_BUTTON_W = 32,
+    HEADER_BUTTON_H = 22,
+    HEADER_BUTTON_ICON = 14,
 }
 
 --------------------------------------------------

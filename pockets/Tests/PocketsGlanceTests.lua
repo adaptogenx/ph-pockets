@@ -47,7 +47,7 @@ TestRunner:Register("Glance: header buttons are Search, Log, Expand (+), header-
     local icons = header.icons
     local ok = #icons == 3 and header.iconButton == icons[1] and header.lootButton == icons[2]
         and header.plusButton == icons[3]
-        and icons[1]:GetWidth() == T.HEADER_BUTTON and icons[3]:GetPoint() == "RIGHT"
+        and icons[1]:GetWidth() == T.HEADER_BUTTON_W and icons[3]:GetPoint() == "RIGHT"
     return ok, ok and "OK" or "unexpected header buttons"
 end)
 
