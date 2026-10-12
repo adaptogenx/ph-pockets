@@ -122,6 +122,18 @@ function Debug:DumpClient()
         tostring(C_Item ~= nil), tostring(issecretvalue ~= nil)))
 end
 
+function Debug:DumpShell()
+    local Shell = Pockets.UI.Shell
+    local Pool = Pockets.UI.ItemButtonPool
+    print(COLOR_YELLOW .. "=== Pockets Shell ===" .. COLOR_RESET)
+    print(string.format("  state=%s laidOut=%s displayed=%s expandedVisible=%s deferred=%s",
+        tostring(Shell.state), tostring(Shell.laidOutState), tostring(Shell.displayedState),
+        tostring(Shell.expandedVisible), tostring(Shell.renderDeferred)))
+    print(string.format("  root shown=%s expanded shown=%s templateProtected=%s blocked=%s prewarmPending=%s",
+        tostring(Shell.root:IsShown()), tostring(Shell.expanded:IsShown()),
+        tostring(Pool.templateProtected), tostring(Shell:IsCombatBlocked()), tostring(Shell.prewarmPending)))
+end
+
 function Debug:DumpSecureButtons()
     print(COLOR_YELLOW .. "=== Pockets Item Buttons ===" .. COLOR_RESET)
     print(string.format("  CursorHasItem: %s", tostring(CursorHasItem and CursorHasItem())))
@@ -235,12 +247,14 @@ function Debug:HandleCommand(args)
         local on = (args[3] or ""):lower() == "on"
         PocketsDB.settings.modernTooltips = on
         print("[Pockets] modernTooltips=" .. tostring(on) .. " (applies after /reload)")
+    elseif subCmd == "shell" then
+        self:DumpShell()
     elseif subCmd == "client" then
         self:DumpClient()
     elseif subCmd == "regions" then
         self:DumpButtonRegions()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, regions")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions")
     end
 end
 
