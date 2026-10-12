@@ -6,7 +6,7 @@
     (TDD §22 Error Handling).
 ]]
 
--- luacheck: globals PocketsDB TooltipDataProcessor Enum ItemRefTooltip
+-- luacheck: globals PocketsDB TooltipDataProcessor Enum ItemRefTooltip hooksecurefunc
 
 local _, Pockets = ...
 
@@ -69,37 +69,23 @@ function TooltipAPI:OnItemTooltipShow(callback)
     end
     self.hooked = true
 
-    -- Opt-in while the Forever freeze is bisected: /pockets debug tooltip on
+    -- Opt-in until verified on Forever: /pockets debug tooltip on
+    -- TooltipDataProcessor.AddTooltipPostCall is NOT used: its callbacks run
+    -- inside Blizzard's shared tooltip pipeline and taint it (nameplate
+    -- secret-value errors, then a client freeze). hooksecurefunc post-hooks
+    -- run after Blizzard's code and do not taint it.
     local optedIn = PocketsDB and PocketsDB.settings and PocketsDB.settings.modernTooltips == true
-    if optedIn and self:HasModernPipeline() then
+    if optedIn and not self:HasLegacyItemHandler(GameTooltip) and hooksecurefunc then
         local isSecret = function(v)
             return Pockets.Adapters.ClientAPI:IsSecret(v)
         end
-        local addOk, addErr = pcall(TooltipDataProcessor.AddTooltipPostCall, Enum.TooltipDataType.Item, function(tooltip, data)
-            -- Only the main/ref tooltips; skip shopping/comparison and
-            -- every other tooltip that renders item data.
-            if tooltip ~= GameTooltip and tooltip ~= ItemRefTooltip then
-                return
-            end
-            -- Circuit breaker: a runaway re-fire loop trips this instead
-            -- of freezing the client.
-            if TooltipAPI.tripped then
-                return
-            end
-            local now = GetTime()
-            if now - (TooltipAPI.windowStart or 0) > 1 then
-                TooltipAPI.windowStart, TooltipAPI.windowCount = now, 0
-            end
-            TooltipAPI.windowCount = TooltipAPI.windowCount + 1
-            if TooltipAPI.windowCount > 100 then
-                TooltipAPI.tripped = true
-                if Pockets.Debug then
-                    Pockets.Debug:LogError("TooltipAPI breaker tripped: >100 item-tooltip callbacks in 1s; hook disabled")
-                end
-                return
-            end
+        local function Fire(tooltip)
             local ok, err = pcall(function()
-                local itemID, itemLink = TooltipAPI.ExtractItem(data, isSecret)
+                local _, itemLink = tooltip:GetItem()
+                if type(itemLink) ~= "string" or isSecret(itemLink) then
+                    return
+                end
+                local itemID = tonumber(itemLink:match("item:(%d+)"))
                 if itemID then
                     callback(tooltip, itemID, itemLink)
                 end
@@ -107,12 +93,22 @@ function TooltipAPI:OnItemTooltipShow(callback)
             if not ok and Pockets.Debug then
                 Pockets.Debug:LogError("TooltipAPI callback failed: " .. tostring(err))
             end
-        end)
-        self.supported = addOk
-        self.mode = addOk and "modern" or nil
-        if not addOk and Pockets.Debug then
-            Pockets.Debug:LogError("TooltipAPI modern hook unavailable: " .. tostring(addErr))
         end
+        local methods = { "SetBagItem", "SetHyperlink", "SetInventoryItem", "SetLootItem",
+            "SetMerchantItem", "SetQuestItem", "SetQuestLogItem", "SetTradeSkillItem" }
+        local hooked = 0
+        for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
+            for _, name in ipairs(methods) do
+                if tip and type(tip[name]) == "function" then
+                    local hookOk = pcall(hooksecurefunc, tip, name, Fire)
+                    if hookOk then
+                        hooked = hooked + 1
+                    end
+                end
+            end
+        end
+        self.supported = hooked > 0
+        self.mode = hooked > 0 and "hooks" or nil
         return
     end
 

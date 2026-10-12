@@ -24,11 +24,8 @@ function TooltipCounts:Initialize()
             local quantity = Pockets.Services.InventoryState:GetCarriedQuantity(itemID)
             if quantity > 0 then
                 tooltip:AddLine(string.format("Pockets: %d", quantity), 0.6, 0.8, 1.0)
-                -- Legacy tooltips need a Show() to resize after AddLine;
-                -- modern post-call tooltips resize themselves.
-                if Pockets.Adapters.TooltipAPI.mode == "legacy" then
-                    tooltip:Show()
-                end
+                -- Resize after AddLine; guarded above against re-entry.
+                tooltip:Show()
             end
         end)
         inCallback = false
