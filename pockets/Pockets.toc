@@ -23,6 +23,7 @@ Adapters/CombatAPI.lua
 Adapters/TooltipAPI.lua
 Adapters/BindingsAPI.lua
 Adapters/MailAPI.lua
+Adapters/MoneyAPI.lua
 
 # NOTE: Bindings.xml is intentionally NOT listed here. WoW auto-discovers
 # and parses a file literally named "Bindings.xml" in the addon's root

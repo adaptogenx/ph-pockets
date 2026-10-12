@@ -72,6 +72,19 @@ TestRunner:Register("LootLog UI: uncached item with no link falls back without e
     return ok and type(text) == "string" and text ~= "", ok and "OK" or tostring(text)
 end)
 
+TestRunner:Register("LootLog UI: money text uses the shared formatter", function()
+    local text = LootLogView:MoneyText({ kind = "money", copper = 12500 })
+    local ok = text == "1g 25s"
+    return ok, ok and "OK" or string.format("got %q", tostring(text))
+end)
+
+TestRunner:Register("LootLog layout: money rows start at the loot column (no icon column)", function()
+    local rows = LootLogView:PlanRows({ { id = 1, kind = "money", copper = 500 } }, 250, function() return 12 end)
+    local lootLeft = L.LOOT_TIME_WIDTH + L.LOOT_COLUMN_GAP
+    local ok = rows[1].textLeft == lootLeft and rows[1].textWidth == 250 - lootLeft
+    return ok, ok and "OK" or "money row column math wrong"
+end)
+
 --------------------------------------------------
 -- Pure layout (fake measure)
 --------------------------------------------------
@@ -250,6 +263,20 @@ TestRunner:Register("LootLog Shell: few rows - rows shown, no scrollbar, empty t
             and view.rows[3].entry.quantity == 2
         Shell:SetState(Shell.STATE.GLANCE)
         return ok, ok and "OK" or "short log rendering wrong"
+    end)
+end)
+
+TestRunner:Register("LootLog Shell: money rows render formatted coin, no icon, not interactive", function()
+    return WithFreshLog(function()
+        LootLog:RecordItem(2589, 1, LINEN)
+        LootLog:RecordMoney(12500)
+        Shell:OpenLootLog()
+        local rows = Shell.frame.shell.lootView.rows
+        local ok = rows[1].entry.kind == "money" and rows[1].text:GetText() == "1g 25s"
+            and not rows[1].icon:IsShown() and not rows[1]:IsMouseEnabled()
+            and rows[2].icon:IsShown() and rows[2]:IsMouseEnabled()
+        Shell:SetState(Shell.STATE.GLANCE)
+        return ok, ok and "OK" or "money row rendering wrong"
     end)
 end)
 

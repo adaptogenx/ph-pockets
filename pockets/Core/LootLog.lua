@@ -1,7 +1,8 @@
 --[[
-    Core/LootLog.lua - Bounded, persisted feed of items the player LOOTED
-    (Loot Log). Not a ledger: no sales, purchases, gold, mail, crafting or
-    other bag changes - only items that arrived while looting.
+    Core/LootLog.lua - Bounded, persisted feed of what the player LOOTED
+    (Loot Log): items and coin. Not a ledger: no sales, purchases, spending,
+    mail/trade gold, crafting or other changes - only things that arrived
+    while looting.
 
     Pockets-owned and fully standalone: nothing here reads pH. The entry
     shape (id, time, kind, itemID/itemLink/quantity) is deliberately plain
@@ -20,6 +21,11 @@
     purchases happen with a merchant window and never a loot window, so
     they are never logged. CHAT_MSG_LOOT is intentionally NOT used (locale-
     dependent text parse and a second signal for the same acquisition).
+    Money follows the same rule: PLAYER_MONEY -> ObserveMoney() diffs
+    successive GetMoney() values, tracks the balance ALWAYS (so a sale or
+    mail never pollutes the next diff), but records only an INCREASE seen
+    inside a loot context. Spending, vendor sales, mail and quest gold are
+    never logged. CHAT_MSG_MONEY / QUEST_TURNED_IN are not used.
     Known gap: items awarded by a group-loot roll after the window closed
     arrive outside a loot context and are not logged.
     No attribution (mob/NPC) is recorded.
@@ -40,12 +46,14 @@ local Constants = Pockets.Constants
 LootLog.store = LootLog.store or { nextId = 1, entries = {} }
 LootLog.entries = LootLog.store.entries -- same table as store.entries
 LootLog.revision = LootLog.revision or 0
+LootLog.lastMoney = nil
 LootLog.lootWindowOpen = false
 LootLog.lootClosedAt = nil
 LootLog.clock = LootLog.clock or time
 
 local KIND_ITEM = "item"
-LootLog.KIND = { ITEM = KIND_ITEM }
+local KIND_MONEY = "money"
+LootLog.KIND = { ITEM = KIND_ITEM, MONEY = KIND_MONEY }
 
 local function Push(self, entry)
     entry.id = self.store.nextId
@@ -69,6 +77,36 @@ function LootLog:RecordItem(itemID, quantity, itemLink)
         return nil
     end
     return Push(self, { kind = KIND_ITEM, itemID = itemID, quantity = quantity, itemLink = itemLink })
+end
+
+-- Copper amount looted (always positive). Ungated; tests and the debug
+-- command use it directly - live gold goes through ObserveMoney.
+function LootLog:RecordMoney(copper)
+    copper = math.floor(tonumber(copper) or 0)
+    if copper <= 0 then
+        return nil
+    end
+    return Push(self, { kind = KIND_MONEY, copper = copper })
+end
+
+-- Called on every PLAYER_MONEY with the current balance. The first call
+-- only establishes the baseline (login must not look like income). The
+-- balance is tracked every time; only an increase inside a loot context
+-- is recorded.
+function LootLog:ObserveMoney(currentMoney)
+    currentMoney = tonumber(currentMoney)
+    if not currentMoney then
+        return nil
+    end
+    local previous = self.lastMoney
+    self.lastMoney = currentMoney
+    if previous == nil or currentMoney <= previous then
+        return nil
+    end
+    if not self:IsLootContextActive() then
+        return nil
+    end
+    return self:RecordMoney(currentMoney - previous)
 end
 
 -- Loot window tracking (LOOT_OPENED / LOOT_CLOSED).
@@ -137,9 +175,10 @@ function LootLog:LoadPersisted(saved)
     local maxId = 0
     for i = #entries, 1, -1 do
         local e = entries[i]
-        -- Money/other legacy kinds from earlier versions are dropped.
+        -- Anything else (e.g. old spending entries) is dropped.
         local valid = type(e) == "table" and type(e.id) == "number" and type(e.time) == "number"
-            and e.kind == KIND_ITEM and e.itemID and (e.quantity or 0) > 0
+            and ((e.kind == KIND_ITEM and e.itemID and (e.quantity or 0) > 0)
+                or (e.kind == KIND_MONEY and type(e.copper) == "number" and e.copper > 0))
         if valid then
             maxId = math.max(maxId, e.id)
         else

@@ -272,11 +272,14 @@ function Debug:HandleTestCommand(args)
             local _, link = Pockets.Adapters.ItemAPI:RawGetItemInfo(itemID)
             Pockets.Services.LootLog:RecordItem(itemID, quantity, link)
             print(string.format("[Pockets] Logged item %d x%d", itemID, quantity))
+        elseif kind == "money" and tonumber(args[4]) then
+            Pockets.Services.LootLog:RecordMoney(tonumber(args[4]))
+            print(string.format("[Pockets] Logged money %d", tonumber(args[4])))
         else
-            print("[Pockets] Usage: /pockets test loot item <itemID> <quantity>")
+            print("[Pockets] Usage: /pockets test loot item <itemID> <quantity> | money <copper>")
         end
     else
-        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>, loot item ...")
+        print("[Pockets] Test commands: run, sample <used> <total> <secondsAgo>, category <itemID>, recent <itemID> <quantity>, loot item|money ...")
     end
 end
 

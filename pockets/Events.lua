@@ -195,6 +195,7 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("BAG_UPDATE")
 mainFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
+mainFrame:RegisterEvent("PLAYER_MONEY")
 mainFrame:RegisterEvent("LOOT_OPENED")
 mainFrame:RegisterEvent("LOOT_CLOSED")
 mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
@@ -209,8 +210,16 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
             InitializeAddon()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Money baseline for Loot Log, taken here (GetMoney can still read
+        -- 0 at ADDON_LOADED, which would log the whole purse). A later PEW
+        -- (zoning) keeps the existing baseline.
+        if Pockets.Services.LootLog.lastMoney == nil then
+            Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
+        end
         EnsureDefaultBinding()
         ScheduleRefresh("player_entering_world")
+    elseif event == "PLAYER_MONEY" then
+        Pockets.Services.LootLog:ObserveMoney(Pockets.Adapters.MoneyAPI:GetMoney())
     elseif event == "LOOT_OPENED" then
         Pockets.Services.LootLog:SetLootWindowOpen(true)
     elseif event == "LOOT_CLOSED" then
@@ -265,6 +274,7 @@ local function ShowDevHelp()
     print("|cffffff00/pockets test category <itemID>|r - Print the category for an item")
     print("|cffffff00/pockets test recent <itemID> <quantity>|r - Inject a Recent Items entry")
     print("|cffffff00/pockets test loot item <itemID> <quantity>|r - Inject a Loot Log item entry")
+    print("|cffffff00/pockets test loot money <copper>|r - Inject a Loot Log looted-coin entry")
     print("===============================")
 end
 

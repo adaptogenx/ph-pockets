@@ -1,6 +1,6 @@
 --[[
     Tests/LootLogTests.lua - Core/LootLog.lua: event storage, ordering,
-    bounds, persistence, loot-context gating and single-source dedup.
+    bounds, persistence, looted-coin gating, loot-context gating and single-source dedup.
 
     Every test runs against a throwaway store (WithFreshLog) and restores
     the player's real log afterward - these tests must never wipe or
@@ -16,14 +16,16 @@ local TestRunner = Pockets.Tests.TestRunner
 local function WithFreshLog(fn)
     local saved = {
         store = LootLog.store, entries = LootLog.entries, revision = LootLog.revision,
-        lootWindowOpen = LootLog.lootWindowOpen, lootClosedAt = LootLog.lootClosedAt, clock = LootLog.clock,
+        lastMoney = LootLog.lastMoney, lootWindowOpen = LootLog.lootWindowOpen, lootClosedAt = LootLog.lootClosedAt, clock = LootLog.clock,
     }
     LootLog.store = { nextId = 1, entries = {} }
     LootLog.entries = LootLog.store.entries
+    LootLog.lastMoney = nil
     LootLog.lootWindowOpen, LootLog.lootClosedAt = false, nil
     LootLog.clock = function() return 1000 end -- every event in the same second
     local ok, a, b = pcall(fn)
     LootLog.store, LootLog.entries, LootLog.revision = saved.store, saved.entries, saved.revision
+    LootLog.lastMoney = saved.lastMoney
     LootLog.lootWindowOpen, LootLog.lootClosedAt, LootLog.clock = saved.lootWindowOpen, saved.lootClosedAt, saved.clock
     if not ok then
         error(a, 0)
@@ -129,6 +131,72 @@ end
 local function Slot(bag, index, itemID, quantity)
     return { bagID = bag, slotIndex = index, itemID = itemID, quantity = quantity, itemLink = "item:" .. itemID }
 end
+
+-- Looted coin ---------------------------------------------------------------
+
+TestRunner:Register("LootLog: RecordMoney keeps looted coin and ignores zero/negative amounts", function()
+    return WithFreshLog(function()
+        LootLog:RecordMoney(213)
+        LootLog:RecordMoney(0)
+        LootLog:RecordMoney(-4500)
+        local e = LootLog:GetEntries()
+        local ok = #e == 1 and e[1].kind == "money" and e[1].copper == 213
+        return ok, ok and "OK" or "expected exactly one +213 entry"
+    end)
+end)
+
+TestRunner:Register("LootLog: first money observation is only a baseline (login is not income)", function()
+    return WithFreshLog(function()
+        LootLog:SetLootWindowOpen(true)
+        LootLog:ObserveMoney(123456)
+        local ok = #LootLog:GetEntries() == 0 and LootLog.lastMoney == 123456
+        return ok, ok and "OK" or "baseline observation was recorded as an event"
+    end)
+end)
+
+TestRunner:Register("LootLog: coin gained while looting is logged", function()
+    return WithFreshLog(function()
+        LootLog:ObserveMoney(1000)
+        LootLog:SetLootWindowOpen(true)
+        LootLog:ObserveMoney(1213)
+        local e = LootLog:GetEntries()
+        local ok = #e == 1 and e[1].copper == 213
+        return ok, ok and "OK" or "looted coin was not logged"
+    end)
+end)
+
+TestRunner:Register("LootLog: coin NOT from looting (vendor sale, mail, quest, trade) is not logged", function()
+    return WithFreshLog(function()
+        LootLog:ObserveMoney(1000)
+        LootLog:ObserveMoney(5000) -- sold items / mail / quest gold: no loot context
+        local ok = #LootLog:GetEntries() == 0 and LootLog.lastMoney == 5000
+        return ok, ok and "OK" or "non-loot gold was logged (or the balance was not tracked)"
+    end)
+end)
+
+TestRunner:Register("LootLog: spending is never logged, and the balance still tracks", function()
+    return WithFreshLog(function()
+        LootLog:ObserveMoney(5000)
+        LootLog:SetLootWindowOpen(true)
+        LootLog:ObserveMoney(4000) -- repair/purchase while a loot window happens to be open
+        LootLog:ObserveMoney(4100) -- then +100 looted: diff is from 4000, not 5000
+        local e = LootLog:GetEntries()
+        local ok = #e == 1 and e[1].copper == 100
+        return ok, ok and "OK" or "expense logged or baseline not tracked through it"
+    end)
+end)
+
+TestRunner:Register("LootLog dedup: repeated PLAYER_MONEY with an unchanged balance records nothing", function()
+    return WithFreshLog(function()
+        LootLog:ObserveMoney(5000)
+        LootLog:SetLootWindowOpen(true)
+        LootLog:ObserveMoney(5100)
+        LootLog:ObserveMoney(5100)
+        LootLog:ObserveMoney(5100)
+        local ok = #LootLog:GetEntries() == 1
+        return ok, ok and "OK" or "a repeated PLAYER_MONEY duplicated the money event"
+    end)
+end)
 
 -- Loot context gating ------------------------------------------------------
 
@@ -259,7 +327,7 @@ TestRunner:Register("LootLog: LoadPersisted drops malformed entries, re-sorts, a
         }
         LootLog:LoadPersisted(saved)
         local e = LootLog:GetEntries()
-        -- Legacy money entries (ids 7 and 5) are dropped too.
+        -- Invalid money entries (ids 7 and 5: non-positive copper) are dropped too.
         local ok = #e == 2 and e[1].id == 6 and e[2].id == 3 and saved.nextId == 7
             and LootLog.entries == saved.entries
         local newest = LootLog:RecordItem(1, 1)

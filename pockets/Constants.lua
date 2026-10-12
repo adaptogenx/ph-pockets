@@ -81,7 +81,7 @@ Constants.ESTIMATOR_SAMPLE_WINDOW_MAX = 60
 -- Loot Log (recent activity feed, NOT a durable history - pH owns that).
 -- Per-character, persisted in PocketsCharDB.lootLog; oldest entries drop
 -- first once the bound is hit.
-Constants.LOOT_LOG_MAX = 50
+Constants.LOOT_LOG_MAX = 100
 -- Seconds after the loot window closes during which new bag items still
 -- count as loot (bag scans are debounced and trail the window).
 Constants.LOOT_CONTEXT_GRACE_SECONDS = 5
