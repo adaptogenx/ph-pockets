@@ -496,7 +496,7 @@ Pockets.Tests.TestRunner:Register("Glance: header has Search, Loot Log, then a '
     local plusIsSecond = header.plusButton == header.icons[3] and header.lootButton == header.icons[2]
     local plusPoint = header.plusButton:GetPoint()
     local plusTexture = header.plusButton:GetNormalTexture() and header.plusButton:GetNormalTexture():GetTexture()
-    local ok = searchIsFirst and plusIsSecond and plusPoint == "RIGHT" and plusTexture == Pockets.UI.PHUI.Icons.PLUS
+    local ok = searchIsFirst and plusIsSecond and plusPoint == "RIGHT" and Pockets.Tests.TextureEquals(plusTexture, Pockets.UI.PHUI.Icons.PLUS)
     return ok, ok and "OK" or string.format(
         "expected search=icons[1], loot=icons[2], plus=icons[3] flush right using PHUI.Icons.PLUS, got plusPoint=%s plusTexture=%s",
         tostring(plusPoint), tostring(plusTexture))
@@ -576,12 +576,16 @@ end)
 Pockets.Tests.TestRunner:Register("Shell close (X) button matches pH's native, unscaled UIPanelCloseButton size", function()
     local L = Pockets.Constants.LAYOUT
     local nativeSize = Pockets.UI.PHUI.NATIVE_CLOSE_BUTTON_SIZE
+    -- Forever's close-button art is larger, so it renders at its own
+    -- (smaller) size there; the layout slot constant stays pH's native 32.
+    local renderedSize = Pockets.Adapters.ClientAPI:IsForever()
+        and Pockets.UI.PHUI.FOREVER_CLOSE_BUTTON_SIZE or nativeSize
     ResetToGlance()
     Shell:SetState(Shell.STATE.MENU)
     local closeButton = Shell.frame.shell.header.closeButton
     local width, height = closeButton:GetSize()
     ResetToGlance()
-    local ok = L.SHELL_HEADER_CLOSE_WIDTH == nativeSize and width == nativeSize and height == nativeSize
+    local ok = L.SHELL_HEADER_CLOSE_WIDTH == nativeSize and width == renderedSize and height == renderedSize
     return ok, ok and "OK" or string.format(
         "expected SHELL_HEADER_CLOSE_WIDTH (%s) and rendered size (%sx%s) to equal PHUI.NATIVE_CLOSE_BUTTON_SIZE (%s)",
         tostring(L.SHELL_HEADER_CLOSE_WIDTH), tostring(width), tostring(height), tostring(nativeSize))
@@ -599,7 +603,7 @@ Pockets.Tests.TestRunner:Register("Glance header '+' matches Shell's expanded-he
     local shellTexture = shellPlus:GetNormalTexture() and shellPlus:GetNormalTexture():GetTexture()
     ResetToGlance()
 
-    local ok = glanceWidth == shellWidth and glanceTexture == shellTexture and glanceTexture == Pockets.UI.PHUI.Icons.PLUS
+    local ok = glanceWidth == shellWidth and glanceTexture == shellTexture and Pockets.Tests.TextureEquals(glanceTexture, Pockets.UI.PHUI.Icons.PLUS)
     return ok, ok and "OK" or string.format(
         "expected identical +buttons, got glance(width=%s texture=%s) shell(width=%s texture=%s)",
         tostring(glanceWidth), tostring(glanceTexture), tostring(shellWidth), tostring(shellTexture))

@@ -26,7 +26,69 @@ end
 -- buried in it is painful (chat has no scroll-to-failure/export) - the
 -- recap is the LAST thing printed, so it's what's on screen without any
 -- scrolling once the run finishes.
+-- Texture equality that works on both clients: Classic reports the path
+-- string, Forever a numeric file ID. Compares against what the client
+-- itself reports for `path`.
+function Pockets.Tests.TextureEquals(actual, path)
+    if actual == path then
+        return true
+    end
+    local probe = UIParent:CreateTexture()
+    probe:SetTexture(path)
+    local expected = probe:GetTexture()
+    return actual ~= nil and actual == expected
+end
+
+-- Layout getters on Forever return float32 noise (19.999988 for 20,
+-- 243.99996 for 244). Tests compare exact pixel values, so while tests run
+-- the size/position getters report values rounded to 0.01px. Restored
+-- afterwards; production code never sees this.
+local ROUNDED_GETTERS = { "GetWidth", "GetHeight", "GetSize", "GetLeft", "GetRight", "GetTop", "GetBottom", "GetPoint" }
+local function Round(v)
+    if type(v) == "number" then
+        return math.floor(v * 100 + 0.5) / 100
+    end
+    return v
+end
+
+local function InstallRoundedGetters()
+    local saved = {}
+    local seen = {}
+    local function Wrap(widgetType, create)
+        local ok, obj = pcall(create)
+        if not ok or not obj then return end
+        local mt = getmetatable(obj)
+        local index = mt and mt.__index
+        if type(index) ~= "table" or seen[index] then return end
+        seen[index] = true
+        for _, name in ipairs(ROUNDED_GETTERS) do
+            local original = rawget(index, name)
+            if type(original) == "function" then
+                saved[#saved + 1] = { index, name, original }
+                index[name] = function(...)
+                    local a, b, c, d, e = original(...)
+                    return Round(a), Round(b), Round(c), Round(d), Round(e)
+                end
+            end
+        end
+    end
+    Wrap("Frame", function() return CreateFrame("Frame") end)
+    Wrap("Button", function() return CreateFrame("Button") end)
+    Wrap("EditBox", function() return CreateFrame("EditBox") end)
+    Wrap("ScrollFrame", function() return CreateFrame("ScrollFrame") end)
+    Wrap("Texture", function() return UIParent:CreateTexture() end)
+    Wrap("FontString", function() return UIParent:CreateFontString() end)
+    return saved
+end
+
+local function RemoveRoundedGetters(saved)
+    for _, entry in ipairs(saved or {}) do
+        entry[1][entry[2]] = entry[3]
+    end
+end
+
 function TestRunner:RunAll()
+    local roundedSaved = InstallRoundedGetters()
     local passed, failed = 0, 0
     local failures = {}
     for _, test in ipairs(self.tests) do
@@ -54,6 +116,8 @@ function TestRunner:RunAll()
         end
         print(COLOR_RED .. "===================================" .. COLOR_RESET)
     end
+
+    RemoveRoundedGetters(roundedSaved)
 
     -- Persist the outcome so it can be read from the SavedVariables file
     -- (WTF/.../SavedVariables/Pockets.lua) after /reload, instead of

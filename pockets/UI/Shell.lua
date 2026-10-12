@@ -864,6 +864,10 @@ function Shell:Render()
     if self.isDragging then
         return
     end
+    -- The Escape catcher is a plain (non-protected) frame, so it follows
+    -- the state even when the item-button render below must wait for
+    -- combat to end - Escape keeps working in combat.
+    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
     if self:DeferIfItemsBlocked() then
         return
     end
