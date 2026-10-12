@@ -198,6 +198,8 @@ mainFrame:RegisterEvent("ITEM_LOCK_CHANGED")
 mainFrame:RegisterEvent("PLAYER_MONEY")
 mainFrame:RegisterEvent("LOOT_OPENED")
 mainFrame:RegisterEvent("LOOT_CLOSED")
+mainFrame:RegisterEvent("QUEST_COMPLETE")
+mainFrame:RegisterEvent("QUEST_FINISHED")
 mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 mainFrame:RegisterEvent("MAIL_CLOSED")
 mainFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
@@ -224,6 +226,10 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
         Pockets.Services.LootLog:SetLootWindowOpen(true)
     elseif event == "LOOT_CLOSED" then
         Pockets.Services.LootLog:SetLootWindowOpen(false)
+    elseif event == "QUEST_COMPLETE" then
+        Pockets.Services.LootLog:SetQuestWindowOpen(true)
+    elseif event == "QUEST_FINISHED" then
+        Pockets.Services.LootLog:SetQuestWindowOpen(false)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         -- Late item data: re-render visible Loot Log rows (no-op unless
         -- it's the open view). Must not trigger a bag rescan.

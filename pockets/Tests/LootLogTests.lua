@@ -16,16 +16,17 @@ local TestRunner = Pockets.Tests.TestRunner
 local function WithFreshLog(fn)
     local saved = {
         store = LootLog.store, entries = LootLog.entries, revision = LootLog.revision,
-        lastMoney = LootLog.lastMoney, lootWindowOpen = LootLog.lootWindowOpen, lootClosedAt = LootLog.lootClosedAt, clock = LootLog.clock,
+        lastMoney = LootLog.lastMoney, lootWindowOpen = LootLog.lootWindowOpen, questWindowOpen = LootLog.questWindowOpen, lootClosedAt = LootLog.lootClosedAt, clock = LootLog.clock,
     }
     LootLog.store = { nextId = 1, entries = {} }
     LootLog.entries = LootLog.store.entries
     LootLog.lastMoney = nil
-    LootLog.lootWindowOpen, LootLog.lootClosedAt = false, nil
+    LootLog.lootWindowOpen, LootLog.questWindowOpen, LootLog.lootClosedAt = false, false, nil
     LootLog.clock = function() return 1000 end -- every event in the same second
     local ok, a, b = pcall(fn)
     LootLog.store, LootLog.entries, LootLog.revision = saved.store, saved.entries, saved.revision
     LootLog.lastMoney = saved.lastMoney
+    LootLog.questWindowOpen = saved.questWindowOpen
     LootLog.lootWindowOpen, LootLog.lootClosedAt, LootLog.clock = saved.lootWindowOpen, saved.lootClosedAt, saved.clock
     if not ok then
         error(a, 0)
@@ -195,6 +196,25 @@ TestRunner:Register("LootLog dedup: repeated PLAYER_MONEY with an unchanged bala
         LootLog:ObserveMoney(5100)
         local ok = #LootLog:GetEntries() == 1
         return ok, ok and "OK" or "a repeated PLAYER_MONEY duplicated the money event"
+    end)
+end)
+
+-- Quest rewards ---------------------------------------------------------------
+
+TestRunner:Register("LootLog: quest reward gold and items are logged (quest dialog open, then grace)", function()
+    return WithFreshLog(function()
+        local now = 1000
+        LootLog.clock = function() return now end
+        LootLog:ObserveMoney(1000)
+        LootLog:SetQuestWindowOpen(true)
+        local gold = LootLog:ObserveMoney(3500)
+        LootLog:SetQuestWindowOpen(false)
+        now = 1002
+        local item = LootLog:ObserveAcquisition(2589, 1)
+        now = 1000 + Constants.LOOT_CONTEXT_GRACE_SECONDS + 1
+        local late = LootLog:ObserveAcquisition(2590, 1)
+        local ok = gold ~= nil and gold.copper == 2500 and item ~= nil and late == nil
+        return ok, ok and "OK" or "quest reward gold/item not logged, or logged outside the context"
     end)
 end)
 

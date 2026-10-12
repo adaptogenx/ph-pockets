@@ -17,9 +17,11 @@
     vendor purchase, mail, quest reward or crafting result, so it is only
     accepted while a LOOT CONTEXT is active: the loot window is open, or
     closed within LOOT_CONTEXT_GRACE_SECONDS (bag updates arrive shortly
-    after the window closes, especially with auto-loot). Sales and
-    purchases happen with a merchant window and never a loot window, so
-    they are never logged. CHAT_MSG_LOOT is intentionally NOT used (locale-
+    after the window closes, especially with auto-loot). A QUEST
+    context counts the same way: the quest-reward dialog open
+    (QUEST_COMPLETE .. QUEST_FINISHED, plus the same grace) so quest item
+    and gold rewards are logged. Sales and purchases happen with a
+    merchant window and never one of these, so they are never logged. CHAT_MSG_LOOT is intentionally NOT used (locale-
     dependent text parse and a second signal for the same acquisition).
     Money follows the same rule: PLAYER_MONEY -> ObserveMoney() diffs
     successive GetMoney() values, tracks the balance ALWAYS (so a sale or
@@ -48,6 +50,7 @@ LootLog.entries = LootLog.store.entries -- same table as store.entries
 LootLog.revision = LootLog.revision or 0
 LootLog.lastMoney = nil
 LootLog.lootWindowOpen = false
+LootLog.questWindowOpen = false
 LootLog.lootClosedAt = nil
 LootLog.clock = LootLog.clock or time
 
@@ -117,8 +120,18 @@ function LootLog:SetLootWindowOpen(isOpen)
     end
 end
 
+-- Quest-reward dialog tracking (QUEST_COMPLETE / QUEST_FINISHED). Same
+-- context as the loot window: rewards arrive while it is open or just
+-- after it closes.
+function LootLog:SetQuestWindowOpen(isOpen)
+    self.questWindowOpen = isOpen and true or false
+    if not isOpen then
+        self.lootClosedAt = self.clock()
+    end
+end
+
 function LootLog:IsLootContextActive()
-    if self.lootWindowOpen then
+    if self.lootWindowOpen or self.questWindowOpen then
         return true
     end
     return self.lootClosedAt ~= nil
