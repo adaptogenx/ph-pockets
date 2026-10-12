@@ -81,6 +81,23 @@ function TooltipAPI:OnItemTooltipShow(callback)
             if tooltip ~= GameTooltip and tooltip ~= ItemRefTooltip then
                 return
             end
+            -- Circuit breaker: a runaway re-fire loop trips this instead
+            -- of freezing the client.
+            if TooltipAPI.tripped then
+                return
+            end
+            local now = GetTime()
+            if now - (TooltipAPI.windowStart or 0) > 1 then
+                TooltipAPI.windowStart, TooltipAPI.windowCount = now, 0
+            end
+            TooltipAPI.windowCount = TooltipAPI.windowCount + 1
+            if TooltipAPI.windowCount > 100 then
+                TooltipAPI.tripped = true
+                if Pockets.Debug then
+                    Pockets.Debug:LogError("TooltipAPI breaker tripped: >100 item-tooltip callbacks in 1s; hook disabled")
+                end
+                return
+            end
             local ok, err = pcall(function()
                 local itemID, itemLink = TooltipAPI.ExtractItem(data, isSecret)
                 if itemID then
