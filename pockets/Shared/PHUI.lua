@@ -63,16 +63,16 @@ PHUI.Fonts = {
     HEADER = { "Fonts\\FRIZQT__.TTF", 12, "" },
     GLYPH_OUTLINE = { "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" },
 
-    -- Glance TDD §3.2 role tokens. All use the client's own Friz Quadrata
+    -- Glance role tokens (TDD §3.2 roles, sized to pH's real 12px title scale). All use the client's own Friz Quadrata
     -- face (no bundled font). TITLE is the single token for BOTH the Glance
     -- and the expanded header title so they can never drift apart.
-    TITLE = { "Fonts\\FRIZQT__.TTF", 17, "" },
-    ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 14, "" },
-    ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
-    CAPACITY = { "Fonts\\FRIZQT__.TTF", 17, "" },
-    MONEY = { "Fonts\\FRIZQT__.TTF", 15, "" },
-    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 13, "" },
-    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    TITLE = { "Fonts\\FRIZQT__.TTF", 12, "" },        -- same as pH's header title
+    ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 11, "" },
+    ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 9, "" },
+    CAPACITY = { "Fonts\\FRIZQT__.TTF", 12, "" },
+    MONEY = { "Fonts\\FRIZQT__.TTF", 11, "" },
+    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 9, "" },
 }
 
 --------------------------------------------------

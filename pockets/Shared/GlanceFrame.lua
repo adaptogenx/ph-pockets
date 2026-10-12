@@ -18,32 +18,35 @@ Pockets.UI.GlanceFrame = Pockets.UI.GlanceFrame or {}
 local GlanceFrame = Pockets.UI.GlanceFrame
 local PHUI = Pockets.UI.PHUI
 
+-- Scaled to pH's real HUD (ph/UI_HUD.lua): 266px collapsed width, 12px
+-- title, 20px header buttons. Width/button size come straight from PHUI so
+-- the two HUDs can never drift apart.
 GlanceFrame.TOKENS = {
-    HUD_WIDTH = 560,
-    HUD_HEIGHT = 104,
-    HEADER_HEIGHT = 46,
-    CONTENT_HEIGHT = 50,
-    OUTER_INSET = 4,
-    PAD_X = 12,
-    PAD_Y = 6,
-    SECTION_GAP = 10,
+    HUD_WIDTH = PHUI.PH_HUD_WIDTH,
+    OUTER_INSET = 3,
+    HEADER_HEIGHT = 24,
+    CONTENT_HEIGHT = 26,
+    PAD_X = 8,
+    PAD_Y = 3,
+    SECTION_GAP = 4,
     DIVIDER_WIDTH = 1,
-    ICON_MAIN = 30,
-    ICON_RECENT = 32,
-    ICON_GAP = 4,
-    HEADER_BUTTON = 30,
-    HEADER_BUTTON_GAP = 6,
-    ETA_GAP = 16,
-    ETA_WIDTH = 64,
-    TAB_HEIGHT = 42,
-    TAB_MIN_WIDTH = 116,
-    TAB_MAX_WIDTH = 200,
-    TAB_GAP = 6,
-    TAB_OFFSET_Y = 4,
-    TAB_ICON = 22,
-    TAB_BAR_HEIGHT = 3,
+    ICON_MAIN = 14,
+    ICON_RECENT = 18,
+    ICON_GAP = 2,
+    HEADER_BUTTON = PHUI.Spacing.ICON_BUTTON_SIZE,
+    HEADER_BUTTON_GAP = 4,
+    ETA_GAP = 8,
+    ETA_WIDTH = 62,
+    TAB_HEIGHT = 28,
+    TAB_MIN_WIDTH = 80,
+    TAB_MAX_WIDTH = 130,
+    TAB_GAP = 4,
+    TAB_OFFSET_Y = 3,
+    TAB_ICON = 16,
+    TAB_BAR_HEIGHT = 2,
 }
 local T = GlanceFrame.TOKENS
+T.HUD_HEIGHT = T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
@@ -53,7 +56,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 -- Tab width: content-sized, clamped to [TAB_MIN_WIDTH, TAB_MAX_WIDTH].
 function GlanceFrame.ComputeTabWidth(textWidth)
-    local width = T.PAD_X + T.TAB_ICON + 6 + (textWidth or 0) + T.PAD_X
+    local width = T.PAD_X + T.TAB_ICON + 5 + (textWidth or 0) + T.PAD_X
     return math.max(T.TAB_MIN_WIDTH, math.min(T.TAB_MAX_WIDTH, math.floor(width + 0.5)))
 end
 
@@ -119,16 +122,16 @@ function GlanceFrame:Build(frame, opts)
     header.titleText:SetJustifyH("LEFT")
 
     -- ETA block: fixed width so the header never changes when the value
-    -- comes and goes; value above, small suffix below.
+    -- comes and goes; value then a small muted suffix on one line.
     local eta = CreateFrame("Frame", nil, header)
-    eta:SetSize(T.ETA_WIDTH, T.HEADER_HEIGHT - 12)
+    eta:SetSize(T.ETA_WIDTH, T.HEADER_HEIGHT - 6)
     eta:SetPoint("LEFT", header.titleText, "RIGHT", T.ETA_GAP, 0)
     header.etaBlock = eta
     header.etaValue = PHUI.CreateLabel(eta, "primary", nil, PHUI.Fonts.ETA_VALUE)
-    header.etaValue:SetPoint("TOPLEFT", eta, "TOPLEFT", 0, -1)
+    header.etaValue:SetPoint("LEFT", eta, "LEFT", 0, 0)
     header.etaValue:SetJustifyH("LEFT")
     header.etaSuffix = PHUI.CreateLabel(eta, "muted", nil, PHUI.Fonts.ETA_SUFFIX)
-    header.etaSuffix:SetPoint("TOPLEFT", header.etaValue, "BOTTOMLEFT", 0, -1)
+    header.etaSuffix:SetPoint("LEFT", header.etaValue, "RIGHT", 3, 0)
     header.etaSuffix:SetJustifyH("LEFT")
 
     function header:SetEta(value, suffix)
@@ -175,7 +178,7 @@ function GlanceFrame:Build(frame, opts)
             local divider = content:CreateTexture(nil, "ARTWORK")
             local d = PHUI.Colors.DIVIDER
             divider:SetColorTexture(d[1], d[2], d[3], d[4])
-            divider:SetSize(T.DIVIDER_WIDTH, T.CONTENT_HEIGHT - T.PAD_Y * 2 - 8)
+            divider:SetSize(T.DIVIDER_WIDTH, T.CONTENT_HEIGHT - T.PAD_Y * 2 - 6)
             divider:SetPoint("LEFT", content, "LEFT", x + T.SECTION_GAP, 0)
             x = x + T.SECTION_GAP + T.DIVIDER_WIDTH + T.SECTION_GAP
         end
@@ -204,17 +207,17 @@ function GlanceFrame:CreateTab(frame)
     PHUI.ApplyBackdrop(tab, { backdrop = PHUI.Backdrops.ICON_BUTTON })
 
     tab.icon = PHUI.CreateNativeIcon(tab, T.TAB_ICON, nil)
-    tab.icon:SetPoint("LEFT", tab, "LEFT", T.PAD_X, 2)
+    tab.icon:SetPoint("LEFT", tab, "LEFT", T.PAD_X, 1)
 
     tab.valueText = PHUI.CreateLabel(tab, "primary", nil, PHUI.Fonts.TAB_VALUE)
-    tab.valueText:SetPoint("TOPLEFT", tab.icon, "TOPRIGHT", 6, 2)
+    tab.valueText:SetPoint("TOPLEFT", tab.icon, "TOPRIGHT", 5, 3)
     tab.valueText:SetJustifyH("LEFT")
     tab.labelText = PHUI.CreateLabel(tab, "muted", nil, PHUI.Fonts.TAB_LABEL)
     tab.labelText:SetPoint("TOPLEFT", tab.valueText, "BOTTOMLEFT", 0, -1)
     tab.labelText:SetJustifyH("LEFT")
 
     tab.bar = self:CreateBar(tab, T.TAB_MIN_WIDTH - T.PAD_X * 2, T.TAB_BAR_HEIGHT)
-    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", T.PAD_X, 5)
+    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", T.PAD_X, 4)
 
     -- data: { texture, value, label, fraction, color = {r,g,b} }
     function tab:SetData(data)

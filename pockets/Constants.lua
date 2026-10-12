@@ -191,8 +191,8 @@ Constants.LAYOUT = {
     GLANCE_WIDTH = 148,
     -- Forever Glance (UI/PocketsGlance.lua): reserved widths of the bag and
     -- money groups in the content row; Recent takes the remainder.
-    GLANCE_BAG_GROUP_WIDTH = 138,
-    GLANCE_MONEY_GROUP_WIDTH = 100,
+    GLANCE_BAG_GROUP_WIDTH = 72,
+    GLANCE_MONEY_GROUP_WIDTH = 54,
     -- Glance's ">>" (more Recent) button sits in the strip's slot right
     -- after the last shown Recent icon, same size as a Recent icon, so it
     -- takes one icon slot (4 icons + ">>" at GLANCE_WIDTH) instead of

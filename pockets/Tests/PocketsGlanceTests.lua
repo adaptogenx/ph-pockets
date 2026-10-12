@@ -33,15 +33,15 @@ local function CollectTexts(frame, out)
     return out
 end
 
-TestRunner:Register("Glance: HUD is 560 x 104 from the shared tokens", function()
+TestRunner:Register("Glance: HUD width equals pH's HUD width; height comes from the shared tokens", function()
     Reset()
     local w, h = Shell.root:GetSize()
-    local ok = w == T.HUD_WIDTH and h == T.HUD_HEIGHT and T.HUD_WIDTH == 560 and T.HUD_HEIGHT == 104
+    local ok = w == T.HUD_WIDTH and h == T.HUD_HEIGHT and T.HUD_WIDTH == Pockets.UI.PHUI.PH_HUD_WIDTH
         and T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT == T.HUD_HEIGHT
     return ok, ok and "OK" or string.format("got %sx%s", tostring(w), tostring(h))
 end)
 
-TestRunner:Register("Glance: header buttons are Search, Log, Expand (+), 30px, right-aligned", function()
+TestRunner:Register("Glance: header buttons are Search, Log, Expand (+), header-button size, right-aligned", function()
     Reset()
     local header = Shell.frame.glance.header
     local icons = header.icons
@@ -62,7 +62,7 @@ TestRunner:Register("Glance: no 'Recent' label and no '>>' button", function()
     return ok, ok and "OK" or "found a Recent label or a >> button"
 end)
 
-TestRunner:Register("Glance: five Recent slots at 32px with 4px gaps", function()
+TestRunner:Register("Glance: five Recent slots from the shared tokens", function()
     local strip = Shell.frame.glance.recentStrip
     local slots = math.floor((strip._width + strip._gap) / (strip._iconSize + strip._gap))
     local ok = slots == 5 and strip._iconSize == T.ICON_RECENT and strip._gap == T.ICON_GAP
@@ -105,10 +105,10 @@ TestRunner:Register("Glance: fill fraction clamps to 0..1", function()
     return ok, ok and "OK" or "bad clamp"
 end)
 
-TestRunner:Register("Glance: tab width is content-sized within [116, 200]", function()
+TestRunner:Register("Glance: tab width is content-sized within the min/max tokens", function()
     local W = GlanceFrame.ComputeTabWidth
-    local ok = W(0) == T.TAB_MIN_WIDTH and W(40) == T.TAB_MIN_WIDTH and W(1000) == T.TAB_MAX_WIDTH
-        and W(100) > T.TAB_MIN_WIDTH and W(100) < T.TAB_MAX_WIDTH
+    local ok = W(0) == T.TAB_MIN_WIDTH and W(1000) == T.TAB_MAX_WIDTH
+        and W(70) > T.TAB_MIN_WIDTH and W(70) < T.TAB_MAX_WIDTH
     return ok, ok and "OK" or "bad ComputeTabWidth"
 end)
 
