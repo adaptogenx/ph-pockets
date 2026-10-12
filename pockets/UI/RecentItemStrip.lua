@@ -144,6 +144,7 @@ function RecentItemStrip:Create(parent, opts)
             button:SetSize(self._iconSize, self._iconSize)
             NeutralizeSlotChrome(button)
             WirePreviewHooks(button)
+            button.hideCount = opts.hideCount and true or false
             pool:Configure(button, items[i])
             button.previewRecord = items[i]
             -- Tells ItemButtonPool's shared OnEnter to leave this

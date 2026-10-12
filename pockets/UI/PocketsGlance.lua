@@ -137,10 +137,10 @@ function PocketsGlance:Build(glance, handlers)
     local moneySection = chassis:AddSection(L.GLANCE_MONEY_GROUP_WIDTH)
     local gold = CreateFrame("Frame", nil, moneySection)
     gold:SetAllPoints(moneySection)
-    gold.icon = PHUI.CreateNativeIcon(gold, 14, Constants.GOLD_ICON, { insetTexCoord = false })
+    gold.icon = PHUI.CreateNativeIcon(gold, 12, Constants.GOLD_ICON, { insetTexCoord = false })
     gold.icon:SetPoint("LEFT", gold, "LEFT", 0, 0)
     gold.primaryText = PHUI.CreateLabel(gold, "primary", nil, PHUI.Fonts.MONEY)
-    gold.primaryText:SetPoint("LEFT", gold.icon, "RIGHT", 6, 0)
+    gold.primaryText:SetPoint("LEFT", gold.icon, "RIGHT", 4, 0)
     gold.primaryText:SetPoint("RIGHT", gold, "RIGHT", 0, 0)
     gold.primaryText:SetJustifyH("LEFT")
     gold.primaryText:SetWordWrap(false)
@@ -155,6 +155,7 @@ function PocketsGlance:Build(glance, handlers)
         width = stripWidth,
         iconSize = T.ICON_RECENT,
         gap = T.ICON_GAP,
+        hideCount = true, -- icons only; no stack numbers
     })
     glance.recentStrip:SetPoint("RIGHT", recentSection, "RIGHT", 0, 0)
 

@@ -365,6 +365,10 @@ local function SetCount(button, quantity)
         button.Count:SetText(quantity > 1 and tostring(quantity) or "")
         if quantity > 1 then button.Count:Show() else button.Count:Hide() end
     end
+    -- Surfaces that don't want stack numbers (Glance's Recent strip).
+    if button.hideCount and button.Count then
+        button.Count:Hide()
+    end
 end
 
 function ItemButtonPool:Configure(button, record)
