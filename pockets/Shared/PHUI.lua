@@ -63,16 +63,16 @@ PHUI.Fonts = {
     HEADER = { "Fonts\\FRIZQT__.TTF", 12, "" },
     GLYPH_OUTLINE = { "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" },
 
-    -- Glance role tokens (TDD §3.2 roles, sized to pH's real 12px title scale). All use the client's own Friz Quadrata
+    -- Glance role tokens (TDD §3.2 roles, sized to the approved Glance mockup). All use the client's own Friz Quadrata
     -- face (no bundled font). TITLE is the single token for BOTH the Glance
     -- and the expanded header title so they can never drift apart.
-    TITLE = { "Fonts\\FRIZQT__.TTF", 12, "" },        -- same as pH's header title
-    ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 11, "" },
-    ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 9, "" },
-    CAPACITY = { "Fonts\\FRIZQT__.TTF", 12, "" },
-    MONEY = { "Fonts\\FRIZQT__.TTF", 11, "" },
-    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 10, "" },
-    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 9, "" },
+    TITLE = { "Fonts\\FRIZQT__.TTF", 16, "" },
+    ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 13, "" },
+    ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    CAPACITY = { "Fonts\\FRIZQT__.TTF", 13, "" },
+    MONEY = { "Fonts\\FRIZQT__.TTF", 13, "" },
+    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 12, "" },
+    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 10, "" },
 }
 
 --------------------------------------------------
@@ -240,6 +240,10 @@ PHUI.NATIVE_CLOSE_BUTTON_SIZE = 32
 -- (Shell's expanded Search/Menu/Category/All) should use this exact
 -- value, not an independently-chosen one.
 PHUI.PH_HUD_WIDTH = 266
+
+-- pH's expanded HUD width (ph/UI_HUD.lua FRAME_WIDTH_EXPANDED = 340): the
+-- width Glance shares so the two HUDs stack flush.
+PHUI.PH_HUD_WIDTH_EXPANDED = 340
 
 -- WoW Forever's UIPanelCloseButton art renders visibly larger than
 -- Classic's at the same size (user report: X too big), so it gets a

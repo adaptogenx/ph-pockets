@@ -3,12 +3,12 @@
 Implements `Pockets_Forever_Glance_TDD.md`. Pockets only; pH untouched.
 
 ## What changed
-- Glance is a fixed 266 x 56 horizontal HUD (pH's real HUD width) built on a reusable chassis
+- Glance is a fixed 340 x 64 horizontal HUD (pH's real expanded HUD width) built on a reusable chassis
   (`Shared/GlanceFrame.lua`) composed in `UI/PocketsGlance.lua`.
 - Header: `pockets` | main-bag ETA (`18m` / `to full`, `—` when unknown) |
   Search, Log (scroll), Expand (+).
 - Body: bag icon + `used / total` + `>` arrow + fill bar (one click target,
-  opens All Items) | money | five Recent icons (18px, no label, no `>>`).
+  opens All Items) | money | five Recent icons (20px, no label, no `>>`).
 - Specialized-bag tabs dock 4px under the HUD (left edge + 12): Ammo (only
   with an ammo bag equipped), Reagents, and profession bags. Main capacity,
   fill bar and ETA now exclude all specialized bags.
@@ -29,9 +29,11 @@ Implements `Pockets_Forever_Glance_TDD.md`. Pockets only; pH untouched.
 - Dedicated reagent slot is always labelled `Reagents`.
 
 ## Deviations / notes
-- The TDD's 560px/17px-font numbers did not match pH's real HUD (266px wide,
-  12px title, 20px buttons, 18px tiles - `ph/UI_HUD.lua`). Everything is
-  scaled to pH's real scale; width and button size are read from PHUI.
+- The TDD's 560px/17px-font numbers did not match pH's real HUD
+  (`ph/UI_HUD.lua`: 266 collapsed / 340 expanded, 20px buttons). Spacing
+  follows the approved mockup (12px/4px padding, 20px icons) at 340px, the
+  narrowest pH width that fits five Recent icons with that padding. Width
+  and button size are read from PHUI. Section gap is 8px (mockup: 12) to fit.
 - The `›` chevron is a Blizzard arrow texture (title font glyph coverage is
   unreliable on this client).
 - Recent icons fill left to right inside a right-anchored 176px strip.

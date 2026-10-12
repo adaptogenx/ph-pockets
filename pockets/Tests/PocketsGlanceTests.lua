@@ -33,10 +33,10 @@ local function CollectTexts(frame, out)
     return out
 end
 
-TestRunner:Register("Glance: HUD width equals pH's HUD width; height comes from the shared tokens", function()
+TestRunner:Register("Glance: HUD width equals pH's expanded HUD width; height comes from the shared tokens", function()
     Reset()
     local w, h = Shell.root:GetSize()
-    local ok = w == T.HUD_WIDTH and h == T.HUD_HEIGHT and T.HUD_WIDTH == Pockets.UI.PHUI.PH_HUD_WIDTH
+    local ok = w == T.HUD_WIDTH and h == T.HUD_HEIGHT and T.HUD_WIDTH == Pockets.UI.PHUI.PH_HUD_WIDTH_EXPANDED
         and T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT == T.HUD_HEIGHT
     return ok, ok and "OK" or string.format("got %sx%s", tostring(w), tostring(h))
 end)
