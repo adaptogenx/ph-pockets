@@ -214,8 +214,17 @@ RegisterEventSafe("MAIL_CLOSED")
 RegisterEventSafe("AUCTION_HOUSE_CLOSED")
 RegisterEventSafe("PLAYER_REGEN_DISABLED")
 RegisterEventSafe("PLAYER_REGEN_ENABLED")
+RegisterEventSafe("ADDON_ACTION_BLOCKED")
+RegisterEventSafe("ADDON_ACTION_FORBIDDEN")
 
-mainFrame:SetScript("OnEvent", function(_, event, addonName)
+mainFrame:SetScript("OnEvent", function(_, event, addonName, blockedFunc)
+    if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
+        -- Names the protected call that was refused (only ours).
+        if addonName == ADDON_NAME and Pockets.Debug then
+            Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc))
+        end
+        return
+    end
     if event == "ADDON_LOADED" then
         if addonName == ADDON_NAME then
             InitializeAddon()
