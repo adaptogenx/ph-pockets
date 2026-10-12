@@ -71,8 +71,8 @@ PHUI.Fonts = {
     ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
     CAPACITY = { "Fonts\\FRIZQT__.TTF", 13, "" },
     MONEY = { "Fonts\\FRIZQT__.TTF", 11, "" },
-    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 11, "" },
-    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 9, "" },
+    TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 8, "" },
 }
 
 --------------------------------------------------

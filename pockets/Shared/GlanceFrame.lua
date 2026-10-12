@@ -38,13 +38,13 @@ GlanceFrame.TOKENS = {
     HEADER_BUTTON_GAP = 6,
     ETA_GAP = 14,
     ETA_WIDTH = 56,
-    TAB_HEIGHT = 22,
-    TAB_MIN_WIDTH = 64,
-    TAB_MAX_WIDTH = 130,
+    TAB_HEIGHT = 28,
+    TAB_MIN_WIDTH = 84,
+    TAB_MAX_WIDTH = 140,
     TAB_GAP = 6,
     TAB_OFFSET_Y = 6,
-    TAB_ICON = 14,
-    TAB_BAR_HEIGHT = 2,
+    TAB_ICON = 16,
+    TAB_BAR_HEIGHT = 3,
 }
 local T = GlanceFrame.TOKENS
 T.HUD_HEIGHT = T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT
@@ -57,7 +57,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 -- Tab width: content-sized, clamped to [TAB_MIN_WIDTH, TAB_MAX_WIDTH].
 function GlanceFrame.ComputeTabWidth(textWidth)
-    local width = 8 + T.TAB_ICON + 5 + (textWidth or 0) + 8
+    local width = T.PAD_X + T.TAB_ICON + 6 + (textWidth or 0) + T.PAD_X
     return math.max(T.TAB_MIN_WIDTH, math.min(T.TAB_MAX_WIDTH, math.floor(width + 0.5)))
 end
 
@@ -203,24 +203,23 @@ end
 -- Creates one reusable tab frame (hidden). Parent is the HUD frame so the
 -- tab's anchor follows it; it extends below the HUD's own rect.
 function GlanceFrame:CreateTab(frame)
-    local PAD = 8 -- tab-internal padding (tabs are smaller than the HUD)
     local tab = CreateFrame("Button", nil, frame, "BackdropTemplate")
     tab:SetSize(T.TAB_MIN_WIDTH, T.TAB_HEIGHT)
     PHUI.ApplyBackdrop(tab, { backdrop = PHUI.Backdrops.ICON_BUTTON })
 
     tab.icon = PHUI.CreateNativeIcon(tab, T.TAB_ICON, nil)
-    tab.icon:SetPoint("LEFT", tab, "LEFT", PAD, 1)
+    tab.icon:SetPoint("LEFT", tab, "LEFT", T.PAD_X, 1)
 
-    -- One line: "<used / total>  <label>", fill bar along the bottom edge.
+    -- Value above, small label below; fill bar along the bottom edge.
     tab.valueText = PHUI.CreateLabel(tab, "primary", nil, PHUI.Fonts.TAB_VALUE)
-    tab.valueText:SetPoint("LEFT", tab.icon, "RIGHT", 5, 1)
+    tab.valueText:SetPoint("TOPLEFT", tab.icon, "TOPRIGHT", 6, 4)
     tab.valueText:SetJustifyH("LEFT")
     tab.labelText = PHUI.CreateLabel(tab, "muted", nil, PHUI.Fonts.TAB_LABEL)
-    tab.labelText:SetPoint("LEFT", tab.valueText, "RIGHT", 5, 0)
+    tab.labelText:SetPoint("TOPLEFT", tab.valueText, "BOTTOMLEFT", 0, 0)
     tab.labelText:SetJustifyH("LEFT")
 
-    tab.bar = self:CreateBar(tab, T.TAB_MIN_WIDTH - PAD * 2, T.TAB_BAR_HEIGHT)
-    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", PAD, 3)
+    tab.bar = self:CreateBar(tab, T.TAB_MIN_WIDTH - T.PAD_X * 2, T.TAB_BAR_HEIGHT)
+    tab.bar:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", T.PAD_X, 2)
 
     -- data: { texture, value, label, fraction, color = {r,g,b} }
     function tab:SetData(data)
@@ -229,10 +228,10 @@ function GlanceFrame:CreateTab(frame)
         end
         self.valueText:SetText(data.value or "")
         self.labelText:SetText(data.label or "")
-        local textWidth = (self.valueText:GetStringWidth() or 0) + 5 + (self.labelText:GetStringWidth() or 0)
+        local textWidth = math.max(self.valueText:GetStringWidth() or 0, self.labelText:GetStringWidth() or 0)
         local width = GlanceFrame.ComputeTabWidth(textWidth)
         self:SetWidth(width)
-        local barWidth = width - PAD * 2
+        local barWidth = width - T.PAD_X * 2
         self.bar.barWidth = barWidth
         self.bar:SetWidth(barWidth)
         self.bar:SetFraction(data.fraction)
