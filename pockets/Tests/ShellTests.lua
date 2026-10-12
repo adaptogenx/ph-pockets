@@ -2271,7 +2271,7 @@ Pockets.Tests.TestRunner:Register("Shell: collapsing a Full Inventory category u
             end
         end
         ok = collapsedID ~= nil and header.collapsed == true
-            and header.chevron:GetText() == "\226\150\184" -- "▸" (collapsed)
+            and Pockets.Tests.TextureEquals(header.chevron:GetTexture(), Pockets.UI.PHUI.Icons.PLUS) -- collapsed
         -- Cleanup: never leave test-induced collapse state behind.
         if collapsedID then
             Pockets.CharDB.collapsedCategories[collapsedID] = nil
@@ -2279,7 +2279,7 @@ Pockets.Tests.TestRunner:Register("Shell: collapsing a Full Inventory category u
         Shell:RenderAll("")
     end
     ResetToGlance()
-    return ok, ok and "OK" or "expected clicking a header to collapse it (chevron -> '\226\150\184', persisted in CharDB.collapsedCategories)"
+    return ok, ok and "OK" or "expected clicking a header to collapse it (chevron -> plus texture, persisted in CharDB.collapsedCategories)"
 end)
 
 Pockets.Tests.TestRunner:Register("Shell: Full Inventory item buttons are all identical dimensions (ITEM_BUTTON_SIZE)", function()
