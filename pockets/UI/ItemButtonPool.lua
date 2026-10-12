@@ -99,14 +99,14 @@ function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     if not self.interactive then
         return
     end
-    if IsModifiedClick and IsModifiedClick("SPLITSTACK") and OpenStackSplitFrame then
+    if IsModifiedClick and IsModifiedClick("SPLITSTACK") and BagAPI:CanSplit() then
         local bagID, slotID, quantity = ResolveInteractionStack(self)
         if bagID and quantity and quantity > 1 then
             -- Remember exactly which physical stack the split UI was
             -- opened for (its quantity is the max), re-validated again
             -- when the amount is confirmed (M2 §22-§23).
             self.splitTarget = { bagID = bagID, slotID = slotID, itemID = self.itemID }
-            OpenStackSplitFrame(quantity, self, "BOTTOMLEFT", "TOPLEFT")
+            BagAPI:OpenSplitFrame(quantity, self, "BOTTOMLEFT", "TOPLEFT")
         end
         return
     end

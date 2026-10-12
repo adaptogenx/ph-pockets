@@ -93,6 +93,7 @@ globals = {
     "SplitContainerItem",
     "UseContainerItem",
     "OpenStackSplitFrame",
+    "StackSplitFrame",
     "HandleModifiedItemClick",
     "IsModifiedClick",
     "GetInventorySlotInfo",

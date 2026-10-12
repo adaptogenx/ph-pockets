@@ -356,6 +356,26 @@ function BagAPI:SplitStack(bagID, slotIndex, amount)
     end
 end
 
+function BagAPI:CanSplit()
+    return OpenStackSplitFrame ~= nil or (StackSplitFrame ~= nil and StackSplitFrame.OpenStackSplitFrame ~= nil)
+end
+
+-- Opens Blizzard's stack-split dialog for `owner` (which must implement
+-- :SplitStack(amount)). The bare OpenStackSplitFrame global is gone on
+-- modern clients (Forever); the dialog is a method on StackSplitFrame.
+-- Returns false when no split dialog is available.
+function BagAPI:OpenSplitFrame(maxQuantity, owner, anchor, anchorTo)
+    if OpenStackSplitFrame then
+        OpenStackSplitFrame(maxQuantity, owner, anchor, anchorTo)
+        return true
+    end
+    if StackSplitFrame and StackSplitFrame.OpenStackSplitFrame then
+        StackSplitFrame:OpenStackSplitFrame(maxQuantity, owner, anchor, anchorTo)
+        return true
+    end
+    return false
+end
+
 -- Shift-click/ctrl-click/etc: delegates to Blizzard's own modified-click
 -- handler (chat link, delete-confirm, etc.) rather than reimplementing it.
 function BagAPI:HandleModifiedItemClick(itemLink)
