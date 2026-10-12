@@ -633,17 +633,24 @@ function Shell:Initialize()
     -- a search query instead of just typing. Both search EditBoxes handle
     -- their own Escape via OnEscapePressed, so this frame has nothing left
     -- to do while either of them is focused.
+    --
+    -- The bail-out is limited to Pockets' OWN search boxes. Any other
+    -- focus value (or a client where the focus query is unavailable/odd)
+    -- must still propagate, or Enter/typing never reaches chat and
+    -- keybindings while an expanded Pockets view is open (Forever bug).
+    -- Propagation is enabled FIRST so an error below can never leave the
+    -- key swallowed.
     frame:SetScript("OnKeyDown", function(self, key)
-        if GetCurrentKeyBoardFocus() then
+        local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+        if focus and (focus == self.shell.header.searchBox or focus == self.shell.searchPanel.editBox) then
             return
         end
+        self:SetPropagateKeyboardInput(true)
         if key == "ESCAPE" then
             local ok = pcall(Shell.HandleEscape, Shell)
-            if not ok then
-                self:SetPropagateKeyboardInput(true)
+            if ok then
+                self:SetPropagateKeyboardInput(false)
             end
-        else
-            self:SetPropagateKeyboardInput(true)
         end
     end)
 
