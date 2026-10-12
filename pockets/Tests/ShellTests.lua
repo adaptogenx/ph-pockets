@@ -140,8 +140,8 @@ Pockets.Tests.TestRunner:Register("Shell: Shift-B (ToggleAllItems) jumps directl
     Shell:ToggleAllItems()
     local fromMenu = Shell:GetState() == Shell.STATE.ALL
 
-    Shell:ToggleAllItems() -- toggling again from ALL goes back to Menu
-    local toggleBack = Shell:GetState() == Shell.STATE.MENU
+    Shell:ToggleAllItems() -- toggling again from ALL closes to Glance
+    local toggleBack = Shell:GetState() == Shell.STATE.GLANCE
 
     ResetToGlance()
     local ok = fromGlance and fromMenu and toggleBack

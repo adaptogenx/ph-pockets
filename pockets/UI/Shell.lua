@@ -2032,13 +2032,13 @@ function Shell:Toggle()
 end
 
 -- Shift-B / the old "expand" action jump directly to All Items (§4),
--- toggling back to Menu if All Items is already open.
+-- closing to Glance if All Items is already open.
 function Shell:ToggleAllItems()
     -- In combat there is no re-layout to step back to Menu: toggling closes.
     if self:IsCombatBlocked() and self.state ~= self.STATE.GLANCE then
         self:SetState(self.STATE.GLANCE)
     elseif self.state == self.STATE.ALL then
-        self:SetState(self.STATE.MENU)
+        self:SetState(self.STATE.GLANCE)
     else
         self:SetState(self.STATE.ALL)
     end
