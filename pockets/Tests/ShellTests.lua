@@ -852,6 +852,8 @@ Pockets.Tests.TestRunner:Register("ItemPreview: Show re-anchors an already-visib
     -- ItemPreview:Show only cares whether GameTooltip:IsShown(), not
     -- what it's currently displaying.
     GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+    -- Forever hides an empty tooltip on Show(); give it content.
+    GameTooltip:SetText("Pockets test")
     GameTooltip:Show()
 
     Pockets.UI.ItemPreview:Show({ texture = 1, quality = 1 })
