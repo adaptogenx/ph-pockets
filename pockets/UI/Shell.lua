@@ -617,42 +617,21 @@ function Shell:Initialize()
     end)
 
     -- Escape dismisses straight to Glance (HandleEscape), never stepping
-    -- backward through the hierarchy. Keyboard capture is only enabled
-    -- outside GLANCE (see Render) so Escape never fights other UI while
-    -- collapsed, and any other key just propagates through untouched. Not
-    -- calling SetPropagateKeyboardInput(true) for ESCAPE consumes the key
-    -- so it never also opens the WoW Game Menu.
-    --
-    -- Bails out completely whenever an EditBox currently holds keyboard
-    -- focus (Quick Search's or All Items' own search field) - EnableKeyboard
-    -- delivers OnKeyDown to this frame for EVERY keypress regardless of
-    -- focus (that's a separate mechanism from an EditBox's own text
-    -- capture), and calling SetPropagateKeyboardInput(true) here for a
-    -- plain letter used to re-dispatch it straight into the action-bar
-    -- keybinding system - firing spells/items while the player was typing
-    -- a search query instead of just typing. Both search EditBoxes handle
-    -- their own Escape via OnEscapePressed, so this frame has nothing left
-    -- to do while either of them is focused.
-    --
-    -- The bail-out is limited to Pockets' OWN search boxes. Any other
-    -- focus value (or a client where the focus query is unavailable/odd)
-    -- must still propagate, or Enter/typing never reaches chat and
-    -- keybindings while an expanded Pockets view is open (Forever bug).
-    -- Propagation is enabled FIRST so an error below can never leave the
-    -- key swallowed.
-    frame:SetScript("OnKeyDown", function(self, key)
-        local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
-        if focus and (focus == self.shell.header.searchBox or focus == self.shell.searchPanel.editBox) then
-            return
-        end
-        self:SetPropagateKeyboardInput(true)
-        if key == "ESCAPE" then
-            local ok = pcall(Shell.HandleEscape, Shell)
-            if ok then
-                self:SetPropagateKeyboardInput(false)
-            end
+    -- backward through the hierarchy. Done with the standard WoW mechanism
+    -- - a hidden frame registered in UISpecialFrames that is only SHOWN
+    -- while an expanded state is open - so Escape closes it (and does not
+    -- also open the Game Menu) and Pockets never captures the keyboard.
+    -- The old approach (EnableKeyboard + SetPropagateKeyboardInput) kept
+    -- Enter/typing from reaching chat on WoW Forever.
+    local catcher = CreateFrame("Frame", "PocketsEscapeCatcher", UIParent)
+    catcher:Hide()
+    catcher:SetScript("OnHide", function(self)
+        if not self.suppress then
+            Shell:HandleEscape()
         end
     end)
+    table.insert(UISpecialFrames, "PocketsEscapeCatcher")
+    Shell.escapeCatcher = catcher
 
     self.frame = frame
     self:BuildGlance()
@@ -773,6 +752,22 @@ end
 -- through Category -> Menu -> Glance the way GoBack/Back does. A no-op
 -- from Glance is handled upstream - keyboard capture is only enabled
 -- outside GLANCE (see Render), so Pockets never even sees this key there.
+-- Shown only while an expanded state is open (see Initialize). Hiding it
+-- programmatically must not count as an Escape press.
+function Shell:SetEscapeCatcherShown(shown)
+    local catcher = self.escapeCatcher
+    if not catcher then
+        return
+    end
+    if shown then
+        catcher:Show()
+    else
+        catcher.suppress = true
+        catcher:Hide()
+        catcher.suppress = false
+    end
+end
+
 function Shell:HandleEscape()
     self:SetState(self.STATE.GLANCE)
 end
@@ -886,7 +881,7 @@ function Shell:Render()
     if state == self.STATE.GLANCE then
         frame.shell:Hide()
         frame.glance:Show()
-        frame:EnableKeyboard(false)
+        self:SetEscapeCatcherShown(false)
         PHUI.ApplyBackdrop(frame, { bgAlpha = L.GLANCE_ALPHA })
         self:RenderGlance()
         return
@@ -894,7 +889,7 @@ function Shell:Render()
 
     frame.glance:Hide()
     frame.shell:Show()
-    frame:EnableKeyboard(true)
+    self:SetEscapeCatcherShown(true)
     PHUI.ApplyBackdrop(frame, { bgAlpha = L.EXPANDED_BODY_ALPHA })
 
     self:ConfigureHeader()

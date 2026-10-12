@@ -1777,7 +1777,7 @@ end)
 
 Pockets.Tests.TestRunner:Register("Shell: Glance does not intercept Escape (keyboard capture disabled)", function()
     ResetToGlance()
-    local ok = not Shell.frame:IsKeyboardEnabled()
+    local ok = not Shell.escapeCatcher:IsShown() and not Shell.frame:IsKeyboardEnabled()
     return ok, ok and "OK" or "expected Glance to leave keyboard capture disabled so Escape is not intercepted"
 end)
 
@@ -1789,14 +1789,14 @@ end)
 -- combat-conditional branch into Render() by accident.
 for _, state in ipairs({ Shell.STATE.MENU, Shell.STATE.ALL, Shell.STATE.SEARCH }) do
     Pockets.Tests.TestRunner:Register(
-        string.format("Shell: %s keeps keyboard capture enabled even while CombatAPI reports combat", tostring(state)),
+        string.format("Shell: %s keeps its Escape catcher shown (no keyboard capture) even while CombatAPI reports combat", tostring(state)),
         function()
             local CombatAPI = Pockets.Adapters.CombatAPI
             local original = CombatAPI.IsInCombat
             CombatAPI.IsInCombat = function() return true end
 
             Shell:SetState(state)
-            local ok = Shell.frame:IsKeyboardEnabled() == true
+            local ok = Shell.escapeCatcher:IsShown() == true
 
             CombatAPI.IsInCombat = original
             ResetToGlance()
@@ -1805,14 +1805,14 @@ for _, state in ipairs({ Shell.STATE.MENU, Shell.STATE.ALL, Shell.STATE.SEARCH }
         end)
 end
 
-Pockets.Tests.TestRunner:Register("Shell: CATEGORY keeps keyboard capture enabled even while CombatAPI reports combat", function()
+Pockets.Tests.TestRunner:Register("Shell: CATEGORY keeps its Escape catcher shown (no keyboard capture) even while CombatAPI reports combat", function()
     local CombatAPI = Pockets.Adapters.CombatAPI
     local original = CombatAPI.IsInCombat
     CombatAPI.IsInCombat = function() return true end
 
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
-    local ok = Shell.frame:IsKeyboardEnabled() == true
+    local ok = Shell.escapeCatcher:IsShown() == true
 
     CombatAPI.IsInCombat = original
     ResetToGlance()
