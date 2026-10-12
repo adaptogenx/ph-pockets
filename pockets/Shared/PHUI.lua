@@ -108,6 +108,14 @@ PHUI.Spacing = {
     -- can't read them directly at load time - see the "Must match"
     -- comments on those constants).
     ICON_BUTTON_SIZE = 20,
+
+    -- Glance mockup design-spec tokens (shared with pH). PADDING above is
+    -- the 12px horizontal padding.
+    PADDING_Y = 4,         -- vertical padding
+    ICON_SPACING = 6,      -- between adjacent icons/buttons
+    SECTION_SPACING = 12,  -- between content groups (divider centered in it)
+    ICON_MAIN = 20,        -- main-row icons (bag, Recent)
+    ICON_TAB = 16,         -- attached-tab icons
 }
 
 --------------------------------------------------

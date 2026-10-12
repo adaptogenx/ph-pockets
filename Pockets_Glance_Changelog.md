@@ -3,7 +3,7 @@
 Implements `Pockets_Forever_Glance_TDD.md`. Pockets only; pH untouched.
 
 ## What changed
-- Glance is a fixed 340 x 64 horizontal HUD (pH's real expanded HUD width) built on a reusable chassis
+- Glance is a fixed 340 x 66 horizontal HUD (pH's real expanded HUD width) built on a reusable chassis
   (`Shared/GlanceFrame.lua`) composed in `UI/PocketsGlance.lua`.
 - Header: `pockets` | main-bag ETA (`18m` / `to full`, `—` when unknown) |
   Search, Log (scroll), Expand (+).
@@ -33,7 +33,7 @@ Implements `Pockets_Forever_Glance_TDD.md`. Pockets only; pH untouched.
   (`ph/UI_HUD.lua`: 266 collapsed / 340 expanded, 20px buttons). Spacing
   follows the approved mockup (12px/4px padding, 20px icons) at 340px, the
   narrowest pH width that fits five Recent icons with that padding. Width
-  and button size are read from PHUI. Section gap is 8px (mockup: 12) to fit.
+  and button size are read from PHUI. Spacing tokens (12/4 padding, 6px icon spacing, 12px section spacing, 20/16px icons) live in `PHUI.Spacing`; the chassis reads them from there.
 - The `›` chevron is a Blizzard arrow texture (title font glyph coverage is
   unreliable on this client).
 - Recent icons fill left to right inside a right-anchored 176px strip.
