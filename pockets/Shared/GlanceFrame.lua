@@ -37,7 +37,7 @@ GlanceFrame.TOKENS = {
     HEADER_BUTTON = PHUI.Spacing.ICON_BUTTON_SIZE,
     HEADER_BUTTON_GAP = 6,
     ETA_GAP = 14,
-    ETA_WIDTH = 56,
+    ETA_WIDTH = 72,
     TAB_HEIGHT = 34,
     TAB_MIN_WIDTH = 84,
     TAB_MAX_WIDTH = 140,
@@ -123,16 +123,16 @@ function GlanceFrame:Build(frame, opts)
     header.titleText:SetJustifyH("LEFT")
 
     -- ETA block: fixed width so the header never changes when the value
-    -- comes and goes; value above, small muted suffix below.
+    -- comes and goes; value then small muted suffix on one line.
     local eta = CreateFrame("Frame", nil, header)
     eta:SetSize(T.ETA_WIDTH, T.HEADER_HEIGHT - 2)
     eta:SetPoint("LEFT", header.titleText, "RIGHT", T.ETA_GAP, 0)
     header.etaBlock = eta
     header.etaValue = PHUI.CreateLabel(eta, "primary", nil, PHUI.Fonts.ETA_VALUE)
-    header.etaValue:SetPoint("TOPLEFT", eta, "TOPLEFT", 0, 0)
+    header.etaValue:SetPoint("LEFT", eta, "LEFT", 0, 0)
     header.etaValue:SetJustifyH("LEFT")
     header.etaSuffix = PHUI.CreateLabel(eta, "muted", nil, PHUI.Fonts.ETA_SUFFIX)
-    header.etaSuffix:SetPoint("TOPLEFT", header.etaValue, "BOTTOMLEFT", 0, 0)
+    header.etaSuffix:SetPoint("BOTTOMLEFT", header.etaValue, "BOTTOMRIGHT", 4, 0)
     header.etaSuffix:SetJustifyH("LEFT")
 
     function header:SetEta(value, suffix)
