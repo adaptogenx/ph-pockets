@@ -117,6 +117,10 @@ function Debug:DumpSecureButtons()
                 tostring(button.secureBagID), tostring(button.secureSlotID), tostring(button.secureItemID),
                 tostring(button.secureBindingValid), tostring(button.IsProtected and button:IsProtected()),
                 tostring(button.GetAttribute and button:GetAttribute("type2"))))
+            print(string.format("     item2=%s useOnKeyDown=%s OnClickIsSecure=%s",
+                tostring(button.GetAttribute and button:GetAttribute("item2")),
+                tostring(button.GetAttribute and button:GetAttribute("useOnKeyDown")),
+                tostring(SecureActionButton_OnClick ~= nil and button:GetScript("OnClick") == SecureActionButton_OnClick)))
         end
     end
     if count == 0 then

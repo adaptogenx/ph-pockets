@@ -260,6 +260,12 @@ local function CreateItemButton(parent)
     end
     local button = CreateFrame("Button", name, bagIndexFrame, template)
     button.usesSecureAttributes = BagAPI:UsesSecureItemAttributes()
+    if button.usesSecureAttributes and button.SetAttribute then
+        -- Secure buttons fire on key-DOWN by default on modern clients
+        -- (ActionButtonUseKeyDown); Pockets registers AnyUp clicks, so
+        -- without this the secure item action never triggers.
+        button:SetAttribute("useOnKeyDown", false)
+    end
     for key, suffix in pairs(REGION_SUFFIXES) do
         if button[key] == nil then
             button[key] = _G[name .. suffix]
