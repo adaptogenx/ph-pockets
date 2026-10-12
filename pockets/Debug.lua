@@ -102,14 +102,21 @@ end
 function Debug:DumpSecureButtons()
     print(COLOR_YELLOW .. "=== Pockets Item Buttons ===" .. COLOR_RESET)
     print(string.format("  CursorHasItem: %s", tostring(CursorHasItem and CursorHasItem())))
+    print(string.format("  templateProtected=%s inCombat=%s dirty=%s",
+        tostring(Pockets.UI.ItemButtonPool.templateProtected),
+        tostring(Pockets.Adapters.CombatAPI:IsInCombat()),
+        tostring(Pockets.UI.ItemButtonPool.dirty)))
     local count = 0
     for _, pool in pairs(Pockets.UI.ItemButtonPool.pools) do
         for _, button in ipairs(pool.active) do
             count = count + 1
             print(string.format(
-                "  #%d bagID=%s slotID=%s interactive=%s resolvedBagID=%s resolvedSlotID=%s",
+                "  #%d bagID=%s slotID=%s interactive=%s resolvedBagID=%s resolvedSlotID=%s secure=%s:%s item=%s valid=%s protected=%s type2=%s",
                 count, tostring(button.bagID), tostring(button.slotID), tostring(button.interactive),
-                tostring(button.bagIndexFrame and button.bagIndexFrame:GetID()), tostring(button:GetID())))
+                tostring(button.bagIndexFrame and button.bagIndexFrame:GetID()), tostring(button:GetID()),
+                tostring(button.secureBagID), tostring(button.secureSlotID), tostring(button.secureItemID),
+                tostring(button.secureBindingValid), tostring(button.IsProtected and button:IsProtected()),
+                tostring(button.GetAttribute and button:GetAttribute("type2"))))
         end
     end
     if count == 0 then

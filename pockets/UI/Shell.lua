@@ -657,6 +657,15 @@ function Shell:Initialize()
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.INVENTORY_CHANGED, function() self:OnDataChanged() end, self)
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.LOOT_LOGGED, function() self:RefreshLootLog() end, self)
 
+    Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, function(payload)
+        if payload and payload.inCombat == false then
+            self:OnCombatEnded()
+        end
+    end, self)
+
+    -- Learn (out of combat) whether item buttons are combat-protected.
+    Pockets.UI.ItemButtonPool:Probe(UIParent)
+
     self.state = self.STATE.GLANCE
     self.context = {}
     self:Render()
@@ -813,6 +822,34 @@ end
 -- Cheap and idempotent - every Render* function below only reads
 -- already-computed domain state (§14), so it's always safe to just call
 -- this again rather than trying to patch up a half-drawn state.
+-- Combat lockdown + protected item buttons: acquiring/showing/hiding/
+-- anchoring them is forbidden, so item-bearing renders wait for
+-- PLAYER_REGEN_ENABLED (M2 §11-§17). Meanwhile the existing buttons stay
+-- visible, counts keep following inventory, and any secure target that
+-- went stale is flagged unavailable (ItemButtonPool:ValidateAll).
+-- Returns true when the caller must not render now.
+function Shell:DeferIfItemsBlocked()
+    local pool = Pockets.UI.ItemButtonPool
+    if not pool:IsStructurallyBlocked() then
+        return false
+    end
+    self.renderDeferred = true
+    pool:ValidateAll()
+    pool:RefreshCounts()
+    return true
+end
+
+-- PLAYER_REGEN_ENABLED: repair secure bindings from current state, then
+-- paint whatever was deferred.
+function Shell:OnCombatEnded()
+    local pool = Pockets.UI.ItemButtonPool
+    local hadDeferred = pool:Reconcile()
+    if self.renderDeferred or hadDeferred then
+        self.renderDeferred = false
+        self:Render()
+    end
+end
+
 function Shell:Render()
     -- Fully deferred while a drag is in progress (§1/§2/§15): WoW's
     -- StartMoving() is live-updating the frame's screen position from the
@@ -823,6 +860,9 @@ function Shell:Render()
     -- still updated by SetState even when deferred; OnDragStop flushes a
     -- fresh Render() once the drag has fully settled.
     if self.isDragging then
+        return
+    end
+    if self:DeferIfItemsBlocked() then
         return
     end
 
@@ -1278,6 +1318,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderSearch()
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     -- GLANCE's own transition just hides the whole `shell` frame (§1/§2 -
     -- see Render) rather than releasing its children, so Menu/Category/
     -- All content from an earlier visit stays :Show()n underneath and
@@ -1482,6 +1525,9 @@ local function BuildFlatSearchResults(query)
 end
 
 function Shell:RenderAll(query)
+    if self:DeferIfItemsBlocked() then
+        return
+    end
     self:ClearBody()
     local shell = self.frame.shell
     local content = shell.content

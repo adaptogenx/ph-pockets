@@ -29,6 +29,11 @@ Pockets.UI.ItemButtonPool = Pockets.UI.ItemButtonPool or {}
 local ItemButtonPool = Pockets.UI.ItemButtonPool
 
 local BagAPI = Pockets.Adapters.BagAPI
+local CombatAPI = Pockets.Adapters.CombatAPI
+
+-- Alpha for a button whose secure target is stale/unavailable (visible,
+-- but visibly not trustworthy) until it is repaired.
+local STALE_ALPHA = 0.4
 local SIZE = Pockets.Constants.LAYOUT.ITEM_BUTTON_SIZE
 
 -- pools[parentFrame] = { free = {}, active = {} }
@@ -97,7 +102,10 @@ function ItemButtonPool.HandleInsecureClick(self, mouseButton)
     if IsModifiedClick and IsModifiedClick("SPLITSTACK") and OpenStackSplitFrame then
         local bagID, slotID, quantity = ResolveInteractionStack(self)
         if bagID and quantity and quantity > 1 then
-            self.bagID, self.slotID = bagID, slotID
+            -- Remember exactly which physical stack the split UI was
+            -- opened for (its quantity is the max), re-validated again
+            -- when the amount is confirmed (M2 §22-§23).
+            self.splitTarget = { bagID = bagID, slotID = slotID, itemID = self.itemID }
             OpenStackSplitFrame(quantity, self, "BOTTOMLEFT", "TOPLEFT")
         end
         return
@@ -141,8 +149,20 @@ local function WireItemButtonScripts(button)
     end)
 
     button.SplitStack = function(self, amount)
-        local bagID, slotID = ResolveInteractionStack(self)
-        if bagID then
+        local InventoryState = Pockets.Services.InventoryState
+        local target = self.splitTarget
+        self.splitTarget = nil
+        local bagID, slotID, quantity
+        if target and InventoryState:IsValidStack(target.bagID, target.slotID, target.itemID) then
+            bagID, slotID = target.bagID, target.slotID
+            local record = InventoryState:GetItem(bagID .. ":" .. slotID)
+            quantity = record and record.quantity
+        else
+            bagID, slotID, quantity = ResolveInteractionStack(self)
+        end
+        -- The chosen amount must fit the physical stack actually being
+        -- split; otherwise no-op rather than split something else.
+        if bagID and quantity and amount and amount > 0 and amount < quantity then
             BagAPI:SplitStack(bagID, slotID, amount)
         end
     end
@@ -255,6 +275,9 @@ local function CreateItemButton(parent)
         button.Count:Hide()
     end
     button.bagIndexFrame = bagIndexFrame
+    if ItemButtonPool.templateProtected == nil then
+        ItemButtonPool.templateProtected = button.IsProtected and button:IsProtected() and true or false
+    end
     button:SetSize(SIZE, SIZE)
     button:RegisterForClicks("AnyUp")
     button:RegisterForDrag("LeftButton")
@@ -269,7 +292,13 @@ function ItemButtonPool:GetPool(parent)
 end
 
 -- Returns a hidden button. Caller must call Configure() then Show() it.
+-- Returns nil when the pool cannot hand out a button safely (combat
+-- lockdown with a protected button template) - callers must stop placing.
 function ItemButtonPool:Acquire(parent)
+    if self:IsStructurallyBlocked() then
+        self.dirty = true
+        return nil
+    end
     local pool = self:GetPool(parent)
     local button = table.remove(pool.free)
     if not button then
@@ -283,13 +312,23 @@ end
 function ItemButtonPool:ReleaseAll(parent)
     local pool = self:GetPool(parent)
     for _, button in ipairs(pool.active) do
-        -- pcall'd defensively so a recycle can never throw out of
-        -- ClearBody regardless of template/combat quirks.
-        pcall(function()
+        if CombatAPI:CanMutateProtected(button) then
             button:Hide()
             button:ClearAllPoints()
-        end)
-        table.insert(pool.free, button)
+            -- A recycled button must never carry the previous item's
+            -- secure target into its next life (M2 §15).
+            self:UnbindSecure(button)
+            table.insert(pool.free, button)
+        else
+            -- Protected in combat: leave the frame untouched, logically
+            -- remove it from active use, finish after PLAYER_REGEN_ENABLED
+            -- (M2 §16). Its target is flagged stale meanwhile.
+            button.secureBindingValid = false
+            button:SetAlpha(STALE_ALPHA)
+            pool.pendingRelease = pool.pendingRelease or {}
+            table.insert(pool.pendingRelease, button)
+            self.dirty = true
+        end
     end
     pool.active = {}
 end
@@ -307,6 +346,14 @@ end
 -- bagIndexFrame:GetID()/button:GetID() - so binding those here just keeps
 -- them in sync with this render's physical location, the same as every
 -- other field on the button.
+local function SetCount(button, quantity)
+    local helperOk = SetItemButtonCount ~= nil and pcall(SetItemButtonCount, button, quantity)
+    if not helperOk and button.Count then
+        button.Count:SetText(quantity > 1 and tostring(quantity) or "")
+        if quantity > 1 then button.Count:Show() else button.Count:Hide() end
+    end
+end
+
 function ItemButtonPool:Configure(button, record)
     local interactive = record.interactive ~= false and record.bagID ~= nil and record.slotID ~= nil
 
@@ -316,12 +363,7 @@ function ItemButtonPool:Configure(button, record)
     -- SetItemButtonCount (not a raw button.Count:SetText()) is what
     -- actually shows/hides the count fontstring - it starts hidden, and
     -- a bare :SetText() alone never makes it visible again.
-    local quantity = record.quantity or 0
-    local helperOk = SetItemButtonCount ~= nil and pcall(SetItemButtonCount, button, quantity)
-    if not helperOk and button.Count then
-        button.Count:SetText(quantity > 1 and tostring(quantity) or "")
-        if quantity > 1 then button.Count:Show() else button.Count:Hide() end
-    end
+    SetCount(button, record.quantity or 0)
     if SetItemButtonDesaturated then
         SetItemButtonDesaturated(button, record.isLocked and true or false)
     end
@@ -360,15 +402,161 @@ function ItemButtonPool:Configure(button, record)
     button.quantity = record.quantity
     button.interactive = interactive
 
-    -- 0/0 when non-interactive so a recycled pool button can never
-    -- resolve to a previous item's slot (same "reject stale location"
-    -- intent as button.bagID/slotID above, just for Blizzard's own
-    -- click resolution instead of Pockets').
-    if interactive then
-        button.bagIndexFrame:SetID(record.bagID)
-        button:SetID(record.slotID)
-    else
-        button.bagIndexFrame:SetID(0)
-        button:SetID(0)
+    self:ConfigureSecure(button, record, interactive)
+end
+
+--------------------------------------------------
+-- Secure state (M2 §9-§17). Blizzard's ContainerFrameItemButtonTemplate
+-- OnClick (right-click use/equip/etc.) resolves its bag/slot from
+-- bagIndexFrame:GetID()/button:GetID() live at click time. Those two IDs
+-- ARE the secure target, tracked here as secureBagID/secureSlotID/
+-- secureItemID and validated against InventoryState. Visual state
+-- (Configure above) is independent of this and always updates.
+--------------------------------------------------
+
+-- Learns whether the template's buttons are protected (combat-locked)
+-- on this client, once, from a throwaway button, so the answer is known
+-- before the first combat. Call out of combat (Shell:Initialize).
+function ItemButtonPool:Probe(parent)
+    if self.templateProtected == nil then
+        local probe = CreateItemButton(parent)
+        probe:Hide()
+        self.probeButton = probe
     end
+    return self.templateProtected
+end
+
+-- True when item buttons cannot be acquired/shown/hidden/anchored right
+-- now: combat lockdown AND a protected template.
+function ItemButtonPool:IsStructurallyBlocked()
+    return CombatAPI:IsInCombat() and self.templateProtected == true
+end
+
+local function BindSecure(button, bagID, slotID, itemID)
+    button.secureBagID, button.secureSlotID, button.secureItemID = bagID, slotID, itemID
+    button.bagIndexFrame:SetID(bagID)
+    button:SetID(slotID)
+    button.bagID, button.slotID = bagID, slotID
+    button.interactive = true
+    button.secureBindingValid = true
+    button.pendingSecure = nil
+    button:SetAlpha(1)
+end
+
+-- Out-of-combat only (callers check). Zeroes the IDs so a recycled/
+-- unavailable button can never resolve to a previous item's slot.
+function ItemButtonPool:UnbindSecure(button)
+    button.secureBagID, button.secureSlotID, button.secureItemID = nil, nil, nil
+    button.bagIndexFrame:SetID(0)
+    button:SetID(0)
+    button.secureBindingValid = false
+    button.pendingSecure = nil
+end
+
+-- True if the secure target still holds the button's item, unlocked.
+function ItemButtonPool:IsSecureTargetValid(button)
+    if button.secureItemID == nil or button.secureItemID ~= button.itemID then
+        return false
+    end
+    return Pockets.Services.InventoryState:IsValidStack(
+        button.secureBagID, button.secureSlotID, button.secureItemID)
+end
+
+function ItemButtonPool:ConfigureSecure(button, record, interactive)
+    if CombatAPI:CanMutateProtected(button) then
+        if interactive then
+            BindSecure(button, record.bagID, record.slotID, record.itemID)
+        else
+            self:UnbindSecure(button)
+            button:SetAlpha(1)
+        end
+        return
+    end
+    -- Combat + protected: do not touch the IDs. Queue the intended
+    -- target (re-resolved from fresh state at Reconcile) and treat the
+    -- current one as unavailable unless it still matches.
+    button.pendingSecure = interactive and { bagID = record.bagID, slotID = record.slotID, itemID = record.itemID } or { clear = true }
+    button.secureBindingValid = interactive and self:IsSecureTargetValid(button) or false
+    button:SetAlpha(button.secureBindingValid and 1 or STALE_ALPHA)
+    if not button.secureBindingValid then
+        self.dirty = true
+    end
+end
+
+-- Re-checks one button's secure target against InventoryState; repairs it
+-- out of combat, otherwise marks it stale and queues the repair.
+function ItemButtonPool:ValidateButton(button)
+    if button.itemID == nil then
+        return
+    end
+    if self:IsSecureTargetValid(button) then
+        button.secureBindingValid = true
+        button.pendingSecure = nil
+        button:SetAlpha(1)
+        return
+    end
+    local target = Pockets.Services.InventoryState:ResolveSmallestStack(button.itemID)
+    if CombatAPI:CanMutateProtected(button) then
+        if target then
+            BindSecure(button, target.bagID, target.slotID, button.itemID)
+        else
+            button.interactive = false
+            self:UnbindSecure(button)
+            button:SetAlpha(STALE_ALPHA)
+        end
+        return
+    end
+    button.secureBindingValid = false
+    button.pendingSecure = target and { bagID = target.bagID, slotID = target.slotID, itemID = button.itemID } or { clear = true }
+    button:SetAlpha(STALE_ALPHA)
+    self.dirty = true
+end
+
+-- Validates every active button (call on inventory changes).
+function ItemButtonPool:ValidateAll()
+    for _, pool in pairs(self.pools) do
+        for _, button in ipairs(pool.active) do
+            self:ValidateButton(button)
+        end
+    end
+end
+
+-- Read-only visual refresh for buttons that cannot be re-rendered in
+-- combat: counts follow InventoryState (count fontstring only - no
+-- protected mutation).
+function ItemButtonPool:RefreshCounts()
+    local InventoryState = Pockets.Services.InventoryState
+    for _, pool in pairs(self.pools) do
+        for _, button in ipairs(pool.active) do
+            if button.itemID then
+                local quantity = InventoryState:GetCarriedQuantity(button.itemID)
+                button.quantity = quantity
+                SetCount(button, quantity)
+            end
+        end
+    end
+end
+
+-- After PLAYER_REGEN_ENABLED: finish deferred releases, then repair every
+-- active button from current state (never from the queued targets, which
+-- may describe items that no longer exist). Returns true if anything was
+-- deferred, so the caller knows a re-render is due.
+function ItemButtonPool:Reconcile()
+    local hadDeferred = self.dirty == true
+    for _, pool in pairs(self.pools) do
+        for _, button in ipairs(pool.pendingRelease or {}) do
+            button:Hide()
+            button:ClearAllPoints()
+            self:UnbindSecure(button)
+            button:SetAlpha(1)
+            table.insert(pool.free, button)
+        end
+        pool.pendingRelease = {}
+        for _, button in ipairs(pool.active) do
+            button.pendingSecure = nil
+            self:ValidateButton(button)
+        end
+    end
+    self.dirty = false
+    return hadDeferred
 end

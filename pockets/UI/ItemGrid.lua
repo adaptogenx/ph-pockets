@@ -28,6 +28,9 @@ function ItemGrid:Render(pool, parent, items, opts)
 
     for _, placement in ipairs(plan.itemPlacements) do
         local button = pool:Acquire(parent)
+        if not button then
+            break -- pool blocked (combat lockdown); re-rendered after combat
+        end
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", parent, "TOPLEFT", opts.x + placement.x, -(opts.y + placement.y))
         pool:Configure(button, items[placement.index])

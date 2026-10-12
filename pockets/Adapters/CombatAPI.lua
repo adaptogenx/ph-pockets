@@ -14,6 +14,20 @@ function CombatAPI:IsInCombat()
     return InCombatLockdown() and true or false
 end
 
+-- True when `frame` may be shown/hidden/anchored/re-IDed right now. In
+-- combat lockdown, protected frames reject those mutations; non-protected
+-- frames are always mutable. Asked of the live frame (IsProtected) rather
+-- than assumed, so the answer follows whatever the client's template is.
+function CombatAPI:CanMutateProtected(frame)
+    if not self:IsInCombat() then
+        return true
+    end
+    if frame and frame.IsProtected then
+        return not frame:IsProtected()
+    end
+    return true
+end
+
 -- Hover-triggered expansion is disabled in combat; clicking is always allowed.
 function CombatAPI:CanHoverExpand()
     return not self:IsInCombat()

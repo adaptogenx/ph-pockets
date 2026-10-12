@@ -139,6 +139,9 @@ function RecentItemStrip:Create(parent, opts)
 
         for i = 1, count do
             local button = pool:Acquire(self.poolAnchor)
+            if not button then
+                return i - 1 -- pool blocked (combat); re-rendered after combat
+            end
             button:SetSize(self._iconSize, self._iconSize)
             NeutralizeSlotChrome(button)
             WirePreviewHooks(button)

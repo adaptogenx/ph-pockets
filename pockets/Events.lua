@@ -227,6 +227,8 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName)
         Pockets.Services.EventBus:Publish(Pockets.Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, { inCombat = true })
     elseif event == "PLAYER_REGEN_ENABLED" then
         Pockets.Services.EventBus:Publish(Pockets.Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, { inCombat = false })
+        -- Bags may have changed during combat; rescan, then bindings reconcile.
+        ScheduleRefresh("regen_enabled")
     elseif BAG_UPDATE_EVENTS[event] ~= nil then
         if BAG_UPDATE_EVENTS[event] then
             ScheduleRefresh(event)
