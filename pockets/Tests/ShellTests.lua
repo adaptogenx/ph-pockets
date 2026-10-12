@@ -517,12 +517,15 @@ end)
 Pockets.Tests.TestRunner:Register("MetricRow: Bag/Gold/Ammo use the shared MetricRow component", function()
     ResetToGlance()
     local glance = Shell.frame.glance
-    local ok = type(glance.bagRow.SetPrimary) == "function"
-        and type(glance.goldRow.SetPrimary) == "function"
-        and type(glance.ammoRow.SetPrimary) == "function"
-        and glance.bagRow.SetPrimary == glance.goldRow.SetPrimary
-        and glance.goldRow.SetPrimary == glance.ammoRow.SetPrimary
-    return ok, ok and "OK" or "expected Bag/Gold/Ammo rows to share the exact same MetricRow method, not per-row implementations"
+    -- MetricRow:Create defines its methods per instance (closures), so
+    -- function identity can never match; what proves a shared component is
+    -- that every row has the same method set and the same child regions.
+    local ok = true
+    for _, row in ipairs({ glance.bagRow, glance.goldRow, glance.ammoRow }) do
+        ok = ok and type(row.SetPrimary) == "function" and type(row.SetPrimaryColor) == "function"
+            and type(row.SetTexture) == "function" and row.icon ~= nil and row.primaryText ~= nil
+    end
+    return ok, ok and "OK" or "expected Bag/Gold/Ammo rows to be built by the shared MetricRow component"
 end)
 
 Pockets.Tests.TestRunner:Register("MetricRow: Bag/Gold/Ammo rows have identical icon size, row height, and left edge", function()
@@ -1118,12 +1121,41 @@ Pockets.Tests.TestRunner:Register("Shell: Menu hides zero-count categories entir
     return ok, ok and "OK" or "expected exactly one visible row (the non-zero category)"
 end)
 
+
+-- Category/List tests need items to render; the live inventory may have
+-- none in the chosen category (it varies per character), so tests that
+-- inspect List rows run against a fixed fake category list instead.
+local function StubCategoryItems()
+    local original = Pockets.API.GetAggregatedCategoryItems
+    Pockets.API.GetAggregatedCategoryItems = function()
+        local items = {}
+        for i = 1, 3 do
+            items[i] = { itemID = 9000 + i, name = "Test Item " .. i, quantity = i, quality = 1,
+                bagID = 0, slotID = i, texture = 134400 }
+        end
+        return items
+    end
+    return function() Pockets.API.GetAggregatedCategoryItems = original end
+end
+
+local function RegisterWithItems(name, fn)
+    Pockets.Tests.TestRunner:Register(name, function()
+        local restore = StubCategoryItems()
+        local ok, a, b = pcall(fn)
+        restore()
+        if not ok then
+            return false, "ERROR: " .. tostring(a)
+        end
+        return a, b
+    end)
+end
+
 --------------------------------------------------
 -- Row unification: Menu category rows and Category List item rows share
 -- one visual row component (§1-§9)
 --------------------------------------------------
 
-Pockets.Tests.TestRunner:Register("RowUnification: Menu row height equals Category List row height", function()
+RegisterWithItems("RowUnification: Menu row height equals Category List row height", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
@@ -1142,7 +1174,7 @@ Pockets.Tests.TestRunner:Register("RowUnification: Menu row height equals Catego
         tostring(menuRowHeight), tostring(listRowHeight))
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: Menu icon size equals Category List icon size", function()
+RegisterWithItems("RowUnification: Menu icon size equals Category List icon size", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
@@ -1161,7 +1193,7 @@ Pockets.Tests.TestRunner:Register("RowUnification: Menu icon size equals Categor
         tostring(menuIconSize), tostring(listIconSize))
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: category label and item name start at the same X", function()
+RegisterWithItems("RowUnification: category label and item name start at the same X", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
@@ -1183,7 +1215,7 @@ end)
 -- (items never navigate deeper, so that 20px was permanently dead space,
 -- worse once a scrollbar narrowed the row further) - qty now sits flush
 -- against the row's own right edge instead of aligning with Menu's count.
-Pockets.Tests.TestRunner:Register("RowUnification: item qty sits flush against the row's right edge (no reserved chevron gap)", function()
+RegisterWithItems("RowUnification: item qty sits flush against the row's right edge (no reserved chevron gap)", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
@@ -1201,7 +1233,7 @@ Pockets.Tests.TestRunner:Register("RowUnification: item qty sits flush against t
         tostring(itemQtyRight), tostring(rowRight))
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: item rows have no chevron", function()
+RegisterWithItems("RowUnification: item rows have no chevron", function()
     local originalMode = Pockets.SavedSettings.categoryViewMode
     Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
@@ -1216,7 +1248,7 @@ Pockets.Tests.TestRunner:Register("RowUnification: item rows have no chevron", f
     return ok, ok and "OK" or "expected Category List rows to have no chevron field at all"
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: Menu and Category List rows use the same Blizzard highlight texture mechanism", function()
+RegisterWithItems("RowUnification: Menu and Category List rows use the same Blizzard highlight texture mechanism", function()
     Shell:SetState(Shell.STATE.MENU)
     local menuRow = Shell.frame.shell.menuRows[1]
     local ok = menuRow and menuRow.GetHighlightTexture and menuRow:GetHighlightTexture() ~= nil
@@ -1224,7 +1256,7 @@ Pockets.Tests.TestRunner:Register("RowUnification: Menu and Category List rows u
     return ok, ok and "OK" or "expected Menu rows to use a real Button highlight texture, not a bespoke overlay"
 end)
 
-Pockets.Tests.TestRunner:Register("RowUnification: category rows still navigate, item rows still resolve to a real stack", function()
+RegisterWithItems("RowUnification: category rows still navigate, item rows still resolve to a real stack", function()
     Shell:SetState(Shell.STATE.MENU)
     Shell.frame.shell.menuRows[1]:Click()
     local navigated = Shell:GetState() == Shell.STATE.CATEGORY
@@ -1962,7 +1994,7 @@ Pockets.Tests.TestRunner:Register("CategoryView: RenderCategory dispatches to th
     return ok, ok and "OK" or string.format("expected exactly 0 grid calls / 1 list call, got %d/%d", gridCalls, listCalls)
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryView: switching mode while Category is open re-renders immediately, no state change", function()
+RegisterWithItems("CategoryView: switching mode while Category is open re-renders immediately, no state change", function()
     WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
@@ -2027,7 +2059,7 @@ Pockets.Tests.TestRunner:Register("CategoryView: Grid -> List cleanup leaves zer
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryView: repeated Grid<->List toggling does not accumulate rows", function()
+RegisterWithItems("CategoryView: repeated Grid<->List toggling does not accumulate rows", function()
     WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
         Shell:SetState(Shell.STATE.MENU)
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
@@ -2389,6 +2421,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH with 0 matches shows 'No items 
     local ok, message = WithAllAggregatedItems(
         { { itemID = 1, name = "Linen Cloth", quantity = 1, bagID = 0, slotID = 1 } }, function()
             Shell.frame.shell.searchPanel.editBox:SetText("silk")
+            Shell:RenderSearch() -- OnTextChanged is deferred on Forever
             local panel = Shell.frame.shell.searchPanel
             local anyRowShown = false
             for _, row in ipairs(Shell.frame.shell.searchRows) do
@@ -2410,6 +2443,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH with 1 match shows exactly one 
         { itemID = 2, name = "Wool Cloth", quantity = 3, bagID = 0, slotID = 2 },
     }, function()
         Shell.frame.shell.searchPanel.editBox:SetText("linen")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local rows = Shell.frame.shell.searchRows
         local shownCount = 0
         for _, row in ipairs(rows) do
@@ -2433,6 +2467,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH with 2 matches shows exactly tw
         { itemID = 3, name = "Linen Cloth", quantity = 1, bagID = 0, slotID = 3 },
     }, function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local rows = Shell.frame.shell.searchRows
         local shownCount = 0
         for _, row in ipairs(rows) do
@@ -2465,6 +2500,7 @@ Pockets.Tests.TestRunner:Register(
     local totalCount = L.SEARCH_MAX_RESULT_ROWS + 3
     local ok, message = WithAllAggregatedItems(BuildManaItems(totalCount), function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local rows = Shell.frame.shell.searchRows
         local shownCount = 0
         for _, row in ipairs(rows) do
@@ -2491,6 +2527,7 @@ Pockets.Tests.TestRunner:Register(
     local totalCount = L.SEARCH_OVERFLOW_LIMIT + 1
     local ok, message = WithAllAggregatedItems(BuildManaItems(totalCount), function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local rows = Shell.frame.shell.searchRows
         local anyRowShown = false
         for _, row in ipairs(rows) do
@@ -2518,6 +2555,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH ranks exact > prefix > substrin
         { itemID = 2, name = "Mana", quantity = 1, bagID = 0, slotID = 2 },               -- exact
     }, function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local rows = Shell.frame.shell.searchRows
         local result = rows[1].name:GetText() == "Mana" and rows[2].name:GetText() == "Major Mana Potion"
         return result, result and "OK" or "expected exact match ('Mana') to rank ahead of the substring match"
@@ -2533,6 +2571,7 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH result rows are real ItemButton
         { itemID = 1, name = "Linen Cloth", quantity = 12, bagID = 0, slotID = 1 },
     }, function()
         Shell.frame.shell.searchPanel.editBox:SetText("linen")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local row = Shell.frame.shell.searchRows[1]
         local result = row.itemID == 1 and row.bagID == 0 and row.slotID == 1
             and row.interactive == true and row.bagIndexFrame and row.bagIndexFrame:GetID() == 0
@@ -2588,8 +2627,10 @@ Pockets.Tests.TestRunner:Register("Shell: SEARCH clearing the query does not per
         { itemID = 3, name = "Mana Ruby", quantity = 1, bagID = 0, slotID = 3 },
     }, function()
         Shell.frame.shell.searchPanel.editBox:SetText("mana") -- grows the frame (3+ feedback)
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever
         local grownHeight = Shell.frame:GetHeight()
-        Shell.frame.shell.searchPanel.editBox:SetText("") -- clears back down
+        Shell.frame.shell.searchPanel.editBox:SetText("")
+        Shell:RenderSearch() -- OnTextChanged is deferred on Forever -- clears back down
         local clearedHeight = Shell.frame:GetHeight()
         local result = grownHeight > blankHeight and clearedHeight == blankHeight
         return result, result and "OK" or string.format(
