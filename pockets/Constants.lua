@@ -218,7 +218,7 @@ Constants.LAYOUT = {
     -- instead - see MAX_VISIBLE_LIST_ROWS), rather than always claiming
     -- the max whether or not the content needs it. The invariant is
     -- position stability, not identical frame height.
-    -- Must match PHUI.PH_HUD_WIDTH (Shared/PHUI.lua) - pH's own real,
+    -- Must match PHUI.PH_HUD_WIDTH_EXPANDED (Shared/PHUI.lua), the same width as Glance so every view is one consistent width. Originally PHUI.PH_HUD_WIDTH - pH's own real,
     -- verified HUD width (ph/UI_HUD.lua:2629/2834, hudFrame:SetWidth(266))
     -- - NOT GLANCE_WIDTH. Glance stays intentionally compact/content-sized
     -- (never meant to clone pH's footprint), but the expanded Shell
@@ -226,7 +226,7 @@ Constants.LAYOUT = {
     -- item grid's column count is computed dynamically from this width
     -- (FlowLayout:PlanFlat) rather than assumed fixed, so this value is
     -- free to change without breaking layout.
-    SHELL_WIDTH = 266,
+    SHELL_WIDTH = 340,
     -- Matches PHUI.Spacing.PANEL_PADDING (Shared/PHUI.lua) - Menu/Category/
     -- All are pH's smaller inner-sub-panel style, not the main HUD frame
     -- (that's Glance, which uses PHUI.Spacing.PADDING - see GLANCE_PADDING).

@@ -202,12 +202,12 @@ end)
 -- width exactly (verified value, not Glance's own intentionally-compact
 -- width - Glance is content-sized on purpose, never meant to clone pH's
 -- footprint).
-Pockets.Tests.TestRunner:Register("Shell: expanded width equals pH's real HUD width (PHUI.PH_HUD_WIDTH)", function()
+Pockets.Tests.TestRunner:Register("Shell: expanded width equals Glance width (PHUI.PH_HUD_WIDTH_EXPANDED)", function()
     local L = Pockets.Constants.LAYOUT
-    local phHudWidth = Pockets.UI.PHUI.PH_HUD_WIDTH
+    local phHudWidth = Pockets.UI.PHUI.PH_HUD_WIDTH_EXPANDED
     local ok = L.SHELL_WIDTH == phHudWidth
     return ok, ok and "OK" or string.format(
-        "expected SHELL_WIDTH (%s) to equal PHUI.PH_HUD_WIDTH (%s)",
+        "expected SHELL_WIDTH (%s) to equal PHUI.PH_HUD_WIDTH_EXPANDED (%s)",
         tostring(L.SHELL_WIDTH), tostring(phHudWidth))
 end)
 
@@ -1503,13 +1503,12 @@ Pockets.Tests.TestRunner:Register("Shell: clicking Category's back button naviga
     return ok, ok and "OK" or "expected MENU after clicking Category's back button"
 end)
 
-Pockets.Tests.TestRunner:Register("Shell: clicking All's back button navigates to Menu", function()
-    Shell:SetState(Shell.STATE.MENU)
+Pockets.Tests.TestRunner:Register("Shell: clicking All's back button navigates to Glance", function()
     Shell:SetState(Shell.STATE.ALL)
     Shell.frame.shell.header.backButton:Click()
-    local ok = Shell:GetState() == Shell.STATE.MENU
+    local ok = Shell:GetState() == Shell.STATE.GLANCE
     ResetToGlance()
-    return ok, ok and "OK" or "expected MENU after clicking All's back button"
+    return ok, ok and "OK" or "expected GLANCE after clicking All's back button"
 end)
 
 --------------------------------------------------

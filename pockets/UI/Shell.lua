@@ -48,13 +48,13 @@ Shell.STATE = {
     LOOT = "LOOT",
 }
 
--- Back (`<`) hierarchy (§4): CATEGORY/ALL -> MENU -> GLANCE, SEARCH ->
+-- Back (`<`) hierarchy (§4): CATEGORY -> MENU -> GLANCE, ALL -> GLANCE, SEARCH ->
 -- GLANCE. Escape does NOT use this map (top-bar/close pass) - Escape/X
 -- dismiss straight to GLANCE from any expanded state; only the Back
 -- button walks it stepwise.
 local ESCAPE_PARENT = {
     [Shell.STATE.CATEGORY] = Shell.STATE.MENU,
-    [Shell.STATE.ALL] = Shell.STATE.MENU,
+    [Shell.STATE.ALL] = Shell.STATE.GLANCE, -- only ever opened from Glance
     [Shell.STATE.MENU] = Shell.STATE.GLANCE,
     [Shell.STATE.SEARCH] = Shell.STATE.GLANCE,
 }
@@ -242,6 +242,7 @@ function Shell:BuildGlance()
         openSearch = function() Shell:SetState(Shell.STATE.SEARCH) end,
         openLog = function() Shell:OpenLootLog() end,
         openAll = function() Shell:SetState(Shell.STATE.ALL) end,
+        openMenu = function() Shell:SetState(Shell.STATE.MENU) end,
     })
 end
 
