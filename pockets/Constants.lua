@@ -312,7 +312,7 @@ Constants.LAYOUT = {
     -- (Menu/Category/All) uses one shared, more opaque body alpha plus a
     -- slightly-more-opaque header/footer chrome band, so nothing hardcodes
     -- its own alpha independently.
-    GLANCE_ALPHA = 0.92,
+    GLANCE_ALPHA = 0.78,
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,
 
