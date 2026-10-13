@@ -36,7 +36,9 @@ end
 TestRunner:Register("Glance: HUD width equals pH's expanded HUD width; height comes from the shared tokens", function()
     Reset()
     local w, h = Shell.root:GetSize()
-    local ok = w == T.HUD_WIDTH and h == T.HUD_HEIGHT and T.HUD_WIDTH == Pockets.UI.PHUI.PH_HUD_WIDTH_EXPANDED
+    -- Native portrait chrome (when the client has it) uses its own height.
+    local expectedH = Shell.root.chrome and T.CHROME_HUD_HEIGHT or T.HUD_HEIGHT
+    local ok = w == T.HUD_WIDTH and h == expectedH and T.HUD_WIDTH == Pockets.UI.PHUI.PH_HUD_WIDTH_EXPANDED
         and T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT == T.HUD_HEIGHT
     return ok, ok and "OK" or string.format("got %sx%s", tostring(w), tostring(h))
 end)
@@ -47,7 +49,7 @@ TestRunner:Register("Glance: header buttons are Search, Log, Expand (+), header-
     local icons = header.icons
     local ok = #icons == 3 and header.iconButton == icons[1] and header.lootButton == icons[2]
         and header.plusButton == icons[3]
-        and icons[1]:GetWidth() == T.HEADER_BUTTON_W and icons[3]:GetPoint() == "RIGHT"
+        and icons[1]:GetWidth() == (Shell.root.chrome and T.CHROME_BUTTON or T.HEADER_BUTTON_W) and icons[3]:GetPoint() == "RIGHT"
     return ok, ok and "OK" or "unexpected header buttons"
 end)
 

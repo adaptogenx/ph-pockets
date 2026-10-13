@@ -59,6 +59,13 @@ Constants.CATEGORY_VIEW_MODE = {
     LIST = "LIST",
 }
 
+-- Persistent HUD presentation (Mini HUD TDD §3). Glance stays the default.
+Constants.HUD_MODE = {
+    GLANCE = "GLANCE",
+    MINI = "MINI",
+    RADIAL = "RADIAL",
+}
+
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
 Constants.CAPACITY_COLOR_THRESHOLDS = {
     YELLOW_AT = 0.70,
@@ -313,6 +320,30 @@ Constants.LAYOUT = {
     -- slightly-more-opaque header/footer chrome band, so nothing hardcodes
     -- its own alpha independently.
     GLANCE_ALPHA = 0.78,
+
+    -- Mini HUD (Mini HUD TDD §2): round portrait + ring + count badge.
+    -- Footprint is exactly portrait + badge minus their overlap.
+    MINI_WIDTH = 52,
+    MINI_HEIGHT = 62,
+    MINI_PORTRAIT_SIZE = 48,
+    MINI_RING_THICKNESS = 4,
+    MINI_BADGE_WIDTH = 50,
+    MINI_BADGE_HEIGHT = 18,
+    MINI_BADGE_OVERLAP = 4,
+
+    -- Radial Glance (Outer Ring TDD §3): eight fixed semantic slots on a
+    -- ring around the Mini center. Slots clockwise from the top:
+    -- 1 gold, 2 ammo, 3-4 specialized bags, 5-8 recent items (newest first).
+    RADIAL_SLOTS = 8,
+    RADIAL_RADIUS = 66, -- one true circle, tightened from the TDD nominal 72 (still clears the Mini badge)
+    RADIAL_NODE_SIZE = 36,
+    RADIAL_NODE_ICON = 25,
+    RADIAL_BADGE_WIDTH = 36,
+    RADIAL_GOLD_BADGE_WIDTH = 44,
+    RADIAL_BADGE_HEIGHT = 13,
+    RADIAL_BADGE_OVERLAP = 3,
+    RADIAL_IDLE_ALPHA = 0.55, -- satellites fade to this unless the HUD is hovered
+    RADIAL_MAX_SHIFT = 24, -- most the ring may slide to stay on screen
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,
 
@@ -396,6 +427,7 @@ Constants.DEFAULT_SETTINGS = {
         locked = false,
     },
     categoryViewMode = Constants.CATEGORY_VIEW_MODE.GRID,
+    hudMode = Constants.HUD_MODE.GLANCE,
     -- Opt-in (v1 stays minimal/opinionated by default - PRD §4 non-goals
     -- warn against a large configuration surface, so new visual extras
     -- default OFF rather than always-on).

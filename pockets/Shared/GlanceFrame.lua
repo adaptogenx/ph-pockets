@@ -48,9 +48,29 @@ GlanceFrame.TOKENS = {
     TAB_OFFSET_Y = -1, -- negative: overlaps the HUD bottom border 1px (reads as attached)
     TAB_ICON = PHUI.Spacing.ICON_TAB,
     TAB_BAR_HEIGHT = 3,
+    -- Native PortraitFrameTemplate chrome, drawn at CHROME_SCALE so the
+    -- ring/bars/portrait shrink together (no seams). Native portrait is
+    -- 62x62 at TOPLEFT -5,+7 (measured on the live Forever
+    -- ProfessionsFrame), so at 0.6 it spans x -3..34, y +4..-33 here.
+    -- The header sits right of it; the content row starts right of it too
+    -- and the portrait overlaps both rows.
+    -- 0.77 * the native 62px portrait = 48px.
+    CHROME_SCALE = 0.77,
+    -- One deliberate content start (frame x) right of the portrait (its
+    -- right edge is ~44): title, bag count and attached tabs share it.
+    CHROME_START_X = 48,
+    CHROME_HEADER_TOP = 0,
+    CHROME_HEADER_HEIGHT = 32,
+    CHROME_CONTENT_HEIGHT = 40,
+    CHROME_BUTTON = 24,
+    CHROME_BUTTON_GAP = 4,
+    CHROME_RIGHT_PAD = 8,
+    CHROME_BOTTOM = 6,
 }
 local T = GlanceFrame.TOKENS
 T.HUD_HEIGHT = T.OUTER_INSET * 2 + T.HEADER_HEIGHT + T.CONTENT_HEIGHT
+-- Native chrome: 32px header, 40px body, bottom border.
+T.CHROME_HUD_HEIGHT = T.CHROME_HEADER_TOP + T.CHROME_HEADER_HEIGHT + T.CHROME_CONTENT_HEIGHT + T.CHROME_BOTTOM
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
@@ -103,13 +123,48 @@ function GlanceFrame:CreateBar(parent, width, height)
 end
 
 --------------------------------------------------
+-- Native chrome (Forever's PortraitFrameTemplate)
+--------------------------------------------------
+
+-- Creates a PortraitFrameTemplate child filling `frame`, showing `portrait`
+-- (a texture path/fileID) in the native ring. Returns nil when the template
+-- doesn't exist on this client (callers keep their plain backdrop). Our own
+-- header replaces the template's title and close button.
+function GlanceFrame:CreateChrome(frame, portrait, alpha)
+    local ok, chrome = pcall(CreateFrame, "Frame", nil, frame, "PortraitFrameTemplate")
+    if not ok or not chrome or not chrome.PortraitContainer then
+        return nil
+    end
+    chrome:SetScale(T.CHROME_SCALE)
+    chrome:SetAllPoints(frame) -- anchors resolve in screen space: still fills the frame
+    chrome:SetFrameLevel(frame:GetFrameLevel())
+    chrome:EnableMouse(false)
+    if chrome.SetPortraitToAsset then
+        chrome:SetPortraitToAsset(portrait)
+    elseif chrome.PortraitContainer.portrait then
+        chrome.PortraitContainer.portrait:SetTexture(portrait)
+    end
+    if chrome.CloseButton then
+        chrome.CloseButton:Hide()
+    end
+    if chrome.SetTitle then
+        chrome:SetTitle("")
+    end
+    if chrome.Bg and alpha then
+        chrome.Bg:SetAlpha(alpha)
+    end
+    return chrome
+end
+
+--------------------------------------------------
 -- Chassis
 --------------------------------------------------
 
 -- Builds the header + content row inside `frame` (an existing, already
 -- sized HUD frame) and returns the chassis table.
--- opts: title (string), buttons (array, left-to-right as they read:
--- { texture, native?, tooltipText, onClick }).
+-- opts: title (string), chrome (bool: native portrait frame - header sits
+-- beside the portrait, content row below it), buttons (array,
+-- left-to-right as they read: { texture, native?, tooltipText, onClick }).
 function GlanceFrame:Build(frame, opts)
     opts = opts or {}
     local chassis = { frame = frame }
@@ -117,12 +172,27 @@ function GlanceFrame:Build(frame, opts)
     local innerWidth = T.HUD_WIDTH - T.OUTER_INSET * 2
 
     local header = CreateFrame("Frame", nil, frame)
-    header:SetSize(innerWidth, T.HEADER_HEIGHT)
-    header:SetPoint("TOPLEFT", frame, "TOPLEFT", T.OUTER_INSET, -T.OUTER_INSET)
+    if opts.chrome then
+        header:SetSize(T.HUD_WIDTH - T.CHROME_START_X, T.CHROME_HEADER_HEIGHT)
+        header:SetPoint("TOPLEFT", frame, "TOPLEFT", T.CHROME_START_X, -T.CHROME_HEADER_TOP)
+        chassis.height = T.CHROME_HUD_HEIGHT
+    else
+        header:SetSize(innerWidth, T.HEADER_HEIGHT)
+        header:SetPoint("TOPLEFT", frame, "TOPLEFT", T.OUTER_INSET, -T.OUTER_INSET)
+        chassis.height = T.HUD_HEIGHT
+    end
     chassis.header = header
+    -- Text/icons sit flush to the header's own edges inside native chrome
+    -- (the frame border already provides the margin).
+    local headerPadX = opts.chrome and 0 or T.PAD_X
+    local rightPad = opts.chrome and T.CHROME_RIGHT_PAD or T.PAD_X
+    local contentHeight = opts.chrome and T.CHROME_CONTENT_HEIGHT or T.CONTENT_HEIGHT
+    local buttonW = opts.chrome and T.CHROME_BUTTON or T.HEADER_BUTTON_W
+    local buttonH = opts.chrome and T.CHROME_BUTTON or T.HEADER_BUTTON_H
+    local buttonGap = opts.chrome and T.CHROME_BUTTON_GAP or T.HEADER_BUTTON_GAP
 
-    header.titleText = PHUI.CreateLabel(header, "primary", opts.title, PHUI.Fonts.TITLE)
-    header.titleText:SetPoint("LEFT", header, "LEFT", T.PAD_X, 0)
+    header.titleText = PHUI.CreateLabel(header, "primary", opts.title, opts.chrome and PHUI.Fonts.TITLE_COMPACT or PHUI.Fonts.TITLE)
+    header.titleText:SetPoint("LEFT", header, "LEFT", headerPadX, 0)
     header.titleText:SetJustifyH("LEFT")
 
     -- ETA block: fixed width so the header never changes when the value
@@ -151,33 +221,37 @@ function GlanceFrame:Build(frame, opts)
         local button
         if spec.native then
             -- Native Blizzard button face (the texture IS the box): square.
-            button = PHUI.CreateNativeIconButton(header, T.HEADER_BUTTON_H, spec.texture, {
+            button = PHUI.CreateNativeIconButton(header, buttonH, spec.texture, {
                 tooltipText = spec.tooltipText, onClick = spec.onClick,
             })
         else
-            button = PHUI.CreateIconButton(header, T.HEADER_BUTTON_H, spec.texture, {
+            button = PHUI.CreateIconButton(header, buttonH, spec.texture, {
                 tooltipText = spec.tooltipText, onClick = spec.onClick,
             })
             -- Wider box with the icon padded inside it (mockup).
-            button:SetSize(T.HEADER_BUTTON_W, T.HEADER_BUTTON_H)
+            button:SetSize(buttonW, buttonH)
             button.icon:ClearAllPoints()
             button.icon:SetSize(T.HEADER_BUTTON_ICON, T.HEADER_BUTTON_ICON)
             button.icon:SetPoint("CENTER", button, "CENTER", 0, 0)
         end
         if previous then
-            button:SetPoint("RIGHT", previous, "LEFT", -T.HEADER_BUTTON_GAP, 0)
+            button:SetPoint("RIGHT", previous, "LEFT", -buttonGap, 0)
         else
-            button:SetPoint("RIGHT", header, "RIGHT", -T.PAD_X, 0)
+            button:SetPoint("RIGHT", header, "RIGHT", -rightPad, 0)
         end
         header.icons[i] = button
         previous = button
     end
 
     local content = CreateFrame("Frame", nil, frame)
-    content:SetSize(innerWidth, T.CONTENT_HEIGHT)
-    content:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+    content:SetSize(innerWidth, contentHeight)
+    if opts.chrome then
+        content:SetPoint("TOPLEFT", frame, "TOPLEFT", T.OUTER_INSET, -(T.CHROME_HEADER_TOP + T.CHROME_HEADER_HEIGHT))
+    else
+        content:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+    end
     chassis.content = content
-    content.nextX = T.PAD_X
+    content.nextX = opts.chrome and (T.CHROME_START_X - T.OUTER_INSET) or T.PAD_X
     content.sections = {}
 
     -- Appends a section of `width` (or, with nil, one filling the rest of
@@ -188,19 +262,21 @@ function GlanceFrame:Build(frame, opts)
             local divider = content:CreateTexture(nil, "ARTWORK")
             local d = PHUI.Colors.DIVIDER
             divider:SetColorTexture(d[1], d[2], d[3], d[4])
-            divider:SetSize(T.DIVIDER_WIDTH, T.CONTENT_HEIGHT - T.PAD_Y * 2)
+            divider:SetSize(T.DIVIDER_WIDTH, contentHeight - T.PAD_Y * 2)
             divider:SetPoint("LEFT", content, "LEFT", x + T.SECTION_GAP, 0)
             x = x + T.SECTION_GAP + T.DIVIDER_WIDTH + T.SECTION_GAP
         end
         local section = CreateFrame("Frame", nil, content)
-        local resolved = width or (innerWidth - T.PAD_X - x)
-        section:SetSize(resolved, T.CONTENT_HEIGHT)
+        local resolved = width or (innerWidth - rightPad - x)
+        section:SetSize(resolved, contentHeight)
         section:SetPoint("LEFT", content, "LEFT", x, 0)
         content.nextX = x + resolved
         table.insert(content.sections, section)
         return section
     end
 
+    -- Where attached tabs start (frame x): the content start.
+    chassis.startX = opts.chrome and T.CHROME_START_X or T.PAD_X
     chassis.tabs = {}
     return chassis
 end
@@ -255,7 +331,7 @@ end
 
 -- Anchors the first `count` tabs left-to-right below the HUD. Tabs never
 -- touch the HUD's own size/anchor.
-function GlanceFrame:LayoutTabs(frame, tabs, count)
+function GlanceFrame:LayoutTabs(frame, tabs, count, startX)
     local previous
     for i, tab in ipairs(tabs) do
         if i <= count then
@@ -263,7 +339,7 @@ function GlanceFrame:LayoutTabs(frame, tabs, count)
             if previous then
                 tab:SetPoint("TOPLEFT", previous, "TOPRIGHT", T.TAB_GAP, 0)
             else
-                tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", T.PAD_X, -T.TAB_OFFSET_Y)
+                tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", startX or T.PAD_X, -T.TAB_OFFSET_Y)
             end
             tab:Show()
             previous = tab

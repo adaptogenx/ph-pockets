@@ -70,12 +70,14 @@ end
 --------------------------------------------------
 
 -- glance: the Frame filling the HUD root. handlers: { openSearch,
--- openLog, openAll }. Returns the glance table's widgets.
-function PocketsGlance:Build(glance, handlers)
+-- openLog, openAll }. `chrome` is true when the HUD root carries the native
+-- portrait frame. Returns the glance table's widgets.
+function PocketsGlance:Build(glance, handlers, chrome)
     local L = Constants.LAYOUT
 
     local chassis = GlanceFrame:Build(glance, {
         title = "pockets",
+        chrome = chrome,
         buttons = {
             {
                 texture = "Interface\\Common\\UI-Searchbox-Icon",
@@ -96,6 +98,7 @@ function PocketsGlance:Build(glance, handlers)
         },
     })
     glance.chassis = chassis
+    glance.hudHeight = chassis.height
     glance.header = chassis.header
     local header = chassis.header
     header.iconButton = header.icons[1]
@@ -109,22 +112,28 @@ function PocketsGlance:Build(glance, handlers)
 
     -- Bag group: icon + count + chevron + fill bar, ONE click target that
     -- opens All Items directly.
-    local bagSection = chassis:AddSection(L.GLANCE_BAG_GROUP_WIDTH)
+    local bagWidth = chrome and (L.GLANCE_BAG_GROUP_WIDTH - T.ICON_MAIN - 6) or L.GLANCE_BAG_GROUP_WIDTH
+    local bagSection = chassis:AddSection(bagWidth)
     local bag = CreateFrame("Button", nil, bagSection)
     bag:SetAllPoints(bagSection)
     bag:RegisterForClicks("AnyUp")
     bag:SetScript("OnClick", function() handlers.openMenu() end)
-    bag.icon = PHUI.CreateNativeIcon(bag, T.ICON_MAIN, Constants.HUD_ICON, { insetTexCoord = false })
-    bag.icon:SetPoint("LEFT", bag, "LEFT", 0, 0)
+    -- With native chrome the bag is the portrait, so no icon here.
+    local iconInset = 0
+    if not chrome then
+        bag.icon = PHUI.CreateNativeIcon(bag, T.ICON_MAIN, Constants.HUD_ICON, { insetTexCoord = false })
+        bag.icon:SetPoint("LEFT", bag, "LEFT", 0, 0)
+        iconInset = T.ICON_MAIN + 6
+    end
     bag.primaryText = PHUI.CreateLabel(bag, "primary", nil, PHUI.Fonts.CAPACITY)
-    bag.primaryText:SetPoint("TOPLEFT", bag, "TOPLEFT", T.ICON_MAIN + 6, -4)
+    bag.primaryText:SetPoint("TOPLEFT", bag, "TOPLEFT", iconInset, -4)
     bag.primaryText:SetJustifyH("LEFT")
     -- Navigation cue (a real Blizzard arrow texture - the title font has
     -- no reliable "›" glyph).
     bag.chevron = PHUI.CreateNativeIcon(bag, 12, PHUI.Icons.NEXT, { insetTexCoord = false })
     bag.chevron:SetPoint("LEFT", bag.primaryText, "RIGHT", 2, 0)
-    bag.bar = GlanceFrame:CreateBar(bag, L.GLANCE_BAG_GROUP_WIDTH - T.ICON_MAIN - 12, 4)
-    bag.bar:SetPoint("BOTTOMLEFT", bag, "BOTTOMLEFT", T.ICON_MAIN + 6, 3)
+    bag.bar = GlanceFrame:CreateBar(bag, bagWidth - iconInset - 6, 2)
+    bag.bar:SetPoint("BOTTOMLEFT", bag, "BOTTOMLEFT", iconInset, 3)
     function bag:SetPrimary(text) self.primaryText:SetText(text) end
     function bag:SetPrimaryColor(r, g, b)
         self.primaryText:SetTextColor(r, g, b)
@@ -213,6 +222,6 @@ function PocketsGlance:Render(glance)
             tab:SetData(models[i])
         end
     end
-    GlanceFrame:LayoutTabs(glance, glance.tabs, #models)
+    GlanceFrame:LayoutTabs(glance, glance.tabs, #models, glance.chassis.startX)
     glance.tabCount = #models
 end

@@ -229,10 +229,17 @@ end
 function Shell:BuildGlance()
     local frame = self.root
     local T = Pockets.UI.GlanceFrame.TOKENS
-    -- Fixed HUD size from the shared chassis tokens; never resized after.
-    frame:SetSize(T.HUD_WIDTH, T.HUD_HEIGHT)
+    -- Native Forever portrait frame (bag icon in the ring) when the client
+    -- has the template; otherwise the plain PHUI backdrop stays.
+    local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA)
+    frame.chrome = chrome
+    if chrome then
+        frame:SetBackdrop(nil)
+    end
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
+    -- Always draw above the template chrome's own child frames.
+    glance:SetFrameLevel(frame:GetFrameLevel() + 10)
     frame.glance = glance
     self.frame.glance = glance
 
@@ -243,7 +250,115 @@ function Shell:BuildGlance()
         openLog = function() Shell:OpenLootLog() end,
         openAll = function() Shell:SetState(Shell.STATE.ALL) end,
         openMenu = function() Shell:SetState(Shell.STATE.MENU) end,
+    }, chrome ~= nil)
+    -- Fixed HUD size from the chassis (depends on chrome); never resized after
+    -- (except by a deliberate Mini/Glance mode switch - ApplyHudMode).
+    frame:SetSize(T.HUD_WIDTH, glance.hudHeight)
+
+    -- Mini HUD: built once, shown instead of Glance when the player picks it.
+    self.mini = Pockets.UI.MiniHUD:Build(frame)
+    self.mini:Hide()
+
+    -- Radial Glance satellites (children of the root; the root keeps the
+    -- Mini footprint so the centre never moves). Dragging a satellite moves
+    -- the HUD through the root's own drag handlers.
+    local function forward(name)
+        return function()
+            local handler = frame:GetScript(name)
+            if handler then
+                handler(frame)
+            end
+        end
+    end
+    self.radial = Pockets.UI.RadialGlance:Build(frame, {
+        openRecent = function()
+            Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Constants.CATEGORY.RECENT })
+        end,
+        openAmmo = function()
+            Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Constants.CATEGORY.AMMO })
+        end,
+        openList = function() Shell:SetState(Shell.STATE.MENU) end,
+        dragStart = forward("OnDragStart"),
+        dragStop = forward("OnDragStop"),
     })
+end
+
+--------------------------------------------------
+-- HUD mode (Mini / Glance) - Mini HUD TDD §3
+--------------------------------------------------
+
+function Shell:GetHudMode()
+    local mode = Pockets.SavedSettings and Pockets.SavedSettings.hudMode
+    local Mode = Constants.HUD_MODE
+    if mode == Mode.MINI or mode == Mode.RADIAL then
+        return mode
+    end
+    return Mode.GLANCE
+end
+
+function Shell:IsMini()
+    return self:GetHudMode() == Constants.HUD_MODE.MINI
+end
+
+function Shell:IsRadial()
+    return self:GetHudMode() == Constants.HUD_MODE.RADIAL
+end
+
+-- Mini and Radial both show the round Mini centre instead of Glance.
+function Shell:UsesMiniCenter()
+    return self:IsMini() or self:IsRadial()
+end
+
+-- Swaps which presentation the root frame shows and resizes it. The root's
+-- TOPLEFT anchor is never touched, so the HUD stays exactly where it was.
+-- Resizes the root: out of combat only.
+function Shell:ApplyHudMode()
+    local root = self.root
+    local T = Pockets.UI.GlanceFrame.TOKENS
+    local mode = self:GetHudMode()
+    if mode ~= Constants.HUD_MODE.GLANCE then
+        root.glance:Hide()
+        if root.chrome then
+            root.chrome:Hide()
+        end
+        root:SetBackdrop(nil)
+        self.mini:Show()
+        root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
+        if mode ~= Constants.HUD_MODE.RADIAL then
+            Pockets.UI.RadialGlance:SetShown(self.radial, false)
+        end
+    else
+        self.mini:Hide()
+        Pockets.UI.RadialGlance:SetShown(self.radial, false)
+        root.glance:Show()
+        if root.chrome then
+            root.chrome:Show()
+        else
+            PHUI.ApplyBackdrop(root, { bgAlpha = L.GLANCE_ALPHA })
+        end
+        root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
+    end
+    self.appliedHudMode = mode
+end
+
+-- Persists and applies a HUD mode. Returns false (and changes nothing) in
+-- combat or for an unknown mode.
+function Shell:SetHudMode(mode)
+    local Mode = Constants.HUD_MODE
+    if mode ~= Mode.MINI and mode ~= Mode.RADIAL and mode ~= Mode.GLANCE then
+        return false
+    end
+    if self:IsCombatBlocked() then
+        return false
+    end
+    Pockets.SavedSettings.hudMode = mode
+    if self.root then
+        self:ApplyHudMode()
+        if self.state == self.STATE.GLANCE and not self.isDragging then
+            self:Render()
+        end
+    end
+    return true
 end
 
 function Shell:BuildShell()
@@ -893,6 +1008,13 @@ function Shell:RenderInCombat()
     self.renderDeferred = true
     pool:ValidateAll()
     pool:RefreshCounts()
+    if self.mini and self:UsesMiniCenter() then
+        -- Plain textures/text only: safe to update in combat.
+        Pockets.UI.MiniHUD:Render(self.mini)
+        if self:IsRadial() then
+            Pockets.UI.RadialGlance:Render(self.radial, false)
+        end
+    end
     self:SyncStateFromVisibility()
 end
 
@@ -1077,7 +1199,9 @@ function Shell:Render()
 
     if state == self.STATE.GLANCE then
         self:SetEscapeCatcherShown(false)
-        PHUI.ApplyBackdrop(self.root, { bgAlpha = L.GLANCE_ALPHA })
+        if self.appliedHudMode ~= self:GetHudMode() then
+            self:ApplyHudMode()
+        end
         self:RenderGlance()
         self:SchedulePrewarm()
         return
@@ -1138,6 +1262,13 @@ end
 --------------------------------------------------
 
 function Shell:RenderGlance()
+    if self:UsesMiniCenter() then
+        Pockets.UI.MiniHUD:Render(self.mini)
+        if self:IsRadial() then
+            Pockets.UI.RadialGlance:Render(self.radial)
+        end
+        return
+    end
     if self:DeferIfItemsBlocked() then
         return
     end

@@ -45,6 +45,7 @@ PHUI.Colors = {
 
     BG_DARK = { 0.082, 0.094, 0.090, 0.92 },     -- #151817 @ 92%
     BG_PARCHMENT = { 0.082, 0.094, 0.090, 0.92 },
+    BADGE_BG = { 0.133, 0.102, 0.078, 0.95 },    -- dark warm charcoal/brown
     BORDER_BRONZE = { 0.596, 0.451, 0.263 },     -- #987343
 
     HOVER = { 0.22, 0.20, 0.17, 0.60 },
@@ -67,9 +68,16 @@ PHUI.Fonts = {
     -- face (no bundled font). TITLE is the single token for BOTH the Glance
     -- and the expanded header title so they can never drift apart.
     TITLE = { "Fonts\\FRIZQT__.TTF", 16, "" },
+    -- Compact title for the native portrait-frame header (Glance chrome).
+    TITLE_COMPACT = { "Fonts\\FRIZQT__.TTF", 14, "" },
     ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 13, "" },
     ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
     CAPACITY = { "Fonts\\FRIZQT__.TTF", 13, "" },
+    -- Count text on the Mini HUD badge.
+    -- Radial satellite badge text / item stack count.
+    NODE_COUNT = { "Fonts\\FRIZQT__.TTF", 10, "" },
+    NODE_STACK = { "Fonts\\FRIZQT__.TTF", 10, "OUTLINE" },
+    MINI_COUNT = { "Fonts\\FRIZQT__.TTF", 12, "" },
     MONEY = { "Fonts\\FRIZQT__.TTF", 11, "" },
     TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 10, "" },
     TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 8, "" },
@@ -129,6 +137,13 @@ PHUI.Spacing = {
 -- throughout pH's UI)
 --------------------------------------------------
 PHUI.Backdrops = {
+    -- Flat badge: solid fill with a 1px outline (no tooltip ornament).
+    BADGE = {
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    },
     PANEL = {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
