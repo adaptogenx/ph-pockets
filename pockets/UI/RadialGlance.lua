@@ -99,6 +99,12 @@ function RadialGlance.BuildModel(gold, specialized, ammoItems)
     return nodes
 end
 
+-- Strip width for n icons: side padding + icons + gaps between them.
+function RadialGlance.StripWidth(n)
+    n = math.max(1, math.min(n, L.RADIAL_STRIP_ICONS))
+    return 2 * L.RADIAL_STRIP_PAD_X + n * L.RADIAL_STRIP_ICON + (n - 1) * L.RADIAL_STRIP_GAP
+end
+
 -- The newest recent items for the strip (newest first, max 5).
 function RadialGlance.BuildRecent(recent)
     local out = {}
@@ -222,6 +228,14 @@ function RadialGlance:Layout(radial)
     local minX, maxX, minY, maxY = -miniHalfW, miniHalfW, -miniHalfH, miniHalfH
     for i, node in ipairs(visible) do
         local x, y = RadialLayout.PositionAt(angles[i], L.RADIAL_RADIUS)
+        -- Left-aligned column: the top satellite's outer edge lines up with
+        -- the Mini's (and the strip's) near edge instead of hovering over
+        -- the Mini's centre.
+        if i == 1 and center == 0 then
+            x = -miniHalfW + node:GetWidth() / 2
+        elseif i == 1 and center == 180 then
+            x = miniHalfW - node:GetWidth() / 2
+        end
         pts[i] = { x = x, y = y }
         minX = math.min(minX, x - node:GetWidth() / 2)
         maxX = math.max(maxX, x + node:GetWidth() / 2)
@@ -255,7 +269,7 @@ function RadialGlance:Layout(radial)
         -- Tucked under the Mini on the side the fan grows away from (like the
         -- mockup: aligned to the Mini's near edge), centred when the fan
         -- faces up/down.
-        local halfStrip = L.RADIAL_STRIP_WIDTH / 2
+        local halfStrip = strip:GetWidth() / 2
         local sdx = 0
         if center == 0 then
             sdx = -miniHalfW + halfStrip
@@ -382,6 +396,10 @@ function RadialGlance:Render(radial, layout)
     end
     for i, btn in ipairs(radial.strip.icons) do
         ConfigureStripIcon(btn, recent[i])
+    end
+    -- Grows/shrinks with the number of icons shown (2 padding + n icons + gaps).
+    if #recent > 0 then
+        radial.strip:SetWidth(RadialGlance.StripWidth(#recent))
     end
     radial.strip:SetShown(#recent > 0)
     if layout ~= false then

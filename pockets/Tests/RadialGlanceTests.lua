@@ -118,8 +118,14 @@ TestRunner:Register("Radial: strip has exact 24px icons with padding between the
         local w, h = strip:GetSize()
         local iw, ih = strip.icons[1]:GetSize()
         local span = L.RADIAL_STRIP_PAD_X * 2 + 5 * L.RADIAL_STRIP_ICON + 4 * L.RADIAL_STRIP_GAP
-        return w == L.RADIAL_STRIP_WIDTH and h == L.RADIAL_STRIP_HEIGHT and iw == 24 and ih == 24
-            and #strip.icons == 5 and span == w and L.RADIAL_STRIP_GAP >= 3 and L.RADIAL_SLOTS == 4
+        local shown = 0
+        for _, icon in ipairs(strip.icons) do
+            if icon:IsShown() then shown = shown + 1 end
+        end
+        local fits = shown == 0 or w == RadialGlance.StripWidth(shown)
+        return fits and h == L.RADIAL_STRIP_HEIGHT and iw == 24 and ih == 24
+            and #strip.icons == 5 and span == L.RADIAL_STRIP_WIDTH and RadialGlance.StripWidth(5) == span
+            and RadialGlance.StripWidth(2) < span and L.RADIAL_STRIP_GAP >= 3 and L.RADIAL_SLOTS == 4
     end)
     return ok, ok and "OK" or "bad strip geometry"
 end)
