@@ -346,14 +346,14 @@ Constants.LAYOUT = {
     RADIAL_GOLD_BADGE_WIDTH = 52,
     RADIAL_BADGE_HEIGHT = 14,
     RADIAL_BADGE_OVERLAP = 6,
-    -- Recent strip right under the radial: 5 exact 24px icons, 4px apart,
-    -- inside a slightly rounded border (6px side / 4px top padding).
+    -- Recent strip right under the radial: 5 exact 24px icons, 6px apart,
+    -- inside a rounded border (8px side padding, 6px top/bottom).
     RADIAL_STRIP_ICONS = 5,
     RADIAL_STRIP_ICON = 24,
-    RADIAL_STRIP_GAP = 4,
-    RADIAL_STRIP_PAD_X = 6,
-    RADIAL_STRIP_WIDTH = 148, -- 5*24 + 4*4 + 2*6
-    RADIAL_STRIP_HEIGHT = 32,
+    RADIAL_STRIP_GAP = 6,
+    RADIAL_STRIP_PAD_X = 8,
+    RADIAL_STRIP_WIDTH = 160, -- 5*24 + 4*6 + 2*8
+    RADIAL_STRIP_HEIGHT = 36,
     RADIAL_STRIP_OFFSET = 4, -- gap below the lowest visible radial element
     RADIAL_MAX_SHIFT = 24, -- most the ring may slide to stay on screen
     EXPANDED_BODY_ALPHA = 0.92,

@@ -141,7 +141,7 @@ function RadialGlance:CreateStrip(root, radial, handlers)
     local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
     strip:SetSize(L.RADIAL_STRIP_WIDTH, L.RADIAL_STRIP_HEIGHT)
     PHUI.ApplyBackdrop(strip, {
-        backdrop = PHUI.Backdrops.ICON_BUTTON, -- slightly rounded
+        backdrop = PHUI.Backdrops.PANEL, -- rounded tooltip-style border
         bgColor = PHUI.Colors.BG_DARK,
         bgAlpha = L.GLANCE_ALPHA,
         borderColor = PHUI.Colors.BORDER_BRONZE,
@@ -160,7 +160,7 @@ function RadialGlance:CreateStrip(root, radial, handlers)
             edgeFile = "Interface\\Buttons\\WHITE8X8",
             edgeSize = 1,
         })
-        btn:SetBackdropColor(0, 0, 0, 0.55)
+        btn:SetBackdropColor(0.16, 0.14, 0.11, 0.95) -- visible slot behind each icon
         btn.icon = btn:CreateTexture(nil, "ARTWORK")
         btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
         btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
@@ -353,7 +353,7 @@ local function ConfigureStripIcon(btn, item)
     if color and item.quality > 1 then
         btn:SetBackdropBorderColor(color.r, color.g, color.b, 1)
     else
-        btn:SetBackdropBorderColor(c[1], c[2], c[3], 0.6)
+        btn:SetBackdropBorderColor(c[1], c[2], c[3], 1)
     end
     btn.onEnter, btn.onLeave = RadialGlance.ItemHover(item)
     btn:Show()
