@@ -1,13 +1,12 @@
 --[[
     UI/RadialGlance.lua - Pockets' Radial Glance: the existing Mini centre
     with a semicircle of metric satellites (gold, ammo, specialized bags)
-    that fans away from the nearest screen edge, plus a compact strip of the
+    on a fixed-step arc (about a quarter circle) that fans away from the nearest screen edge, plus a compact strip of the
     five newest recent items beneath it.
 
     Only available metrics get a satellite; they are spread evenly across the
     arc. The root keeps the Mini footprint, so the Mini never moves.
-    Satellites and strip fade to a low idle alpha and brighten while the HUD
-    is hovered (no layout change). Nothing here uses items - clicks only
+    Nothing here uses items - clicks only
     navigate. Reads domain state only; nodes/strip icons are built once.
 ]]
 
@@ -126,17 +125,12 @@ function RadialGlance:Build(root, handlers)
             badgeOverlap = L.RADIAL_BADGE_OVERLAP,
             onDragStart = handlers.dragStart,
             onDragStop = handlers.dragStop,
-            onHover = function(_, entered)
-                RadialGlance:OnHover(radial, entered)
-            end,
         })
         node.slot = slot
         node:Hide()
         radial.nodes[slot] = node
     end
     radial.strip = RadialGlance:CreateStrip(root, radial, handlers)
-    root:HookScript("OnEnter", function() RadialGlance:OnHover(radial, true) end)
-    root:HookScript("OnLeave", function() RadialGlance:OnHover(radial, false) end)
     return radial
 end
 
@@ -147,7 +141,7 @@ function RadialGlance:CreateStrip(root, radial, handlers)
     local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
     strip:SetSize(L.RADIAL_STRIP_WIDTH, L.RADIAL_STRIP_HEIGHT)
     PHUI.ApplyBackdrop(strip, {
-        backdrop = PHUI.Backdrops.BADGE,
+        backdrop = PHUI.Backdrops.ICON_BUTTON, -- slightly rounded
         bgColor = PHUI.Colors.BG_DARK,
         bgAlpha = L.GLANCE_ALPHA,
         borderColor = PHUI.Colors.BORDER_BRONZE,
@@ -161,7 +155,12 @@ function RadialGlance:CreateStrip(root, radial, handlers)
         btn:SetPoint("LEFT", strip, "LEFT",
             L.RADIAL_STRIP_PAD_X + (i - 1) * (L.RADIAL_STRIP_ICON + L.RADIAL_STRIP_GAP), 0)
         btn:RegisterForClicks("AnyUp")
-        btn:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        btn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        btn:SetBackdropColor(0, 0, 0, 0.55)
         btn.icon = btn:CreateTexture(nil, "ARTWORK")
         btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
         btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
@@ -171,13 +170,11 @@ function RadialGlance:CreateStrip(root, radial, handlers)
         btn.count:SetJustifyH("RIGHT")
         btn:SetScript("OnClick", function() handlers.openRecent() end)
         btn:SetScript("OnEnter", function(self)
-            RadialGlance:OnHover(radial, true)
             if self.onEnter then self.onEnter(self) end
         end)
         btn:SetScript("OnLeave", function(self)
             GameTooltip:Hide()
             if self.onLeave then self.onLeave(self) end
-            RadialGlance:OnHover(radial, false)
         end)
         btn:RegisterForDrag("LeftButton")
         btn:SetScript("OnDragStart", handlers.dragStart)
@@ -220,7 +217,7 @@ function RadialGlance:Layout(radial)
     radial.facing = center
 
     -- Positions relative to the ring centre (y up) and the fan's bounding box.
-    local angles = RadialLayout.ArcAngles(#visible, center, L.RADIAL_ARC_SPAN)
+    local angles = RadialLayout.ArcAngles(#visible, center, L.RADIAL_ARC_STEP)
     local pts = {}
     local minX, maxX, minY, maxY = -miniHalfW, miniHalfW, -miniHalfH, miniHalfH
     for i, node in ipairs(visible) do
@@ -255,12 +252,20 @@ function RadialGlance:Layout(radial)
         if ringY and ringY + stripTop - L.RADIAL_STRIP_HEIGHT < 0 then
             stripTop = highest + L.RADIAL_STRIP_OFFSET + L.RADIAL_STRIP_HEIGHT
         end
+        -- Tucked under the Mini on the side the fan grows away from (like the
+        -- mockup: aligned to the Mini's near edge), centred when the fan
+        -- faces up/down.
+        local halfStrip = L.RADIAL_STRIP_WIDTH / 2
         local sdx = 0
+        if center == 0 then
+            sdx = -miniHalfW + halfStrip
+        elseif center == 180 then
+            sdx = miniHalfW - halfStrip
+        end
         if ringX then
-            local halfStrip = L.RADIAL_STRIP_WIDTH / 2
-            if ringX - halfStrip < 0 then
+            if ringX + sdx - halfStrip < 0 then
                 sdx = halfStrip - ringX
-            elseif ringX + halfStrip > screenW then
+            elseif ringX + sdx + halfStrip > screenW then
                 sdx = screenW - halfStrip - ringX
             end
         end
@@ -379,57 +384,8 @@ function RadialGlance:Render(radial, layout)
         ConfigureStripIcon(btn, recent[i])
     end
     radial.strip:SetShown(#recent > 0)
-    self:ApplyAlpha(radial)
     if layout ~= false then
         self:Layout(radial)
-    end
-end
-
--- Fade only: brightens while the mouse is over the centre or any satellite.
-function RadialGlance:ApplyAlpha(radial)
-    local hovered = radial.hovered
-    local alpha = hovered and 1 or L.RADIAL_IDLE_ALPHA
-    for _, node in ipairs(radial.nodes) do
-        node:SetAlpha(alpha)
-    end
-    radial.strip:SetAlpha(alpha)
-end
-
--- Frame:IsMouseOver on current clients; the old global where it still exists.
-local function Over(frame)
-    if frame.IsMouseOver then
-        return frame:IsMouseOver()
-    end
-    return MouseIsOver and MouseIsOver(frame) or false
-end
-
-local function IsMouseOverHud(radial)
-    if Over(radial.root) then
-        return true
-    end
-    for _, node in ipairs(radial.nodes) do
-        if node:IsShown() and Over(node) then
-            return true
-        end
-    end
-    return radial.strip:IsShown() and Over(radial.strip)
-end
-
-function RadialGlance:OnHover(radial, entered)
-    if entered then
-        radial.hovered = true
-        self:ApplyAlpha(radial)
-        return
-    end
-    -- Leaving one piece may mean entering a neighbour: re-check shortly.
-    local function settle()
-        radial.hovered = IsMouseOverHud(radial)
-        RadialGlance:ApplyAlpha(radial)
-    end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.1, settle)
-    else
-        settle()
     end
 end
 

@@ -33,14 +33,27 @@ function RadialLayout.EdgeAngle(cx, cy, screenW, screenH)
     return 90 -- near the bottom edge: expand up
 end
 
--- Angles for `count` satellites spread evenly across an arc of `span`
--- degrees centred on `center`, first node at the
--- top of the fan when facing right, each in the
--- middle of its own span/count wedge so none sits on the screen edge line.
-function RadialLayout.ArcAngles(count, center, span)
+-- Angles for `count` satellites on a fixed-step arc (so fewer satellites
+-- stay tight rather than spreading around the Mini). The arc starts at the
+-- Mini's top shoulder and runs toward the nearest edge's opposite side, like
+-- the mockup (gold at the top, then clockwise down toward east when facing
+-- right). `facing` is EdgeAngle's result.
+--   0   (expand right): start up, run clockwise  (top -> east)
+--   180 (expand left):  start up, run counter-clockwise (top -> west)
+--   -90 (expand down):  start east, run clockwise (east -> south)
+--   90  (expand up):    start west, run clockwise (west -> north)
+function RadialLayout.ArcAngles(count, facing, step)
+    local start, dir = 90, -1
+    if facing == 180 then
+        dir = 1
+    elseif facing == -90 then
+        start = 0
+    elseif facing == 90 then
+        start = 180
+    end
     local angles = {}
     for i = 1, count do
-        angles[i] = center + span / 2 - (i - 0.5) * span / count
+        angles[i] = start + dir * (i - 1) * step
     end
     return angles
 end

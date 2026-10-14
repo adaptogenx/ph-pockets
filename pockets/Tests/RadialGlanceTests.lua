@@ -37,13 +37,16 @@ end
 
 local function Near(a, b) return math.abs(a - b) < 1e-6 end
 
-TestRunner:Register("Radial: arc angles spread evenly across 180 degrees, none on the edge line", function()
-    local one = RadialLayout.ArcAngles(1, 0, 180)
-    local four = RadialLayout.ArcAngles(4, 0, 180)
-    local up = RadialLayout.ArcAngles(3, 90, 180)
-    local ok = #one == 1 and Near(one[1], 0)
-        and Near(four[1], 67.5) and Near(four[2], 22.5) and Near(four[3], -22.5) and Near(four[4], -67.5)
-        and Near(up[1], 150) and Near(up[2], 90) and Near(up[3], 30)
+TestRunner:Register("Radial: arc is a fixed-step quarter circle that starts at the top (right-facing)", function()
+    local three = RadialLayout.ArcAngles(3, 0, 48)
+    local one = RadialLayout.ArcAngles(1, 0, 48)
+    local west = RadialLayout.ArcAngles(2, 180, 48)
+    local down = RadialLayout.ArcAngles(2, -90, 48)
+    local up = RadialLayout.ArcAngles(2, 90, 48)
+    local ok = Near(three[1], 90) and Near(three[2], 42) and Near(three[3], -6) and #one == 1 and Near(one[1], 90)
+        and Near(west[1], 90) and Near(west[2], 138)
+        and Near(down[1], 0) and Near(down[2], -48)
+        and Near(up[1], 180) and Near(up[2], 132)
     return ok, ok and "OK" or "bad arc angles"
 end)
 
@@ -109,14 +112,14 @@ TestRunner:Register("Radial: recent strip keeps the newest five in order; empty 
     return ok, ok and "OK" or "bad recent list"
 end)
 
-TestRunner:Register("Radial: strip is 136x30 with exact 24px icons; satellites sit on the arc", function()
+TestRunner:Register("Radial: strip has exact 24px icons with padding between them", function()
     local ok = WithMode(Mode.RADIAL, function()
         local strip = Shell.radial.strip
         local w, h = strip:GetSize()
         local iw, ih = strip.icons[1]:GetSize()
         local span = L.RADIAL_STRIP_PAD_X * 2 + 5 * L.RADIAL_STRIP_ICON + 4 * L.RADIAL_STRIP_GAP
-        return w == 136 and h == 30 and iw == 24 and ih == 24 and #strip.icons == 5 and span == w
-            and L.RADIAL_SLOTS == 4
+        return w == L.RADIAL_STRIP_WIDTH and h == L.RADIAL_STRIP_HEIGHT and iw == 24 and ih == 24
+            and #strip.icons == 5 and span == w and L.RADIAL_STRIP_GAP >= 3 and L.RADIAL_SLOTS == 4
     end)
     return ok, ok and "OK" or "bad strip geometry"
 end)
@@ -164,20 +167,6 @@ TestRunner:Register("Radial: centre click opens the list; recent icon opens Rece
     local ok = results.center and results.noItemUse and (not results.hasItem or results.recent)
     return ok, ok and "OK" or string.format("center=%s recent=%s noItemUse=%s",
         tostring(results.center), tostring(results.recent), tostring(results.noItemUse))
-end)
-
-TestRunner:Register("Radial: satellites dim when idle and brighten on hover", function()
-    local radial = Shell.radial
-    radial.hovered = false
-    RadialGlance:ApplyAlpha(radial)
-    local idle = radial.nodes[1]:GetAlpha()
-    radial.hovered = true
-    RadialGlance:ApplyAlpha(radial)
-    local hot = radial.nodes[1]:GetAlpha()
-    radial.hovered = false
-    RadialGlance:ApplyAlpha(radial)
-    local ok = math.abs(idle - L.RADIAL_IDLE_ALPHA) < 0.01 and hot == 1
-    return ok, ok and "OK" or string.format("idle=%s hot=%s", idle, hot)
 end)
 
 TestRunner:Register("Radial: recent node hover shows the big preview only when enabled", function()

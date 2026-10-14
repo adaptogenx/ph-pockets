@@ -15,7 +15,7 @@ local CircularMetricNode = Pockets.UI.CircularMetricNode
 local PHUI = Pockets.UI.PHUI
 
 -- opts: size, iconSize, badgeWidth, badgeHeight, badgeOverlap, onDragStart,
--- onHover(node, entered) (any hover change), onDragStop (forwarded so dragging a satellite moves the HUD).
+-- onDragStop (forwarded so dragging a satellite moves the HUD).
 function CircularMetricNode:Create(parent, opts)
     local node = CreateFrame("Button", nil, parent)
     node:RegisterForClicks("AnyUp")
@@ -115,9 +115,6 @@ function CircularMetricNode:Create(parent, opts)
         end
     end)
     node:SetScript("OnEnter", function(self)
-        if opts.onHover then
-            opts.onHover(self, true)
-        end
         if self.onEnter then
             self.onEnter(self)
         end
@@ -128,9 +125,6 @@ function CircularMetricNode:Create(parent, opts)
         end
         if self.onLeave then
             self.onLeave(self)
-        end
-        if opts.onHover then
-            opts.onHover(self, false)
         end
     end)
     if opts.onDragStart then
