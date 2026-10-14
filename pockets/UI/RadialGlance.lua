@@ -211,6 +211,9 @@ function RadialGlance:Layout(radial)
     end
     local half = L.RADIAL_NODE_SIZE / 2
     local miniHalfW, miniHalfH = L.MINI_WIDTH / 2, L.MINI_HEIGHT / 2
+    -- The column aligns on the Mini's round portrait edge (portrait circles
+    -- and the strip's edge line up), not on the wider rectangular badges.
+    local alignHalf = L.MINI_PORTRAIT_SIZE / 2
 
     local root = radial.root
     local left, top = root:GetLeft(), root:GetTop()
@@ -232,9 +235,9 @@ function RadialGlance:Layout(radial)
         -- the Mini's (and the strip's) near edge instead of hovering over
         -- the Mini's centre.
         if i == 1 and center == 0 then
-            x = -miniHalfW + node:GetWidth() / 2
+            x = -alignHalf + L.RADIAL_NODE_SIZE / 2
         elseif i == 1 and center == 180 then
-            x = miniHalfW - node:GetWidth() / 2
+            x = alignHalf - L.RADIAL_NODE_SIZE / 2
         end
         pts[i] = { x = x, y = y }
         minX = math.min(minX, x - node:GetWidth() / 2)
@@ -272,9 +275,9 @@ function RadialGlance:Layout(radial)
         local halfStrip = strip:GetWidth() / 2
         local sdx = 0
         if center == 0 then
-            sdx = -miniHalfW + halfStrip
+            sdx = -alignHalf + halfStrip
         elseif center == 180 then
-            sdx = miniHalfW - halfStrip
+            sdx = alignHalf - halfStrip
         end
         if ringX then
             if ringX + sdx - halfStrip < 0 then

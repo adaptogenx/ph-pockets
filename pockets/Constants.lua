@@ -325,7 +325,7 @@ Constants.LAYOUT = {
     -- Footprint is exactly portrait + badge minus their overlap.
     -- Sized 1.25x the original 52x62 / 48px TDD spec (player feedback:
     -- too small). Height = portrait - overlap + badge.
-    MINI_WIDTH = 65,
+    MINI_WIDTH = 62, -- = widest piece (badge); the root must match so centre maths is exact
     MINI_HEIGHT = 77,
     MINI_PORTRAIT_SIZE = 60,
     MINI_ICON_SIZE = 43,
