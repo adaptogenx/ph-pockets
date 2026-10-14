@@ -211,8 +211,8 @@ function RadialGlance:Layout(radial)
     end
     local half = L.RADIAL_NODE_SIZE / 2
     local miniHalfW, miniHalfH = L.MINI_WIDTH / 2, L.MINI_HEIGHT / 2
-    -- The column aligns on the Mini's round portrait edge (portrait circles
-    -- and the strip's edge line up), not on the wider rectangular badges.
+    -- The top satellite aligns on the Mini's round portrait edge; the strip
+    -- aligns on the Mini's outermost edge (its count badge).
     local alignHalf = L.MINI_PORTRAIT_SIZE / 2
 
     local root = radial.root
@@ -275,9 +275,9 @@ function RadialGlance:Layout(radial)
         local halfStrip = strip:GetWidth() / 2
         local sdx = 0
         if center == 0 then
-            sdx = -alignHalf + halfStrip
+            sdx = -miniHalfW + halfStrip
         elseif center == 180 then
-            sdx = alignHalf - halfStrip
+            sdx = miniHalfW - halfStrip
         end
         if ringX then
             if ringX + sdx - halfStrip < 0 then
