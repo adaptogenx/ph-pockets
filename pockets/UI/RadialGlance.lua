@@ -1,15 +1,14 @@
 --[[
-    UI/RadialGlance.lua - Pockets' Radial Glance (Outer Ring TDD): the
-    existing Mini centre surrounded by up to eight circular satellites.
+    UI/RadialGlance.lua - Pockets' Radial Glance: the existing Mini centre
+    with a semicircle of metric satellites (gold, ammo, specialized bags)
+    that fans away from the nearest screen edge, plus a compact strip of the
+    five newest recent items beneath it.
 
-    Slots are fixed and semantic (never reshuffled by data):
-        1 gold | 2 ammo | 3-4 specialized bags | 5-8 recent items
-    Recents also fill any unused ammo/bag slot. Satellites fade to a low
-    idle alpha and brighten while the HUD is hovered (no layout change).
-    Satellites are children
-    of the HUD root but the root keeps the Mini footprint, so the centre's
-    screen position never moves; satellites only inform/navigate and never
-    use items. Reads domain state only; nodes are built once.
+    Only available metrics get a satellite; they are spread evenly across the
+    arc. The root keeps the Mini footprint, so the Mini never moves.
+    Satellites and strip fade to a low idle alpha and brighten while the HUD
+    is hovered (no layout change). Nothing here uses items - clicks only
+    navigate. Reads domain state only; nodes/strip icons are built once.
 ]]
 
 -- luacheck: globals MouseIsOver
@@ -22,8 +21,6 @@ local PHUI = Pockets.UI.PHUI
 local Constants = Pockets.Constants
 local RadialLayout = Pockets.UI.RadialLayout
 local L = Constants.LAYOUT
-
-RadialGlance.SLOT = { GOLD = 1, AMMO = 2, SPEC_1 = 3, SPEC_2 = 4, RECENT_FIRST = 5 }
 
 --------------------------------------------------
 -- Pure helpers (unit-testable)
@@ -65,59 +62,51 @@ function RadialGlance.FormatBag(used, total)
     return Pockets.UI.MiniHUD.FormatCount(used, total)
 end
 
--- Slot assignment. Returns { [1..8] = node model | nil }.
+-- Visible metric satellites, in fixed order: gold, ammo, then up to two
+-- specialized bags. Unavailable metrics are simply absent (no placeholders).
 --   gold: copper; specialized: InventoryState:GetSpecializedCapacities();
---   recent: newest-first item records; ammoItems: carried ammo records
---   (any character can carry ammo, not just ones with a quiver).
-function RadialGlance.BuildModel(gold, specialized, recent, ammoItems)
-    local S = RadialGlance.SLOT
-    local slots = {}
-    slots[S.GOLD] = { kind = "gold", copper = gold or 0 }
-
+--   ammoItems: carried ammo records (any character can carry ammo, not just
+--   ones with a quiver).
+function RadialGlance.BuildModel(gold, specialized, ammoItems)
     local ammoCount = 0
     for _, item in ipairs(ammoItems or {}) do
         ammoCount = ammoCount + (item.quantity or 0)
     end
+    local ammo
     local others = {}
     for _, cap in ipairs(specialized or {}) do
         if (cap.total or 0) > 0 then
             if cap.class == "ammo" then
-                slots[S.AMMO] = { kind = "bag", cap = cap, isAmmo = true, ammoCount = ammoCount }
+                ammo = { kind = "bag", cap = cap, isAmmo = true, ammoCount = ammoCount }
             else
                 table.insert(others, cap)
             end
         end
     end
     -- Loose ammo with no quiver: icon + arrow count, no capacity badge/arc.
-    if not slots[S.AMMO] and ammoCount > 0 then
-        slots[S.AMMO] = { kind = "ammo", item = ammoItems[1], ammoCount = ammoCount }
+    if not ammo and ammoCount > 0 then
+        ammo = { kind = "ammo", item = ammoItems[1], ammoCount = ammoCount }
+    end
+
+    local nodes = { { kind = "gold", copper = gold or 0 } }
+    if ammo then
+        table.insert(nodes, ammo)
     end
     for i = 1, 2 do
         if others[i] then
-            slots[S.SPEC_1 + i - 1] = { kind = "bag", cap = others[i] }
+            table.insert(nodes, { kind = "bag", cap = others[i] })
         end
     end
+    return nodes
+end
 
-    -- Recents take their own slots first (5-8, newest first), then any
-    -- unused ammo/bag slots (2, 3, 4) so no slot is left empty while recent
-    -- items are waiting.
-    local order = {}
-    for slot = S.RECENT_FIRST, L.RADIAL_SLOTS do
-        table.insert(order, slot)
+-- The newest recent items for the strip (newest first, max 5).
+function RadialGlance.BuildRecent(recent)
+    local out = {}
+    for i = 1, math.min(#(recent or {}), L.RADIAL_STRIP_ICONS) do
+        out[i] = recent[i]
     end
-    for slot = S.AMMO, S.SPEC_2 do
-        if not slots[slot] then
-            table.insert(order, slot)
-        end
-    end
-    for i, slot in ipairs(order) do
-        local item = recent and recent[i]
-        if not item then
-            break
-        end
-        slots[slot] = { kind = "item", item = item }
-    end
-    return slots
+    return out
 end
 
 --------------------------------------------------
@@ -145,49 +134,138 @@ function RadialGlance:Build(root, handlers)
         node:Hide()
         radial.nodes[slot] = node
     end
-    radial.offsetX, radial.offsetY = 0, 0
+    radial.strip = RadialGlance:CreateStrip(root, radial, handlers)
     root:HookScript("OnEnter", function() RadialGlance:OnHover(radial, true) end)
     root:HookScript("OnLeave", function() RadialGlance:OnHover(radial, false) end)
     return radial
 end
 
+-- Recent strip: fixed-size frame (never resizes with content), five plain
+-- 24px icon buttons. Hover = item tooltip (+ big preview when enabled);
+-- click = open Recent. Never uses the item.
+function RadialGlance:CreateStrip(root, radial, handlers)
+    local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
+    strip:SetSize(L.RADIAL_STRIP_WIDTH, L.RADIAL_STRIP_HEIGHT)
+    PHUI.ApplyBackdrop(strip, {
+        backdrop = PHUI.Backdrops.BADGE,
+        bgColor = PHUI.Colors.BG_DARK,
+        bgAlpha = L.GLANCE_ALPHA,
+        borderColor = PHUI.Colors.BORDER_BRONZE,
+    })
+    strip:Hide()
+    strip.icons = {}
+    local bronze = PHUI.Colors.BORDER_BRONZE
+    for i = 1, L.RADIAL_STRIP_ICONS do
+        local btn = CreateFrame("Button", nil, strip, "BackdropTemplate")
+        btn:SetSize(L.RADIAL_STRIP_ICON, L.RADIAL_STRIP_ICON)
+        btn:SetPoint("LEFT", strip, "LEFT",
+            L.RADIAL_STRIP_PAD_X + (i - 1) * (L.RADIAL_STRIP_ICON + L.RADIAL_STRIP_GAP), 0)
+        btn:RegisterForClicks("AnyUp")
+        btn:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        btn.icon = btn:CreateTexture(nil, "ARTWORK")
+        btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+        btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        btn.count = PHUI.CreateLabel(btn, "primary", nil, PHUI.Fonts.NODE_STACK)
+        btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        btn.count:SetJustifyH("RIGHT")
+        btn:SetScript("OnClick", function() handlers.openRecent() end)
+        btn:SetScript("OnEnter", function(self)
+            RadialGlance:OnHover(radial, true)
+            if self.onEnter then self.onEnter(self) end
+        end)
+        btn:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+            if self.onLeave then self.onLeave(self) end
+            RadialGlance:OnHover(radial, false)
+        end)
+        btn:RegisterForDrag("LeftButton")
+        btn:SetScript("OnDragStart", handlers.dragStart)
+        btn:SetScript("OnDragStop", handlers.dragStop)
+        btn.defaultBorder = bronze
+        btn:Hide()
+        strip.icons[i] = btn
+    end
+    return strip
+end
+
 -- Ring centre relative to the root's TOPLEFT: the middle of the whole Mini
--- footprint (portrait + hanging count badge), so the orbit looks balanced
--- rather than bottom-heavy around the portrait alone.
+-- footprint (portrait + hanging count badge).
 local CENTER_X = L.MINI_WIDTH / 2
 local CENTER_Y = -L.MINI_HEIGHT / 2
 
--- Bounding reach of the ring from its centre (satellite radius + badge).
-local function Extent()
-    local half = L.RADIAL_NODE_SIZE / 2
-    local reach = L.RADIAL_RADIUS + half
-    return {
-        left = reach,
-        right = reach,
-        top = reach,
-        bottom = reach + L.RADIAL_BADGE_HEIGHT - L.RADIAL_BADGE_OVERLAP,
-    }
-end
-
--- Anchors every node, sliding the whole ring (never the centre) just enough
--- to stay on screen. Plain frames only; safe to call whenever.
+-- Anchors the visible satellites on a semicircle facing away from the
+-- nearest screen edge (sliding the fan, never the Mini, just enough to stay
+-- on screen), then the strip beneath the lowest visible element. Plain
+-- frames only; safe to call whenever. Visible nodes only - hidden ones are
+-- not positioned.
 function RadialGlance:Layout(radial)
+    local visible = {}
+    for _, node in ipairs(radial.nodes) do
+        if node:IsShown() then
+            table.insert(visible, node)
+        end
+    end
+    local half = L.RADIAL_NODE_SIZE / 2
+    local miniHalfW, miniHalfH = L.MINI_WIDTH / 2, L.MINI_HEIGHT / 2
+
+    local root = radial.root
+    local left, top = root:GetLeft(), root:GetTop()
+    local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+    local ringX, ringY
+    if left and top then
+        ringX, ringY = left + CENTER_X, top + CENTER_Y
+    end
+    local center = ringX and RadialLayout.EdgeAngle(ringX, ringY, screenW, screenH) or 0
+    radial.facing = center
+
+    -- Positions relative to the ring centre (y up) and the fan's bounding box.
+    local angles = RadialLayout.ArcAngles(#visible, center, L.RADIAL_ARC_SPAN)
+    local pts = {}
+    local minX, maxX, minY, maxY = -miniHalfW, miniHalfW, -miniHalfH, miniHalfH
+    for i, node in ipairs(visible) do
+        local x, y = RadialLayout.PositionAt(angles[i], L.RADIAL_RADIUS)
+        pts[i] = { x = x, y = y }
+        minX = math.min(minX, x - node:GetWidth() / 2)
+        maxX = math.max(maxX, x + node:GetWidth() / 2)
+        maxY = math.max(maxY, y + half)
+        minY = math.min(minY, y + half - node:GetHeight())
+    end
     local dx, dy = 0, 0
-    local cx, cy = radial.root:GetCenter()
-    local left, top = radial.root:GetLeft(), radial.root:GetTop()
-    if cx and top and left and UIParent then
-        local ringX = left + CENTER_X
-        local ringY = top + CENTER_Y
-        dx, dy = RadialLayout.ClampOffset(ringX, ringY, Extent(), UIParent:GetWidth(), UIParent:GetHeight(), L.RADIAL_MAX_SHIFT)
+    if ringX then
+        dx, dy = RadialLayout.ClampOffset(ringX, ringY,
+            { left = -minX, right = maxX, top = maxY, bottom = -minY },
+            screenW, screenH, L.RADIAL_MAX_SHIFT)
     end
     radial.offsetX, radial.offsetY = dx, dy
-    local half = L.RADIAL_NODE_SIZE / 2
-    for slot, node in ipairs(radial.nodes) do
-        -- Portrait centres sit on one true circle; the node's top edge is
-        -- anchored (a badge, when present, hangs below the portrait).
-        local x, y = RadialLayout.Position(slot, L.RADIAL_SLOTS, L.RADIAL_RADIUS)
+    -- The shift only applies to satellites; the Mini rect stays put.
+    local lowest, highest = -miniHalfH, miniHalfH
+    for i, node in ipairs(visible) do
         node:ClearAllPoints()
-        node:SetPoint("TOP", radial.root, "TOPLEFT", CENTER_X + x + dx, CENTER_Y + y + dy + half)
+        node:SetPoint("TOP", root, "TOPLEFT", CENTER_X + pts[i].x + dx, CENTER_Y + pts[i].y + dy + half)
+        lowest = math.min(lowest, pts[i].y + dy + half - node:GetHeight())
+        highest = math.max(highest, pts[i].y + dy + half)
+    end
+
+    -- Strip: centred under the Mini, 6px below the lowest visible element;
+    -- if that would fall off the bottom of the screen, above the highest.
+    local strip = radial.strip
+    if strip:IsShown() then
+        local stripTop = lowest - L.RADIAL_STRIP_OFFSET
+        if ringY and ringY + stripTop - L.RADIAL_STRIP_HEIGHT < 0 then
+            stripTop = highest + L.RADIAL_STRIP_OFFSET + L.RADIAL_STRIP_HEIGHT
+        end
+        local sdx = 0
+        if ringX then
+            local halfStrip = L.RADIAL_STRIP_WIDTH / 2
+            if ringX - halfStrip < 0 then
+                sdx = halfStrip - ringX
+            elseif ringX + halfStrip > screenW then
+                sdx = screenW - halfStrip - ringX
+            end
+        end
+        strip:ClearAllPoints()
+        strip:SetPoint("TOP", root, "TOPLEFT", CENTER_X + sdx, CENTER_Y + stripTop)
     end
 end
 
@@ -254,34 +332,42 @@ local function Configure(node, model, handlers)
         node:SetCount(RadialGlance.FormatCount(model.ammoCount))
         node:SetHover(RadialGlance.ItemHover(model.item))
         node:SetHandler(handlers.openAmmo)
-    elseif model.kind == "item" then
-        local item = model.item
-        node:ShowBadge(false)
-        node:SetIcon(item.texture)
-        if (item.quantity or 0) > 1 then
-            node:SetCount(tostring(item.quantity))
-        end
-        local color = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
-        if color and item.quality > 1 then
-            node:SetRimColor(color.r, color.g, color.b)
-        end
-        node:SetHover(RadialGlance.ItemHover(item))
-        node:SetHandler(handlers.openRecent)
     end
+end
+
+-- Configures one strip icon (or hides it) for a recent-item record.
+local function ConfigureStripIcon(btn, item)
+    if not item then
+        btn:Hide()
+        return
+    end
+    btn.icon:SetTexture(item.texture)
+    btn.count:SetText((item.quantity or 0) > 1 and tostring(item.quantity) or "")
+    local color = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
+    local c = btn.defaultBorder
+    if color and item.quality > 1 then
+        btn:SetBackdropBorderColor(color.r, color.g, color.b, 1)
+    else
+        btn:SetBackdropBorderColor(c[1], c[2], c[3], 0.6)
+    end
+    btn.onEnter, btn.onLeave = RadialGlance.ItemHover(item)
+    btn:Show()
 end
 
 -- layout: pass false in combat (anchors are left untouched).
 function RadialGlance:Render(radial, layout)
     local InventoryState = Pockets.Services.InventoryState
-    local slots = RadialGlance.BuildModel(
+    local models = RadialGlance.BuildModel(
         Pockets.Adapters.MoneyAPI:GetMoney(),
         InventoryState:GetSpecializedCapacities(),
-        Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.RECENT),
         Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.AMMO))
+    local recent = RadialGlance.BuildRecent(
+        Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.RECENT))
     Pockets.UI.ItemPreview:Hide() -- a node may have been reconfigured under the cursor
-    radial.model = slots
-    for slot, node in ipairs(radial.nodes) do
-        local model = slots[slot]
+    radial.model = models
+    radial.recentModel = recent
+    for i, node in ipairs(radial.nodes) do
+        local model = models[i]
         if model then
             Configure(node, model, radial.handlers)
             node:Show()
@@ -289,6 +375,10 @@ function RadialGlance:Render(radial, layout)
             node:Hide()
         end
     end
+    for i, btn in ipairs(radial.strip.icons) do
+        ConfigureStripIcon(btn, recent[i])
+    end
+    radial.strip:SetShown(#recent > 0)
     self:ApplyAlpha(radial)
     if layout ~= false then
         self:Layout(radial)
@@ -302,6 +392,7 @@ function RadialGlance:ApplyAlpha(radial)
     for _, node in ipairs(radial.nodes) do
         node:SetAlpha(alpha)
     end
+    radial.strip:SetAlpha(alpha)
 end
 
 -- Frame:IsMouseOver on current clients; the old global where it still exists.
@@ -321,7 +412,7 @@ local function IsMouseOverHud(radial)
             return true
         end
     end
-    return false
+    return radial.strip:IsShown() and Over(radial.strip)
 end
 
 function RadialGlance:OnHover(radial, entered)
@@ -347,5 +438,6 @@ function RadialGlance:SetShown(radial, shown)
         for _, node in ipairs(radial.nodes) do
             node:Hide()
         end
+        radial.strip:Hide()
     end
 end

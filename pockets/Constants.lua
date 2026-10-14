@@ -323,19 +323,23 @@ Constants.LAYOUT = {
 
     -- Mini HUD (Mini HUD TDD §2): round portrait + ring + count badge.
     -- Footprint is exactly portrait + badge minus their overlap.
-    MINI_WIDTH = 52,
-    MINI_HEIGHT = 62,
-    MINI_PORTRAIT_SIZE = 48,
-    MINI_RING_THICKNESS = 4,
-    MINI_BADGE_WIDTH = 50,
-    MINI_BADGE_HEIGHT = 18,
-    MINI_BADGE_OVERLAP = 4,
+    -- Sized 1.25x the original 52x62 / 48px TDD spec (player feedback:
+    -- too small). Height = portrait - overlap + badge.
+    MINI_WIDTH = 65,
+    MINI_HEIGHT = 77,
+    MINI_PORTRAIT_SIZE = 60,
+    MINI_ICON_SIZE = 43,
+    MINI_RING_THICKNESS = 5,
+    MINI_BADGE_WIDTH = 62,
+    MINI_BADGE_HEIGHT = 22,
+    MINI_BADGE_OVERLAP = 5,
 
     -- Radial Glance (Outer Ring TDD §3): eight fixed semantic slots on a
     -- ring around the Mini center. Slots clockwise from the top:
     -- 1 gold, 2 ammo, 3-4 specialized bags, 5-8 recent items (newest first).
-    RADIAL_SLOTS = 8,
-    RADIAL_RADIUS = 66, -- one true circle, tightened from the TDD nominal 72 (still clears the Mini badge)
+    RADIAL_SLOTS = 4, -- metric satellites: gold, ammo, up to two specialized bags
+    RADIAL_ARC_SPAN = 180, -- satellites fan across a semicircle facing away from the nearest screen edge
+    RADIAL_RADIUS = 74, -- arc radius; clears the 65x77 Mini and keeps the fan ~130px wide
     RADIAL_NODE_SIZE = 36,
     RADIAL_NODE_ICON = 25,
     RADIAL_BADGE_WIDTH = 36,
@@ -343,6 +347,15 @@ Constants.LAYOUT = {
     RADIAL_BADGE_HEIGHT = 13,
     RADIAL_BADGE_OVERLAP = 3,
     RADIAL_IDLE_ALPHA = 0.55, -- satellites fade to this unless the HUD is hovered
+    -- Recent strip under the radial: 5 icons, exact 24px, 2px apart, 4px
+    -- side padding = 136px wide (3px spacing would be 140px).
+    RADIAL_STRIP_ICONS = 5,
+    RADIAL_STRIP_ICON = 24,
+    RADIAL_STRIP_GAP = 2,
+    RADIAL_STRIP_WIDTH = 136,
+    RADIAL_STRIP_HEIGHT = 30,
+    RADIAL_STRIP_PAD_X = 4,
+    RADIAL_STRIP_OFFSET = 6, -- gap below the lowest visible radial element
     RADIAL_MAX_SHIFT = 24, -- most the ring may slide to stay on screen
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,

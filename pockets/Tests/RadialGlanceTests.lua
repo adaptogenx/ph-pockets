@@ -1,6 +1,6 @@
 --[[
-    Tests/RadialGlanceTests.lua - Outer Ring TDD §8: stable slot geometry,
-    semantic slot assignment, recent ordering/overflow, gold formatting,
+    Tests/RadialGlanceTests.lua - Radial semicircle: arc geometry and edge
+    orientation, metric-only satellites, recent strip, gold formatting,
     edge clamping, mode persistence, click routing, no item actions.
 ]]
 
@@ -13,7 +13,6 @@ local RadialLayout = Pockets.UI.RadialLayout
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
 local Mode = Constants.HUD_MODE
-local S = RadialGlance.SLOT
 
 local function WithMode(mode, fn)
     local previous = Shell:GetHudMode()
@@ -38,23 +37,26 @@ end
 
 local function Near(a, b) return math.abs(a - b) < 1e-6 end
 
-TestRunner:Register("Radial: eight slots start at the top and run clockwise, all distinct", function()
-    local n = L.RADIAL_SLOTS
-    local x1, y1 = RadialLayout.Position(1, n, 72)
-    local x3, y3 = RadialLayout.Position(3, n, 72)
-    local x5, y5 = RadialLayout.Position(5, n, 72)
-    local x7, y7 = RadialLayout.Position(7, n, 72)
-    local seen, unique = {}, true
-    for slot = 1, n do
-        local x, y = RadialLayout.Position(slot, n, 72)
-        local key = string.format("%.3f,%.3f", x, y)
-        if seen[key] then unique = false end
-        seen[key] = true
-        if not Near(math.sqrt(x * x + y * y), 72) then unique = false end
-    end
-    local ok = n == 8 and Near(x1, 0) and Near(y1, 72) and Near(x3, 72) and Near(y3, 0)
-        and Near(x5, 0) and Near(y5, -72) and Near(x7, -72) and Near(y7, 0) and unique
-    return ok, ok and "OK" or "bad radial geometry"
+TestRunner:Register("Radial: arc angles spread evenly across 180 degrees, none on the edge line", function()
+    local one = RadialLayout.ArcAngles(1, 0, 180)
+    local four = RadialLayout.ArcAngles(4, 0, 180)
+    local up = RadialLayout.ArcAngles(3, 90, 180)
+    local ok = #one == 1 and Near(one[1], 0)
+        and Near(four[1], 67.5) and Near(four[2], 22.5) and Near(four[3], -22.5) and Near(four[4], -67.5)
+        and Near(up[1], 150) and Near(up[2], 90) and Near(up[3], 30)
+    return ok, ok and "OK" or "bad arc angles"
+end)
+
+TestRunner:Register("Radial: satellites face away from the nearest screen edge", function()
+    local W, H = 1000, 800
+    local ok = RadialLayout.EdgeAngle(50, 400, W, H) == 0 -- left edge: expand right
+        and RadialLayout.EdgeAngle(950, 400, W, H) == 180 -- right edge: expand left
+        and RadialLayout.EdgeAngle(500, 780, W, H) == -90 -- top edge: expand down
+        and RadialLayout.EdgeAngle(500, 20, W, H) == 90 -- bottom edge: expand up
+    local x, y = RadialLayout.PositionAt(0, 74)
+    local x2, y2 = RadialLayout.PositionAt(90, 74)
+    ok = ok and Near(x, 74) and Near(y, 0) and Near(x2, 0) and Near(y2, 74)
+    return ok, ok and "OK" or "bad orientation/position"
 end)
 
 TestRunner:Register("Radial: ring slides to stay on screen but never past the max shift", function()
@@ -67,57 +69,56 @@ TestRunner:Register("Radial: ring slides to stay on screen but never past the ma
     return ok, ok and "OK" or string.format("%s %s %s %s %s", dxl, dyb, dxr, dyt, dxs)
 end)
 
-TestRunner:Register("Radial: slots are semantic - missing ammo/bags leave blanks, recents stay put", function()
-    local none = RadialGlance.BuildModel(5, {}, Items(2))
-    local withAmmo = RadialGlance.BuildModel(5, {
+TestRunner:Register("Radial: only available metrics appear - gold always, ammo and bags when present", function()
+    local none = RadialGlance.BuildModel(5, {}, {})
+    local ammo = RadialGlance.BuildModel(5, {
         { class = "ammo", used = 1, total = 18, utilization = 1 / 18, label = "Ammo" },
-    }, Items(2))
-    local ok = none[S.GOLD].kind == "gold" and none[S.AMMO] == nil and none[S.SPEC_1] == nil
-        and none[S.RECENT_FIRST].item.itemID == 1 and none[S.RECENT_FIRST + 1].item.itemID == 2
-        and withAmmo[S.AMMO].isAmmo and withAmmo[S.RECENT_FIRST].item.itemID == 1
-        and withAmmo[S.SPEC_1] == nil
-    return ok, ok and "OK" or "slot reshuffle"
-end)
-
-TestRunner:Register("Radial: at most two specialized bags; zero-total bags are not shown", function()
+    }, {})
     local caps = {
         { class = "ammo", used = 0, total = 0 },
         { class = "reagents", used = 1, total = 36, label = "Reagents" },
         { class = "herbs", used = 2, total = 20, label = "Herbs" },
         { class = "mining", used = 3, total = 20, label = "Mining" },
     }
-    local m = RadialGlance.BuildModel(0, caps, {})
-    local ok = m[S.AMMO] == nil and m[S.SPEC_1].cap.class == "reagents" and m[S.SPEC_2].cap.class == "herbs"
-    return ok, ok and "OK" or "bad specialized slots"
+    local bags = RadialGlance.BuildModel(0, caps, {})
+    local ok = #none == 1 and none[1].kind == "gold"
+        and #ammo == 2 and ammo[2].isAmmo
+        and #bags == 3 and bags[2].cap.class == "reagents" and bags[3].cap.class == "herbs"
+    return ok, ok and "OK" or "bad metric list"
 end)
 
-TestRunner:Register("Radial: recents fill slots 5-8 then unused ammo/bag slots; none when empty", function()
-    local empty = RadialGlance.BuildModel(0, {}, {})
-    local two = RadialGlance.BuildModel(0, {}, Items(2))
-    local many = RadialGlance.BuildModel(0, {}, Items(20))
-    local oneBag = RadialGlance.BuildModel(0, {
-        { class = "herbs", used = 1, total = 20, label = "Herbs" },
-    }, Items(20))
-    local ok = empty[5] == nil and empty[2] == nil
-        and two[5].item.itemID == 1 and two[6].item.itemID == 2 and two[7] == nil and two[2] == nil
-        and many[8].item.itemID == 4 and many[2].item.itemID == 5 and many[3].item.itemID == 6
-        and many[4].item.itemID == 7 and many[1].kind == "gold"
-        and oneBag[3].kind == "bag" and oneBag[2].item.itemID == 5 and oneBag[4].item.itemID == 6
-    return ok, ok and "OK" or "bad recent fill"
+TestRunner:Register("Radial: loose ammo (no quiver) shows an Ammo node with the summed count", function()
+    local arrows = { { itemID = 1, texture = 9, quantity = 60 }, { itemID = 2, texture = 8, quantity = 40 } }
+    local loose = RadialGlance.BuildModel(0, {}, arrows)
+    local quiver = RadialGlance.BuildModel(0, {
+        { class = "ammo", used = 2, total = 18, utilization = 2 / 18, label = "Ammo" },
+    }, arrows)
+    local none = RadialGlance.BuildModel(0, {}, {})
+    local ok = loose[2].kind == "ammo" and loose[2].ammoCount == 100
+        and quiver[2].kind == "bag" and quiver[2].ammoCount == 100
+        and #none == 1 and RadialGlance.FormatCount(100) == "100"
+        and RadialGlance.FormatCount(12500) == "12k"
+    return ok, ok and "OK" or "bad ammo model"
 end)
 
-TestRunner:Register("Radial: satellites dim when idle and brighten on hover", function()
-    local radial = Shell.radial
-    radial.hovered = false
-    RadialGlance:ApplyAlpha(radial)
-    local idle = radial.nodes[1]:GetAlpha()
-    radial.hovered = true
-    RadialGlance:ApplyAlpha(radial)
-    local hot = radial.nodes[1]:GetAlpha()
-    radial.hovered = false
-    RadialGlance:ApplyAlpha(radial)
-    local ok = math.abs(idle - L.RADIAL_IDLE_ALPHA) < 0.01 and hot == 1
-    return ok, ok and "OK" or string.format("idle=%s hot=%s", idle, hot)
+TestRunner:Register("Radial: recent strip keeps the newest five in order; empty gives none", function()
+    local five = RadialGlance.BuildRecent(Items(20))
+    local two = RadialGlance.BuildRecent(Items(2))
+    local ok = #five == 5 and five[1].itemID == 1 and five[5].itemID == 5
+        and #two == 2 and #RadialGlance.BuildRecent({}) == 0 and #RadialGlance.BuildRecent(nil) == 0
+    return ok, ok and "OK" or "bad recent list"
+end)
+
+TestRunner:Register("Radial: strip is 136x30 with exact 24px icons; satellites sit on the arc", function()
+    local ok = WithMode(Mode.RADIAL, function()
+        local strip = Shell.radial.strip
+        local w, h = strip:GetSize()
+        local iw, ih = strip.icons[1]:GetSize()
+        local span = L.RADIAL_STRIP_PAD_X * 2 + 5 * L.RADIAL_STRIP_ICON + 4 * L.RADIAL_STRIP_GAP
+        return w == 136 and h == 30 and iw == 24 and ih == 24 and #strip.icons == 5 and span == w
+            and L.RADIAL_SLOTS == 4
+    end)
+    return ok, ok and "OK" or "bad strip geometry"
 end)
 
 TestRunner:Register("Radial: gold stays compact and keeps its denomination", function()
@@ -138,49 +139,49 @@ TestRunner:Register("Radial: mode persists, centre keeps Mini footprint and anch
             and p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
             and Shell.radial.nodes[1]:IsShown()
     end)
-    local hidden = not Shell.radial.nodes[1]:IsShown()
+    local hidden = not Shell.radial.nodes[1]:IsShown() and not Shell.radial.strip:IsShown()
     local ok2 = nodeCount == L.RADIAL_SLOTS and #Shell.radial.nodes == nodeCount
     return ok and hidden and ok2, (ok and hidden and ok2) and "OK" or "radial mode state wrong"
 end)
 
-TestRunner:Register("Radial: centre click opens the list; recent node opens Recent; nodes have no item actions", function()
+TestRunner:Register("Radial: centre click opens the list; recent icon opens Recent; no item actions", function()
     local results = WithMode(Mode.RADIAL, function()
         local r = {}
         Shell.root:Click()
         r.center = Shell:GetState() == Shell.STATE.MENU
         Shell:SetState(Shell.STATE.GLANCE)
-        local node = Shell.radial.nodes[S.RECENT_FIRST]
-        r.hasItemNode = node:IsShown()
-        if r.hasItemNode then
-            node:Click()
+        local icon = Shell.radial.strip.icons[1]
+        r.hasItem = icon:IsShown()
+        if r.hasItem then
+            icon:Click()
             r.recent = Shell:GetState() == Shell.STATE.CATEGORY
                 and Shell.context.categoryID == Constants.CATEGORY.RECENT
         end
-        r.noItemUse = node:GetAttribute("type") == nil and node:GetAttribute("item") == nil
+        r.noItemUse = icon:GetAttribute("type") == nil and icon:GetAttribute("item") == nil
         return r
     end)
     -- Recent may legitimately be empty in the test environment.
-    local ok = results.center and results.noItemUse and (not results.hasItemNode or results.recent)
+    local ok = results.center and results.noItemUse and (not results.hasItem or results.recent)
     return ok, ok and "OK" or string.format("center=%s recent=%s noItemUse=%s",
         tostring(results.center), tostring(results.recent), tostring(results.noItemUse))
 end)
 
-TestRunner:Register("Radial: loose ammo (no quiver) shows an Ammo node with the summed count", function()
-    local arrows = { { itemID = 1, texture = 9, quantity = 60 }, { itemID = 2, texture = 8, quantity = 40 } }
-    local loose = RadialGlance.BuildModel(0, {}, {}, arrows)
-    local quiver = RadialGlance.BuildModel(0, {
-        { class = "ammo", used = 2, total = 18, utilization = 2 / 18, label = "Ammo" },
-    }, {}, arrows)
-    local none = RadialGlance.BuildModel(0, {}, {}, {})
-    local ok = loose[S.AMMO].kind == "ammo" and loose[S.AMMO].ammoCount == 100
-        and quiver[S.AMMO].kind == "bag" and quiver[S.AMMO].ammoCount == 100
-        and none[S.AMMO] == nil and RadialGlance.FormatCount(100) == "100"
-        and RadialGlance.FormatCount(12500) == "12k"
-    return ok, ok and "OK" or "bad ammo model"
+TestRunner:Register("Radial: satellites dim when idle and brighten on hover", function()
+    local radial = Shell.radial
+    radial.hovered = false
+    RadialGlance:ApplyAlpha(radial)
+    local idle = radial.nodes[1]:GetAlpha()
+    radial.hovered = true
+    RadialGlance:ApplyAlpha(radial)
+    local hot = radial.nodes[1]:GetAlpha()
+    radial.hovered = false
+    RadialGlance:ApplyAlpha(radial)
+    local ok = math.abs(idle - L.RADIAL_IDLE_ALPHA) < 0.01 and hot == 1
+    return ok, ok and "OK" or string.format("idle=%s hot=%s", idle, hot)
 end)
 
 TestRunner:Register("Radial: recent node hover shows the big preview only when enabled", function()
-    local node = Shell.radial.nodes[S.RECENT_FIRST]
+    local node = Shell.radial.strip.icons[1]
     local settings = Pockets.SavedSettings
     local original = settings.recentItemPreviewEnabled
     local record = { itemID = 6948, texture = "Interface\\Icons\\INV_Misc_Rune_01", quantity = 1 }

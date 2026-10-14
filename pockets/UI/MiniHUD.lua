@@ -58,7 +58,7 @@ function MiniHUD:Build(parent)
     local mini = Pockets.UI.CircularPortrait:Create(parent, {
         size = L.MINI_PORTRAIT_SIZE,
         icon = Constants.HUD_ICON,
-        iconSize = 34,
+        iconSize = L.MINI_ICON_SIZE,
         rimColor = PHUI.Colors.BORDER_BRONZE,
         badge = {
             width = L.MINI_BADGE_WIDTH,
@@ -75,7 +75,7 @@ function MiniHUD:Build(parent)
 
     -- Ring sits just inside the portrait rim, above the portrait art.
     local ring = Pockets.UI.CapacityRing:Create(mini.portrait, {
-        diameter = L.MINI_PORTRAIT_SIZE - 4,
+        diameter = L.MINI_PORTRAIT_SIZE - 5,
         thickness = L.MINI_RING_THICKNESS,
     })
     ring:SetPoint("CENTER", mini.portrait, "CENTER", 0, 0)

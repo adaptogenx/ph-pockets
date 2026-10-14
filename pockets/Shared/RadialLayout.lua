@@ -2,8 +2,7 @@
     Shared/RadialLayout.lua - Pure geometry for a ring of satellites around
     an anchor (Outer Ring TDD §3, §6). No frames, no Pockets knowledge.
 
-    Slots are fixed: slot 1 at the top, then clockwise every 360/count
-    degrees, so data changes never reorder nodes. Y is up (WoW convention).
+    Y is up (WoW convention); angles are in degrees, 0 = east, 90 = up.
 ]]
 
 local _, Pockets = ...
@@ -11,15 +10,39 @@ local _, Pockets = ...
 Pockets.UI.RadialLayout = Pockets.UI.RadialLayout or {}
 local RadialLayout = Pockets.UI.RadialLayout
 
--- Math-convention angle in degrees: 90 (top), 45, 0, -45 ... clockwise.
-function RadialLayout.Angle(slot, count)
-    return 90 - (slot - 1) * (360 / count)
+-- Offset of a point at `angle` degrees (math convention: 0 = east, 90 = up)
+-- and `radius` from the ring centre.
+function RadialLayout.PositionAt(angle, radius)
+    local rad = math.rad(angle)
+    return radius * math.cos(rad), radius * math.sin(rad)
 end
 
--- Offset of a slot's centre from the ring centre.
-function RadialLayout.Position(slot, count, radius)
-    local rad = math.rad(RadialLayout.Angle(slot, count))
-    return radius * math.cos(rad), radius * math.sin(rad)
+-- Direction (degrees) the fan should face: away from the nearest screen
+-- edge, so the HUD grows into the screen. (cx, cy) is the ring centre in
+-- screen units (y from the bottom). Ties prefer left/right, then top.
+function RadialLayout.EdgeAngle(cx, cy, screenW, screenH)
+    local dl, dr, dt, db = cx, screenW - cx, screenH - cy, cy
+    local nearest = math.min(dl, dr, dt, db)
+    if dl == nearest then
+        return 0 -- near the left edge: expand right
+    elseif dr == nearest then
+        return 180 -- near the right edge: expand left
+    elseif dt == nearest then
+        return -90 -- near the top edge: expand down
+    end
+    return 90 -- near the bottom edge: expand up
+end
+
+-- Angles for `count` satellites spread evenly across an arc of `span`
+-- degrees centred on `center`, first node at the
+-- top of the fan when facing right, each in the
+-- middle of its own span/count wedge so none sits on the screen edge line.
+function RadialLayout.ArcAngles(count, center, span)
+    local angles = {}
+    for i = 1, count do
+        angles[i] = center + span / 2 - (i - 0.5) * span / count
+    end
+    return angles
 end
 
 -- How far to slide the whole ring so its bounding box stays on screen.

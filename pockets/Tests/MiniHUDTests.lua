@@ -98,12 +98,13 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
     return pass, pass and "OK" or string.format("text=%s lit=%s spec=%s", tostring(text), tostring(lit), tostring(specializedCalled))
 end)
 
-TestRunner:Register("Mini: footprint is 52x62 with a round badge 50x18; no Glance content shown", function()
+TestRunner:Register("Mini: footprint matches the Mini layout tokens; no Glance content shown", function()
     local ok = WithMode(Mode.MINI, function()
         local w, h = Shell.root:GetSize()
         local bw, bh = Shell.mini.badge:GetSize()
-        return w == L.MINI_WIDTH and h == L.MINI_HEIGHT and L.MINI_WIDTH == 52 and L.MINI_HEIGHT == 62
-            and bw == 50 and bh == 18 and Shell.mini:IsShown() and not Shell.root.glance:IsShown()
+        return w == L.MINI_WIDTH and h == L.MINI_HEIGHT
+            and h == L.MINI_PORTRAIT_SIZE - L.MINI_BADGE_OVERLAP + L.MINI_BADGE_HEIGHT
+            and bw == L.MINI_BADGE_WIDTH and bh == L.MINI_BADGE_HEIGHT and Shell.mini:IsShown() and not Shell.root.glance:IsShown()
     end)
     return ok, ok and "OK" or "bad Mini footprint"
 end)

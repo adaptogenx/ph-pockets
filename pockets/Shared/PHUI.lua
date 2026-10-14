@@ -77,7 +77,7 @@ PHUI.Fonts = {
     -- Radial satellite badge text / item stack count.
     NODE_COUNT = { "Fonts\\FRIZQT__.TTF", 10, "" },
     NODE_STACK = { "Fonts\\FRIZQT__.TTF", 10, "OUTLINE" },
-    MINI_COUNT = { "Fonts\\FRIZQT__.TTF", 12, "" },
+    MINI_COUNT = { "Fonts\\FRIZQT__.TTF", 15, "" },
     MONEY = { "Fonts\\FRIZQT__.TTF", 11, "" },
     TAB_VALUE = { "Fonts\\FRIZQT__.TTF", 10, "" },
     TAB_LABEL = { "Fonts\\FRIZQT__.TTF", 8, "" },
