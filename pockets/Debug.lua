@@ -207,6 +207,50 @@ function Debug:DumpButtonRegions()
     print(COLOR_YELLOW .. "===============================" .. COLOR_RESET)
 end
 
+-- Read-only dump of the native portrait template already built for Glance
+-- (Shell.root.chrome): its frames/regions with atlas or texture, size and
+-- anchor, to find which piece draws the circular border. Creates nothing.
+function Debug:DumpPortrait()
+    local chrome = Pockets.UI.Shell and Pockets.UI.Shell.root and Pockets.UI.Shell.root.chrome
+    if not chrome then
+        print("[Pockets] No native portrait chrome on this client")
+        return
+    end
+    local function describe(obj, indent, key)
+        local w, h = obj:GetSize()
+        local extra = ""
+        if obj.GetAtlas and obj:GetAtlas() then
+            extra = " atlas=" .. tostring(obj:GetAtlas())
+        elseif obj.GetTexture and obj:GetTexture() then
+            extra = " tex=" .. tostring(obj:GetTexture())
+        end
+        local point, _, relPoint, x, y = obj:GetPoint(1)
+        print(string.format("%s%s [%s] shown=%s %.0fx%.0f pt=%s/%s %.0f,%.0f%s", indent, tostring(key),
+            tostring(obj:GetObjectType()), tostring(obj:IsShown()), w or -1, h or -1,
+            tostring(point), tostring(relPoint), x or 0, y or 0, extra))
+    end
+    local function dump(frame, indent, depth)
+        local names = {}
+        for k, v in pairs(frame) do
+            if type(v) == "table" and v.GetObjectType then
+                names[v] = k
+            end
+        end
+        for _, region in ipairs({ frame:GetRegions() }) do
+            describe(region, indent, names[region] or "?")
+        end
+        for _, child in ipairs({ frame:GetChildren() }) do
+            describe(child, indent, names[child] or "?")
+            if depth > 0 then
+                dump(child, indent .. "    ", depth - 1)
+            end
+        end
+    end
+    print(COLOR_YELLOW .. "=== Pockets Portrait Template ===" .. COLOR_RESET)
+    dump(chrome, "  ", 2)
+    print(COLOR_YELLOW .. "=================================" .. COLOR_RESET)
+end
+
 function Debug:DumpEvents()
     print(COLOR_YELLOW .. "=== Pockets EventBus Subscribers ===" .. COLOR_RESET)
     for eventName, list in pairs(Pockets.Services.EventBus.subscribers) do
@@ -256,8 +300,10 @@ function Debug:HandleCommand(args)
         self:DumpClient()
     elseif subCmd == "regions" then
         self:DumpButtonRegions()
+    elseif subCmd == "portrait" then
+        self:DumpPortrait()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions, portrait")
     end
 end
 
