@@ -216,6 +216,13 @@ function Debug:DumpPortrait()
         print("[Pockets] No native portrait chrome on this client")
         return
     end
+    -- Also saved to PocketsDB.debugPortrait so it can be read from the
+    -- SavedVariables file after /reload (chat can't be copied).
+    local lines = {}
+    local function out(line)
+        table.insert(lines, line)
+        print(line)
+    end
     local function describe(obj, indent, key)
         local w, h = obj:GetSize()
         local extra = ""
@@ -225,7 +232,7 @@ function Debug:DumpPortrait()
             extra = " tex=" .. tostring(obj:GetTexture())
         end
         local point, _, relPoint, x, y = obj:GetPoint(1)
-        print(string.format("%s%s [%s] shown=%s %.0fx%.0f pt=%s/%s %.0f,%.0f%s", indent, tostring(key),
+        out(string.format("%s%s [%s] shown=%s %.0fx%.0f pt=%s/%s %.0f,%.0f%s", indent, tostring(key),
             tostring(obj:GetObjectType()), tostring(obj:IsShown()), w or -1, h or -1,
             tostring(point), tostring(relPoint), x or 0, y or 0, extra))
     end
@@ -248,7 +255,9 @@ function Debug:DumpPortrait()
     end
     print(COLOR_YELLOW .. "=== Pockets Portrait Template ===" .. COLOR_RESET)
     dump(chrome, "  ", 2)
+    PocketsDB.debugPortrait = lines
     print(COLOR_YELLOW .. "=================================" .. COLOR_RESET)
+    print("[Pockets] Saved to PocketsDB.debugPortrait - /reload to write it to disk.")
 end
 
 function Debug:DumpEvents()
