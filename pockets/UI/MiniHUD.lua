@@ -81,13 +81,18 @@ function MiniHUD:Build(parent)
     })
     ring:SetPoint("CENTER", mini.portrait, "CENTER", 0, 0)
     ring:SetFrameLevel(mini.portrait:GetFrameLevel() + 10)
+    -- Zoned gauge: green up to the yellow threshold, then yellow, then red,
+    -- by each segment's own position around the ring.
+    ring:SetColorFn(function(fraction)
+        local c = Pockets.UI.Layout:GetCapacityColor(fraction)
+        return c.r, c.g, c.b
+    end)
     mini.ring = ring
     return mini
 end
 
 function MiniHUD:Render(mini)
     local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
-    mini.ring:SetColor(MiniHUD.GetColor(capacity))
     mini.ring:SetFraction(MiniHUD.GetFraction(capacity))
     mini:SetBadgeText(MiniHUD.FormatCount(capacity.used, capacity.total))
 end

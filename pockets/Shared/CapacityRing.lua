@@ -80,9 +80,17 @@ function CapacityRing:Create(parent, opts)
 
     function ring:Refresh()
         local c = self.color
+        local fn = self.colorFn
         for i, seg in ipairs(self.segments) do
             if i <= self.lit then
-                seg:SetVertexColor(c[1], c[2], c[3], 1)
+                if fn then
+                    -- Zoned ring: each lit segment takes the colour of its
+                    -- own position (e.g. green, then yellow, then red).
+                    local r, g, b = fn((i - 0.5) / self.segmentCount)
+                    seg:SetVertexColor(r, g, b, 1)
+                else
+                    seg:SetVertexColor(c[1], c[2], c[3], 1)
+                end
             else
                 seg:SetVertexColor(TRACK[1], TRACK[2], TRACK[3], TRACK[4])
             end
@@ -95,6 +103,11 @@ function CapacityRing:Create(parent, opts)
             self.lit = lit
             self:Refresh()
         end
+    end
+    -- fn(fraction 0..1) -> r, g, b; nil goes back to the single colour.
+    function ring:SetColorFn(fn)
+        self.colorFn = fn
+        self:Refresh()
     end
     function ring:SetColor(r, g, b)
         self.color = { r, g, b }
