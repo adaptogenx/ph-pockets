@@ -60,7 +60,6 @@ function MiniHUD:Build(parent)
         icon = Constants.HUD_ICON,
         iconSize = L.MINI_ICON_SIZE,
         iconTexCoord = { 0, 1, 0, 1 }, -- whole bag, not a zoomed crop
-        iconMask = false, -- the backpack art has its own transparent corners; skip the blurry mask
         rimColor = PHUI.Colors.BORDER_BRONZE,
         badge = {
             width = L.MINI_BADGE_WIDTH,
