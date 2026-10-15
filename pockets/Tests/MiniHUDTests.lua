@@ -143,3 +143,13 @@ TestRunner:Register("Mini: clicking opens the category list (Menu) directly, not
     local ok = state == Shell.STATE.MENU
     return ok, ok and "OK" or ("state=" .. tostring(state))
 end)
+
+TestRunner:Register("Mini: count text stays cream under 70%, then yellow, then red", function()
+    local C = PHUI.Colors
+    local function is(color, r, g, b) return r == color[1] and g == color[2] and b == color[3] end
+    local function at(used, total) return MiniHUD.GetTextColor({ used = used, total = total }) end
+    local ok = is(C.TEXT_PRIMARY, at(500, 1000)) and is(C.TEXT_PRIMARY, at(699, 1000))
+        and is(C.ACCENT_WARNING, at(800, 1000)) and is(C.ACCENT_BAD, at(950, 1000))
+        and is(C.ACCENT_BAD, at(46, 46)) and is(C.TEXT_PRIMARY, at(0, 0))
+    return ok, ok and "OK" or "bad count text colours"
+end)

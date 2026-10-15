@@ -47,6 +47,17 @@ function MiniHUD.GetColor(capacity)
     return c.r, c.g, c.b
 end
 
+-- r, g, b for the count text: cream while there's room, then the ring's
+-- yellow / red as the bags fill (same thresholds as the ring).
+function MiniHUD.GetTextColor(capacity)
+    local fraction = MiniHUD.GetFraction(capacity)
+    if fraction >= Constants.CAPACITY_COLOR_THRESHOLDS.YELLOW_AT then
+        return MiniHUD.GetColor(capacity)
+    end
+    local c = PHUI.Colors.TEXT_PRIMARY
+    return c[1], c[2], c[3]
+end
+
 --------------------------------------------------
 -- Build / Render
 --------------------------------------------------
@@ -95,4 +106,5 @@ function MiniHUD:Render(mini)
     local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
     mini.ring:SetFraction(MiniHUD.GetFraction(capacity))
     mini:SetBadgeText(MiniHUD.FormatCount(capacity.used, capacity.total))
+    mini.badge.text:SetTextColor(MiniHUD.GetTextColor(capacity))
 end
