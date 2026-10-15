@@ -80,8 +80,8 @@ end
 
 -- Badge width: at least the spec width, grown to fit icon + text (no clipping).
 function SidecarHUD.BadgeWidth(textWidth)
-    local pad = 4
-    return math.max(L.SIDECAR_BADGE_WIDTH, pad * 3 + L.SIDECAR_BADGE_ICON + (textWidth or 0))
+    return math.max(L.SIDECAR_BADGE_WIDTH,
+        2 * L.SIDECAR_BADGE_PAD + L.SIDECAR_BADGE_GAP_ICON + L.SIDECAR_BADGE_ICON + (textWidth or 0))
 end
 
 --------------------------------------------------
@@ -103,10 +103,10 @@ local function CreateBadge(root, handlers)
     })
     badge.icon = badge:CreateTexture(nil, "ARTWORK")
     badge.icon:SetSize(L.SIDECAR_BADGE_ICON, L.SIDECAR_BADGE_ICON)
-    badge.icon:SetPoint("LEFT", badge, "LEFT", 4, 0)
+    badge.icon:SetPoint("LEFT", badge, "LEFT", L.SIDECAR_BADGE_PAD, 0)
     badge.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     badge.text = PHUI.CreateLabel(badge, "primary", nil, PHUI.Fonts.SIDECAR_VALUE)
-    badge.text:SetPoint("LEFT", badge.icon, "RIGHT", 3, 0)
+    badge.text:SetPoint("LEFT", badge.icon, "RIGHT", L.SIDECAR_BADGE_GAP_ICON, 0)
     badge.text:SetJustifyH("LEFT")
     badge:SetScript("OnEnter", function(self)
         if self.onEnter then self.onEnter(self) end

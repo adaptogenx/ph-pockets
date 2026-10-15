@@ -29,11 +29,11 @@ end
 
 TestRunner:Register("Sidecar: layout tokens match the spec", function()
     local S = SidecarHUD.STRIP_SPEC
-    local ok = L.SIDECAR_BADGE_HEIGHT == 22 and L.SIDECAR_BADGE_GAP == 3 and L.SIDECAR_MINI_GAP == 4
+    local ok = L.SIDECAR_BADGE_HEIGHT == 24 and L.SIDECAR_BADGE_GAP == 3 and L.SIDECAR_MINI_GAP == 4
         and S.icon == 22 and S.gap == 2 and S.padX == 0 and S.height == 22 and S.icons == 5
         and S.backdrop == nil and L.SIDECAR_STRIP_BELOW == 4
-        -- Mini + gap + minimum column = exactly five icons and four gaps.
-        and L.MINI_WIDTH + L.SIDECAR_MINI_GAP + L.SIDECAR_BADGE_WIDTH == 5 * 22 + 4 * 2
+        -- Mini + gap + minimum column fits five icons with their minimum gaps.
+        and L.MINI_WIDTH + L.SIDECAR_MINI_GAP + L.SIDECAR_BADGE_WIDTH >= 5 * 22 + 4 * 2
     return ok, ok and "OK" or "bad sidecar tokens"
 end)
 

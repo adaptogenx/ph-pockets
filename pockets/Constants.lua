@@ -327,23 +327,25 @@ Constants.LAYOUT = {
     -- Sized 1.25x the original 52x62 / 48px TDD spec (player feedback:
     -- too small). Height = portrait - overlap + badge.
     MINI_WIDTH = 62, -- = widest piece (badge); the root must match so centre maths is exact
-    MINI_HEIGHT = 77,
+    MINI_HEIGHT = 79,
     MINI_PORTRAIT_SIZE = 60,
     -- Breathing room: rim r30 | 2px gap | ring r26-22 | 4px gap | bag r18.
     MINI_ICON_SIZE = 36,
     MINI_RING_THICKNESS = 4,
     MINI_RING_INSET = 4, -- ring sits this far inside the portrait rim, per side
     MINI_BADGE_WIDTH = 62,
-    MINI_BADGE_HEIGHT = 22,
+    MINI_BADGE_HEIGHT = 24, -- room for ~5px of padding above/below the 14px count
     MINI_BADGE_OVERLAP = 5,
 
     -- Sidecar HUD: gold/ammo badges right of the Mini, compact recent strip
     -- 3px beneath it. No labels, no frames beyond 1px bronze edges.
-    SIDECAR_BADGE_WIDTH = 52, -- minimum column width: 62 Mini + 4 gap + 52 = 118 = 5*22 + 4*2; grows with text
-    SIDECAR_BADGE_HEIGHT = 22,
+    SIDECAR_BADGE_WIDTH = 56, -- minimum column width (62 Mini + 4 gap + 56 = 122); grows with text
+    SIDECAR_BADGE_HEIGHT = 24, -- text/icon padded inside the pill
     SIDECAR_BADGE_GAP = 3, -- between the stacked badges
     SIDECAR_MINI_GAP = 4, -- Mini -> badges
     SIDECAR_BADGE_ICON = 16,
+    SIDECAR_BADGE_PAD = 7, -- inside the pill, left and right
+    SIDECAR_BADGE_GAP_ICON = 5,
     SIDECAR_STRIP_ICONS = 5,
     -- Recent strip spans exactly the Mini + gold/ammo width (118px at the
     -- minimum): 5 icons of 22px, 2px apart, no padding, no outer frame.
