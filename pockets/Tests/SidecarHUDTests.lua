@@ -30,10 +30,10 @@ end
 TestRunner:Register("Sidecar: layout tokens match the spec", function()
     local S = SidecarHUD.STRIP_SPEC
     local ok = L.SIDECAR_BADGE_WIDTH == 42 and L.SIDECAR_BADGE_HEIGHT == 18 and L.SIDECAR_BADGE_GAP == 3
-        and L.SIDECAR_MINI_GAP == 4 and S.icon == 24 and S.gap == 4 and S.padX == 4 and S.height == 32
+        and L.SIDECAR_MINI_GAP == 4 and S.icon == 18 and S.gap == 3 and S.padX == 4 and S.height == 26
         and L.SIDECAR_STRIP_BELOW == 3 and S.icons == 5
         and S.height == S.icon + 8 -- 4px vertical padding
-        and S.gap >= 4
+        and RadialGlance.StripWidth(5, S) <= L.MINI_WIDTH + L.SIDECAR_MINI_GAP + L.SIDECAR_BADGE_WIDTH + 4
     return ok, ok and "OK" or "bad sidecar tokens"
 end)
 
@@ -54,8 +54,8 @@ end)
 TestRunner:Register("Sidecar: badge is 42px minimum and grows with long text; strip is content-sized", function()
     local S = SidecarHUD.STRIP_SPEC
     local ok = SidecarHUD.BadgeWidth(10) == 42 and SidecarHUD.BadgeWidth(40) > 42
-        and RadialGlance.StripWidth(5, S) == 2 * 4 + 5 * 24 + 4 * 4
-        and RadialGlance.StripWidth(2, S) == 2 * 4 + 2 * 24 + 4
+        and RadialGlance.StripWidth(5, S) == 2 * 4 + 5 * 18 + 4 * 3
+        and RadialGlance.StripWidth(2, S) == 2 * 4 + 2 * 18 + 3
         and RadialGlance.StripWidth(2, S) < RadialGlance.StripWidth(5, S)
     return ok, ok and "OK" or "bad widths"
 end)

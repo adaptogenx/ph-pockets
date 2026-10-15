@@ -57,7 +57,8 @@ function CircularPortrait:Create(parent, opts)
     local tex = holder:CreateTexture(nil, "ARTWORK")
     tex:SetSize(iconSize, iconSize)
     tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
-    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local coords = opts.iconTexCoord or { 0.08, 0.92, 0.08, 0.92 }
+    tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
     if tex.AddMaskTexture and holder.CreateMaskTexture then
         local mask = holder:CreateMaskTexture()
         mask:SetTexture(CIRCLE_MASK)
