@@ -77,6 +77,31 @@ function ItemPreview:Show(record)
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
     end
+    self:Recenter()
+    -- The tooltip can still be growing (extra lines added by post-call
+    -- hooks, item info arriving), so settle once more next frame.
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if f:IsShown() then
+                ItemPreview:Recenter()
+            end
+        end)
+    end
+end
+
+-- Centres the icon + tooltip pair (icon, 4px gap, tooltip) horizontally on
+-- the screen. The tooltip stays anchored to the icon's top-right, so only
+-- the icon moves.
+function ItemPreview:Recenter()
+    local f = self.frame
+    if not f or not f:IsShown() then
+        return
+    end
+    local tooltipWidth = GameTooltip:IsShown() and GameTooltip:GetWidth() or 0
+    local gap = tooltipWidth > 0 and 4 or 0
+    local total = f:GetWidth() + gap + tooltipWidth
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", UIParent, "TOP", -total / 2, -Pockets.Constants.LAYOUT.RECENT_PREVIEW_TOP_OFFSET)
 end
 
 function ItemPreview:Hide()
