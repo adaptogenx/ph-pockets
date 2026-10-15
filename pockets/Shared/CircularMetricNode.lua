@@ -44,7 +44,7 @@ function CircularMetricNode:Create(parent, opts)
 
     -- Thin capacity arc just inside the rim (only for true used/total).
     local arc = Pockets.UI.CapacityRing:Create(portrait.portrait, {
-        diameter = opts.size - 4,
+        diameter = math.floor(opts.size * 0.76), -- inside the native ring's hole
         thickness = 2,
         segments = 28,
     })
@@ -65,7 +65,11 @@ function CircularMetricNode:Create(parent, opts)
     function node:SetIcon(tex) portrait:SetIcon(tex) end
     function node:SetBadgeText(text) portrait:SetBadgeText(text) end
     function node:SetBadgeWidth(w) portrait:SetBadgeWidth(w) end
-    function node:SetRimColor(r, g, b) portrait.rim:SetColor(r, g, b) end
+    function node:SetRimColor(r, g, b)
+        if portrait.rim then
+            portrait.rim:SetColor(r, g, b)
+        end
+    end
     function node:SetCount(text) self.count:SetText(text or "") end
     -- Shows/hides the badge and resizes the hit rect to the visible art.
     function node:ShowBadge(shown)
