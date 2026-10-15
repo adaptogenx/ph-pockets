@@ -21,6 +21,16 @@ local Constants = Pockets.Constants
 local RadialLayout = Pockets.UI.RadialLayout
 local L = Constants.LAYOUT
 
+-- Recent-strip geometry; the Sidecar HUD reuses the same strip with its own.
+RadialGlance.STRIP_SPEC = {
+    icons = L.RADIAL_STRIP_ICONS,
+    icon = L.RADIAL_STRIP_ICON,
+    gap = L.RADIAL_STRIP_GAP,
+    padX = L.RADIAL_STRIP_PAD_X,
+    height = L.RADIAL_STRIP_HEIGHT,
+    backdrop = PHUI.Backdrops.PANEL, -- rounded tooltip-style border
+}
+
 --------------------------------------------------
 -- Pure helpers (unit-testable)
 --------------------------------------------------
@@ -100,15 +110,17 @@ function RadialGlance.BuildModel(gold, specialized, ammoItems)
 end
 
 -- Strip width for n icons: side padding + icons + gaps between them.
-function RadialGlance.StripWidth(n)
-    n = math.max(1, math.min(n, L.RADIAL_STRIP_ICONS))
-    return 2 * L.RADIAL_STRIP_PAD_X + n * L.RADIAL_STRIP_ICON + (n - 1) * L.RADIAL_STRIP_GAP
+function RadialGlance.StripWidth(n, spec)
+    spec = spec or RadialGlance.STRIP_SPEC
+    n = math.max(1, math.min(n, spec.icons))
+    return 2 * spec.padX + n * spec.icon + (n - 1) * spec.gap
 end
 
 -- The newest recent items for the strip (newest first, max 5).
-function RadialGlance.BuildRecent(recent)
+function RadialGlance.BuildRecent(recent, spec)
+    spec = spec or RadialGlance.STRIP_SPEC
     local out = {}
-    for i = 1, math.min(#(recent or {}), L.RADIAL_STRIP_ICONS) do
+    for i = 1, math.min(#(recent or {}), spec.icons) do
         out[i] = recent[i]
     end
     return out
@@ -136,18 +148,19 @@ function RadialGlance:Build(root, handlers)
         node:Hide()
         radial.nodes[slot] = node
     end
-    radial.strip = RadialGlance:CreateStrip(root, radial, handlers)
+    radial.strip = RadialGlance.CreateStrip(root, handlers)
     return radial
 end
 
 -- Recent strip: fixed-size frame (never resizes with content), five plain
 -- 24px icon buttons. Hover = item tooltip (+ big preview when enabled);
 -- click = open Recent. Never uses the item.
-function RadialGlance:CreateStrip(root, radial, handlers)
+function RadialGlance.CreateStrip(root, handlers, spec)
+    spec = spec or RadialGlance.STRIP_SPEC
     local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
-    strip:SetSize(L.RADIAL_STRIP_WIDTH, L.RADIAL_STRIP_HEIGHT)
+    strip:SetSize(RadialGlance.StripWidth(spec.icons, spec), spec.height)
     PHUI.ApplyBackdrop(strip, {
-        backdrop = PHUI.Backdrops.PANEL, -- rounded tooltip-style border
+        backdrop = spec.backdrop,
         bgColor = PHUI.Colors.BG_DARK,
         bgAlpha = L.GLANCE_ALPHA,
         borderColor = PHUI.Colors.BORDER_BRONZE,
@@ -155,11 +168,11 @@ function RadialGlance:CreateStrip(root, radial, handlers)
     strip:Hide()
     strip.icons = {}
     local bronze = PHUI.Colors.BORDER_BRONZE
-    for i = 1, L.RADIAL_STRIP_ICONS do
+    for i = 1, spec.icons do
         local btn = CreateFrame("Button", nil, strip, "BackdropTemplate")
-        btn:SetSize(L.RADIAL_STRIP_ICON, L.RADIAL_STRIP_ICON)
+        btn:SetSize(spec.icon, spec.icon)
         btn:SetPoint("LEFT", strip, "LEFT",
-            L.RADIAL_STRIP_PAD_X + (i - 1) * (L.RADIAL_STRIP_ICON + L.RADIAL_STRIP_GAP), 0)
+            spec.padX + (i - 1) * (spec.icon + spec.gap), 0)
         btn:RegisterForClicks("AnyUp")
         btn:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -358,7 +371,7 @@ local function Configure(node, model, handlers)
 end
 
 -- Configures one strip icon (or hides it) for a recent-item record.
-local function ConfigureStripIcon(btn, item)
+function RadialGlance.ConfigureStripIcon(btn, item)
     if not item then
         btn:Hide()
         return
@@ -398,7 +411,7 @@ function RadialGlance:Render(radial, layout)
         end
     end
     for i, btn in ipairs(radial.strip.icons) do
-        ConfigureStripIcon(btn, recent[i])
+        RadialGlance.ConfigureStripIcon(btn, recent[i])
     end
     -- Grows/shrinks with the number of icons shown (2 padding + n icons + gaps).
     if #recent > 0 then

@@ -281,6 +281,7 @@ function Shell:BuildGlance()
         dragStart = forward("OnDragStart"),
         dragStop = forward("OnDragStop"),
     })
+    self.sidecar = Pockets.UI.SidecarHUD:Build(frame, self.radial.handlers)
 end
 
 --------------------------------------------------
@@ -290,7 +291,7 @@ end
 function Shell:GetHudMode()
     local mode = Pockets.SavedSettings and Pockets.SavedSettings.hudMode
     local Mode = Constants.HUD_MODE
-    if mode == Mode.MINI or mode == Mode.RADIAL then
+    if mode == Mode.MINI or mode == Mode.RADIAL or mode == Mode.SIDECAR then
         return mode
     end
     return Mode.GLANCE
@@ -304,9 +305,13 @@ function Shell:IsRadial()
     return self:GetHudMode() == Constants.HUD_MODE.RADIAL
 end
 
--- Mini and Radial both show the round Mini centre instead of Glance.
+function Shell:IsSidecar()
+    return self:GetHudMode() == Constants.HUD_MODE.SIDECAR
+end
+
+-- Mini, Radial and Sidecar all show the round Mini centre instead of Glance.
 function Shell:UsesMiniCenter()
-    return self:IsMini() or self:IsRadial()
+    return self:IsMini() or self:IsRadial() or self:IsSidecar()
 end
 
 -- Swaps which presentation the root frame shows and resizes it. The root's
@@ -327,9 +332,13 @@ function Shell:ApplyHudMode()
         if mode ~= Constants.HUD_MODE.RADIAL then
             Pockets.UI.RadialGlance:SetShown(self.radial, false)
         end
+        if mode ~= Constants.HUD_MODE.SIDECAR then
+            Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
+        end
     else
         self.mini:Hide()
         Pockets.UI.RadialGlance:SetShown(self.radial, false)
+        Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
         root.glance:Show()
         if root.chrome then
             root.chrome:Show()
@@ -345,7 +354,7 @@ end
 -- combat or for an unknown mode.
 function Shell:SetHudMode(mode)
     local Mode = Constants.HUD_MODE
-    if mode ~= Mode.MINI and mode ~= Mode.RADIAL and mode ~= Mode.GLANCE then
+    if mode ~= Mode.MINI and mode ~= Mode.RADIAL and mode ~= Mode.SIDECAR and mode ~= Mode.GLANCE then
         return false
     end
     if self:IsCombatBlocked() then
@@ -1013,6 +1022,8 @@ function Shell:RenderInCombat()
         Pockets.UI.MiniHUD:Render(self.mini)
         if self:IsRadial() then
             Pockets.UI.RadialGlance:Render(self.radial, false)
+        elseif self:IsSidecar() then
+            Pockets.UI.SidecarHUD:Render(self.sidecar, false)
         end
     end
     self:SyncStateFromVisibility()
@@ -1266,6 +1277,8 @@ function Shell:RenderGlance()
         Pockets.UI.MiniHUD:Render(self.mini)
         if self:IsRadial() then
             Pockets.UI.RadialGlance:Render(self.radial)
+        elseif self:IsSidecar() then
+            Pockets.UI.SidecarHUD:Render(self.sidecar)
         end
         return
     end

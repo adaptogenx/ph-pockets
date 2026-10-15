@@ -65,7 +65,7 @@ local function EnsureSavedVariables()
     -- old or hand-edited save never changes the HUD unexpectedly.
     local HudMode = Pockets.Constants.HUD_MODE
     local savedHud = PocketsDB.settings.hudMode
-    if savedHud ~= HudMode.GLANCE and savedHud ~= HudMode.MINI and savedHud ~= HudMode.RADIAL then
+    if savedHud ~= HudMode.GLANCE and savedHud ~= HudMode.MINI and savedHud ~= HudMode.RADIAL and savedHud ~= HudMode.SIDECAR then
         PocketsDB.settings.hudMode = Pockets.Constants.DEFAULT_SETTINGS.hudMode
     end
 
@@ -289,7 +289,7 @@ local function ShowHelp()
     print("|cffffff00/pockets show|r - Show/hide the HUD")
     print("|cffffff00/pockets toggle|r - Toggle the full inventory view")
     print("|cffffff00/pockets categoryview [grid||list]|r - Show or set the Category body view")
-    print("|cffffff00/pockets hud [mini||radial||glance]|r - Show or set the HUD mode (default glance)")
+    print("|cffffff00/pockets hud [mini||radial||sidecar||glance]|r - Show or set the HUD mode (default glance)")
     print("|cffffff00/pockets recentpreview [on||off]|r - Show or set the large icon + tooltip preview when hovering Recent items (default off)")
     print("|cffffff00/pockets help|r - Show this help")
     print("|cffffff00/pockets help dev|r - Show debug/testing commands")
@@ -342,7 +342,8 @@ local function HandleCommand(msg)
     elseif cmd == "hud" then
         local Mode = Pockets.Constants.HUD_MODE
         local requested = (args[2] or ""):upper()
-        if requested == Mode.MINI or requested == Mode.RADIAL or requested == Mode.GLANCE then
+        if requested == Mode.MINI or requested == Mode.RADIAL or requested == Mode.SIDECAR
+            or requested == Mode.GLANCE then
             if Pockets.UI.Shell:SetHudMode(requested) then
                 print("[Pockets] HUD mode set to " .. requested:lower())
             else
@@ -351,7 +352,7 @@ local function HandleCommand(msg)
         elseif requested == "" then
             print("[Pockets] HUD mode is currently " .. tostring(Pockets.SavedSettings.hudMode):lower())
         else
-            print("[Pockets] Usage: /pockets hud mini||radial||glance")
+            print("[Pockets] Usage: /pockets hud mini||radial||sidecar||glance")
         end
     elseif cmd == "recentpreview" then
         local requested = (args[2] or ""):lower()

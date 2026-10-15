@@ -58,6 +58,7 @@ UI/RecentItemStrip.lua
 UI/PocketsGlance.lua
 UI/MiniHUD.lua
 UI/RadialGlance.lua
+UI/SidecarHUD.lua
 UI/Search.lua
 UI/FlowLayout.lua
 UI/CategoryHeader.lua
@@ -94,5 +95,6 @@ Tests/ShellTests.lua
 Tests/PocketsGlanceTests.lua
 Tests/MiniHUDTests.lua
 Tests/RadialGlanceTests.lua
+Tests/SidecarHUDTests.lua
 Tests/StackResolverTests.lua
 Tests/PositionStrategyTests.lua

@@ -64,6 +64,7 @@ Constants.HUD_MODE = {
     GLANCE = "GLANCE",
     MINI = "MINI",
     RADIAL = "RADIAL",
+    SIDECAR = "SIDECAR",
 }
 
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
@@ -333,6 +334,20 @@ Constants.LAYOUT = {
     MINI_BADGE_WIDTH = 62,
     MINI_BADGE_HEIGHT = 22,
     MINI_BADGE_OVERLAP = 5,
+
+    -- Sidecar HUD: gold/ammo badges right of the Mini, compact recent strip
+    -- 3px beneath it. No labels, no frames beyond 1px bronze edges.
+    SIDECAR_BADGE_WIDTH = 42, -- minimum; grows with its text
+    SIDECAR_BADGE_HEIGHT = 18,
+    SIDECAR_BADGE_GAP = 3, -- between the stacked badges
+    SIDECAR_MINI_GAP = 4, -- Mini -> badges
+    SIDECAR_BADGE_ICON = 12,
+    SIDECAR_STRIP_ICONS = 5,
+    SIDECAR_STRIP_ICON = 18,
+    SIDECAR_STRIP_GAP = 2,
+    SIDECAR_STRIP_PAD_X = 4,
+    SIDECAR_STRIP_HEIGHT = 26,
+    SIDECAR_STRIP_BELOW = 3, -- gap under the Mini
 
     -- Radial Glance (Outer Ring TDD §3): eight fixed semantic slots on a
     -- ring around the Mini center. Slots clockwise from the top:
