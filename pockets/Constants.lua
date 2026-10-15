@@ -343,10 +343,10 @@ Constants.LAYOUT = {
     SIDECAR_MINI_GAP = 4, -- Mini -> badges
     SIDECAR_BADGE_ICON = 12,
     SIDECAR_STRIP_ICONS = 5,
-    SIDECAR_STRIP_ICON = 18,
-    SIDECAR_STRIP_GAP = 2,
+    SIDECAR_STRIP_ICON = 24, -- big enough to read/hover comfortably
+    SIDECAR_STRIP_GAP = 4,
     SIDECAR_STRIP_PAD_X = 4,
-    SIDECAR_STRIP_HEIGHT = 26,
+    SIDECAR_STRIP_HEIGHT = 32,
     SIDECAR_STRIP_BELOW = 3, -- gap under the Mini
 
     -- Radial Glance (Outer Ring TDD §3): eight fixed semantic slots on a
