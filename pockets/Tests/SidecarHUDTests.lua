@@ -30,9 +30,10 @@ end
 TestRunner:Register("Sidecar: layout tokens match the spec", function()
     local S = SidecarHUD.STRIP_SPEC
     local ok = L.SIDECAR_BADGE_WIDTH == 42 and L.SIDECAR_BADGE_HEIGHT == 18 and L.SIDECAR_BADGE_GAP == 3
-        and L.SIDECAR_MINI_GAP == 4 and S.icon == 18 and S.gap == 2 and S.padX == 4 and S.height == 26
+        and L.SIDECAR_MINI_GAP == 4 and S.icon == 24 and S.gap == 4 and S.padX == 4 and S.height == 32
         and L.SIDECAR_STRIP_BELOW == 3 and S.icons == 5
         and S.height == S.icon + 8 -- 4px vertical padding
+        and S.gap >= 4
     return ok, ok and "OK" or "bad sidecar tokens"
 end)
 
@@ -53,8 +54,8 @@ end)
 TestRunner:Register("Sidecar: badge is 42px minimum and grows with long text; strip is content-sized", function()
     local S = SidecarHUD.STRIP_SPEC
     local ok = SidecarHUD.BadgeWidth(10) == 42 and SidecarHUD.BadgeWidth(40) > 42
-        and RadialGlance.StripWidth(5, S) == 2 * 4 + 5 * 18 + 4 * 2
-        and RadialGlance.StripWidth(2, S) == 2 * 4 + 2 * 18 + 2
+        and RadialGlance.StripWidth(5, S) == 2 * 4 + 5 * 24 + 4 * 4
+        and RadialGlance.StripWidth(2, S) == 2 * 4 + 2 * 24 + 4
         and RadialGlance.StripWidth(2, S) < RadialGlance.StripWidth(5, S)
     return ok, ok and "OK" or "bad widths"
 end)
@@ -78,7 +79,7 @@ TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor; no radia
     return ok and hidden, (ok and hidden) and "OK" or "sidecar mode state wrong"
 end)
 
-TestRunner:Register("Sidecar: gold stays put when ammo hides; Mini click opens the list", function()
+TestRunner:Register("Sidecar: gold centres on the Mini when ammo hides; Mini click opens the list", function()
     local result = WithMode(Mode.SIDECAR, function()
         local sidecar = Shell.sidecar
         local InventoryState = Pockets.Services.InventoryState
@@ -87,19 +88,20 @@ TestRunner:Register("Sidecar: gold stays put when ammo hides; Mini click opens t
             return { { class = "ammo", used = 1, total = 18, utilization = 1 / 18, label = "Ammo", texture = 1 } }
         end
         SidecarHUD:Render(sidecar)
-        local _, _, _, gx1, gy1 = sidecar.gold:GetPoint()
+        local _, _, _, _, gy1 = sidecar.gold:GetPoint()
         local ammoShown = sidecar.ammo:IsShown()
         InventoryState.GetSpecializedCapacities = function() return {} end
         local api = Pockets.API.GetAggregatedCategoryItems
         Pockets.API.GetAggregatedCategoryItems = function() return {} end
         SidecarHUD:Render(sidecar)
-        local _, _, _, gx2, gy2 = sidecar.gold:GetPoint()
+        local _, _, _, _, gy2 = sidecar.gold:GetPoint()
         local ammoHidden = not sidecar.ammo:IsShown()
         local stripHidden = not sidecar.strip:IsShown()
         Pockets.API.GetAggregatedCategoryItems = api
         InventoryState.GetSpecializedCapacities = original
         Shell.root:Click()
-        return ammoShown and ammoHidden and stripHidden and gx1 == gx2 and gy1 == gy2
+        local centred = math.abs(gy2 + (L.MINI_PORTRAIT_SIZE - L.SIDECAR_BADGE_HEIGHT) / 2) < 0.01
+        return ammoShown and ammoHidden and stripHidden and centred and gy1 > gy2
             and Shell:GetState() == Shell.STATE.MENU
     end)
     return result, result and "OK" or "ammo/gold/strip/click behavior wrong"

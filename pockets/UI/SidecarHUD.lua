@@ -1,11 +1,11 @@
 --[[
     UI/SidecarHUD.lua - Pockets' Sidecar HUD: the existing Mini with gold
-    and ammo badges stacked to its right and a compact strip of the five
+    and ammo (icon + text, no frames) stacked to its right and a compact strip of the five
     newest recent items 3px beneath it.
 
     No labels. The root keeps the Mini footprint, so the Mini never moves;
-    badges and strip are children of the root. Gold has a fixed place (it
-    never shifts when Ammo hides); the strip is content-sized and hidden
+    badges and strip are children of the root. Gold sits on the Mini midpoint alone,
+    stacks above Ammo when present; the strip is content-sized and hidden
     when empty. Reuses RadialGlance's data model and recent strip. Nothing
     here uses items - clicks only navigate. Reads domain state only; frames
     are built once.
@@ -60,11 +60,7 @@ local function CreateBadge(root, handlers)
     local badge = CreateFrame("Button", nil, root, "BackdropTemplate")
     badge:SetSize(L.SIDECAR_BADGE_WIDTH, L.SIDECAR_BADGE_HEIGHT)
     badge:RegisterForClicks("AnyUp")
-    PHUI.ApplyBackdrop(badge, {
-        backdrop = PHUI.Backdrops.BADGE,
-        bgColor = PHUI.Colors.BADGE_BG,
-        borderColor = PHUI.Colors.BORDER_BRONZE,
-    })
+    -- Deliberately no square/backdrop: just the icon and text.
     badge.icon = badge:CreateTexture(nil, "ARTWORK")
     badge.icon:SetSize(L.SIDECAR_BADGE_ICON, L.SIDECAR_BADGE_ICON)
     badge.icon:SetPoint("LEFT", badge, "LEFT", 3, 0)
@@ -105,8 +101,8 @@ function SidecarHUD:Build(root, handlers)
     return sidecar
 end
 
--- Column of badges right of the Mini, vertically centred on its portrait
--- (a fixed spot, so Gold never moves when Ammo hides); strip 3px under the
+-- Badges right of the Mini, vertically centred on its portrait as a column
+-- (gold + ammo) or, with no ammo, gold alone on the portrait's midpoint; strip 3px under the
 -- Mini, left-aligned with it. Near the right/bottom screen edge the badges
 -- flip to the Mini's left / the strip moves above it. The Mini never moves.
 function SidecarHUD:Layout(sidecar)
@@ -131,8 +127,14 @@ function SidecarHUD:Layout(sidecar)
             badge:SetPoint("TOPLEFT", root, "TOPLEFT", L.MINI_WIDTH + L.SIDECAR_MINI_GAP, y)
         end
     end
-    place(sidecar.gold, columnTop)
-    place(sidecar.ammo, columnTop - L.SIDECAR_BADGE_HEIGHT - L.SIDECAR_BADGE_GAP)
+    if sidecar.ammo:IsShown() then
+        place(sidecar.gold, columnTop)
+        place(sidecar.ammo, columnTop - L.SIDECAR_BADGE_HEIGHT - L.SIDECAR_BADGE_GAP)
+    else
+        -- Gold alone sits on the Mini portrait's midpoint.
+        place(sidecar.gold, -(L.MINI_PORTRAIT_SIZE - L.SIDECAR_BADGE_HEIGHT) / 2)
+        place(sidecar.ammo, columnTop - L.SIDECAR_BADGE_HEIGHT - L.SIDECAR_BADGE_GAP)
+    end
 
     -- Left-aligned with the Mini (right-aligned when flipped).
     local strip = sidecar.strip
