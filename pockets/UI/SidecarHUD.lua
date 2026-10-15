@@ -26,7 +26,7 @@ SidecarHUD.STRIP_SPEC = {
     gap = L.SIDECAR_STRIP_GAP,
     padX = L.SIDECAR_STRIP_PAD_X,
     height = L.SIDECAR_STRIP_HEIGHT,
-    backdrop = PHUI.Backdrops.BADGE, -- flat 1px bronze edge, no ornament
+    backdrop = PHUI.Backdrops.ROUNDED_SMALL, -- lightly rounded, thin
 }
 
 --------------------------------------------------

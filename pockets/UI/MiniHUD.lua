@@ -65,7 +65,7 @@ function MiniHUD:Build(parent)
             height = L.MINI_BADGE_HEIGHT,
             overlap = L.MINI_BADGE_OVERLAP,
             font = PHUI.Fonts.MINI_COUNT,
-            backdrop = PHUI.Backdrops.BADGE,
+            backdrop = PHUI.Backdrops.ROUNDED_SMALL,
             bgColor = PHUI.Colors.BADGE_BG,
             borderColor = PHUI.Colors.BORDER_BRONZE,
             textColor = PHUI.Colors.TEXT_PRIMARY,

@@ -137,6 +137,16 @@ PHUI.Spacing = {
 -- throughout pH's UI)
 --------------------------------------------------
 PHUI.Backdrops = {
+    -- Lightly rounded small surface (count badges, compact strips): the
+    -- tooltip border art scaled down so the corners curve but stay thin.
+    ROUNDED_SMALL = {
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    },
     -- Flat badge: solid fill with a 1px outline (no tooltip ornament).
     BADGE = {
         bgFile = "Interface\\Buttons\\WHITE8X8",
