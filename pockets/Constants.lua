@@ -330,10 +330,9 @@ Constants.LAYOUT = {
     MINI_HEIGHT = 77,
     MINI_PORTRAIT_SIZE = 60,
     -- Breathing room: rim r30 | 2px gap | ring r26-22 | 4px gap | bag r18.
-    -- Native ring hole is ~51px: ring r22-18 sits inside it, bag r16 inside that.
-    MINI_ICON_SIZE = 32,
+    MINI_ICON_SIZE = 36,
     MINI_RING_THICKNESS = 4,
-    MINI_RING_INSET = 8, -- capacity ring sits this far inside the portrait edge, per side
+    MINI_RING_INSET = 4, -- ring sits this far inside the portrait rim, per side
     MINI_BADGE_WIDTH = 62,
     MINI_BADGE_HEIGHT = 22,
     MINI_BADGE_OVERLAP = 5,
@@ -361,7 +360,7 @@ Constants.LAYOUT = {
     RADIAL_ARC_STEP = 48, -- degrees between satellites: ~a quarter circle for three
     RADIAL_RADIUS = 76, -- arc radius; clears the 65x77 Mini and its hanging badge
     RADIAL_NODE_SIZE = 42,
-    RADIAL_NODE_ICON = 26,
+    RADIAL_NODE_ICON = 30,
     RADIAL_BADGE_WIDTH = 42,
     RADIAL_GOLD_BADGE_WIDTH = 52,
     RADIAL_BADGE_HEIGHT = 14,
