@@ -1,6 +1,6 @@
 --[[
     UI/SidecarHUD.lua - Pockets' Sidecar HUD: the existing Mini with gold
-    and ammo (icon + text, no frames) stacked to its right and the five newest recent items in a
+    and ammo (icon + text on a soft dark pill) stacked to its right and the five newest recent items in a
     strip beneath it spanning exactly the same width (no outer frame).
 
     No labels. The root keeps the Mini footprint, so the Mini never moves;
@@ -80,7 +80,7 @@ end
 
 -- Badge width: at least the spec width, grown to fit icon + text (no clipping).
 function SidecarHUD.BadgeWidth(textWidth)
-    local pad = 3
+    local pad = 4
     return math.max(L.SIDECAR_BADGE_WIDTH, pad * 3 + L.SIDECAR_BADGE_ICON + (textWidth or 0))
 end
 
@@ -92,12 +92,20 @@ local function CreateBadge(root, handlers)
     local badge = CreateFrame("Button", nil, root, "BackdropTemplate")
     badge:SetSize(L.SIDECAR_BADGE_WIDTH, L.SIDECAR_BADGE_HEIGHT)
     badge:RegisterForClicks("AnyUp")
-    -- Deliberately no square/backdrop: just the icon and text.
+    -- Soft dark rounded pill (translucent, faint bronze edge) so the value
+    -- stays readable over bright scenery.
+    PHUI.ApplyBackdrop(badge, {
+        backdrop = PHUI.Backdrops.ROUNDED_SMALL,
+        bgColor = PHUI.Colors.BADGE_BG,
+        bgAlpha = 0.72,
+        borderColor = PHUI.Colors.BORDER_BRONZE,
+        borderAlpha = 0.55,
+    })
     badge.icon = badge:CreateTexture(nil, "ARTWORK")
     badge.icon:SetSize(L.SIDECAR_BADGE_ICON, L.SIDECAR_BADGE_ICON)
-    badge.icon:SetPoint("LEFT", badge, "LEFT", 3, 0)
+    badge.icon:SetPoint("LEFT", badge, "LEFT", 4, 0)
     badge.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    badge.text = PHUI.CreateLabel(badge, "primary", nil, PHUI.Fonts.NODE_COUNT)
+    badge.text = PHUI.CreateLabel(badge, "primary", nil, PHUI.Fonts.SIDECAR_VALUE)
     badge.text:SetPoint("LEFT", badge.icon, "RIGHT", 3, 0)
     badge.text:SetJustifyH("LEFT")
     badge:SetScript("OnEnter", function(self)

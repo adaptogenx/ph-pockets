@@ -340,10 +340,10 @@ Constants.LAYOUT = {
     -- Sidecar HUD: gold/ammo badges right of the Mini, compact recent strip
     -- 3px beneath it. No labels, no frames beyond 1px bronze edges.
     SIDECAR_BADGE_WIDTH = 52, -- minimum column width: 62 Mini + 4 gap + 52 = 118 = 5*22 + 4*2; grows with text
-    SIDECAR_BADGE_HEIGHT = 18,
+    SIDECAR_BADGE_HEIGHT = 22,
     SIDECAR_BADGE_GAP = 3, -- between the stacked badges
     SIDECAR_MINI_GAP = 4, -- Mini -> badges
-    SIDECAR_BADGE_ICON = 12,
+    SIDECAR_BADGE_ICON = 16,
     SIDECAR_STRIP_ICONS = 5,
     -- Recent strip spans exactly the Mini + gold/ammo width (118px at the
     -- minimum): 5 icons of 22px, 2px apart, no padding, no outer frame.

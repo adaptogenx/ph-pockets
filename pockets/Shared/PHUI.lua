@@ -75,6 +75,8 @@ PHUI.Fonts = {
     CAPACITY = { "Fonts\\FRIZQT__.TTF", 13, "" },
     -- Count text on the Mini HUD badge.
     -- Radial satellite badge text / item stack count.
+    -- Sidecar gold/ammo value text.
+    SIDECAR_VALUE = { "Fonts\\FRIZQT__.TTF", 12, "" },
     NODE_COUNT = { "Fonts\\FRIZQT__.TTF", 10, "" },
     NODE_STACK = { "Fonts\\FRIZQT__.TTF", 10, "OUTLINE" },
     MINI_COUNT = { "Fonts\\FRIZQT__.TTF", 15, "" },
