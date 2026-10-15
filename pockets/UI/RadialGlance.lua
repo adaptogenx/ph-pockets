@@ -159,12 +159,14 @@ function RadialGlance.CreateStrip(root, handlers, spec)
     spec = spec or RadialGlance.STRIP_SPEC
     local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
     strip:SetSize(RadialGlance.StripWidth(spec.icons, spec), spec.height)
-    PHUI.ApplyBackdrop(strip, {
-        backdrop = spec.backdrop,
-        bgColor = PHUI.Colors.BG_DARK,
-        bgAlpha = L.GLANCE_ALPHA,
-        borderColor = PHUI.Colors.BORDER_BRONZE,
-    })
+    if spec.backdrop then -- the Sidecar strip has no outer frame
+        PHUI.ApplyBackdrop(strip, {
+            backdrop = spec.backdrop,
+            bgColor = PHUI.Colors.BG_DARK,
+            bgAlpha = L.GLANCE_ALPHA,
+            borderColor = PHUI.Colors.BORDER_BRONZE,
+        })
+    end
     strip:Hide()
     strip.icons = {}
     local bronze = PHUI.Colors.BORDER_BRONZE

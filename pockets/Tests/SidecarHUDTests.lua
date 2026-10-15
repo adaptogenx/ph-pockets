@@ -29,11 +29,11 @@ end
 
 TestRunner:Register("Sidecar: layout tokens match the spec", function()
     local S = SidecarHUD.STRIP_SPEC
-    local ok = L.SIDECAR_BADGE_WIDTH == 42 and L.SIDECAR_BADGE_HEIGHT == 18 and L.SIDECAR_BADGE_GAP == 3
-        and L.SIDECAR_MINI_GAP == 4 and S.icon == 18 and S.gap == 3 and S.padX == 4 and S.height == 26
-        and L.SIDECAR_STRIP_BELOW == 3 and S.icons == 5
-        and S.height == S.icon + 8 -- 4px vertical padding
-        and RadialGlance.StripWidth(5, S) <= L.MINI_WIDTH + L.SIDECAR_MINI_GAP + L.SIDECAR_BADGE_WIDTH + 4
+    local ok = L.SIDECAR_BADGE_HEIGHT == 18 and L.SIDECAR_BADGE_GAP == 3 and L.SIDECAR_MINI_GAP == 4
+        and S.icon == 22 and S.gap == 2 and S.padX == 0 and S.height == 22 and S.icons == 5
+        and S.backdrop == nil and L.SIDECAR_STRIP_BELOW == 4
+        -- Mini + gap + minimum column = exactly five icons and four gaps.
+        and L.MINI_WIDTH + L.SIDECAR_MINI_GAP + L.SIDECAR_BADGE_WIDTH == 5 * 22 + 4 * 2
     return ok, ok and "OK" or "bad sidecar tokens"
 end)
 
@@ -51,13 +51,20 @@ TestRunner:Register("Sidecar: gold always present; ammo only when applicable", f
     return ok, ok and "OK" or "bad sidecar model"
 end)
 
-TestRunner:Register("Sidecar: badge is 42px minimum and grows with long text; strip is content-sized", function()
-    local S = SidecarHUD.STRIP_SPEC
-    local ok = SidecarHUD.BadgeWidth(10) == 42 and SidecarHUD.BadgeWidth(40) > 42
-        and RadialGlance.StripWidth(5, S) == 2 * 4 + 5 * 18 + 4 * 3
-        and RadialGlance.StripWidth(2, S) == 2 * 4 + 2 * 18 + 3
-        and RadialGlance.StripWidth(2, S) < RadialGlance.StripWidth(5, S)
-    return ok, ok and "OK" or "bad widths"
+TestRunner:Register("Sidecar: strip spans the container; icons spaced evenly; aligned by screen side", function()
+    local W = 118
+    local five = {}
+    for i = 1, 5 do five[i] = SidecarHUD.IconX(i, 5, W, "left") end
+    local wide = SidecarHUD.StripGap(140)
+    local ok = SidecarHUD.StripGap(W) == 2
+        and five[1] == 0 and five[2] == 24 and five[5] + 22 == W
+        and wide > 2 and SidecarHUD.IconX(5, 5, 140, "left") + 22 == 140
+        and SidecarHUD.IconX(1, 2, W, "right") == W - (2 * 22 + 2)
+        and SidecarHUD.IconX(1, 3, W, "center") == (W - (3 * 22 + 2 * 2)) / 2
+        and SidecarHUD.Align(100, 1000) == "left" and SidecarHUD.Align(500, 1000) == "center"
+        and SidecarHUD.Align(900, 1000) == "right"
+        and SidecarHUD.BadgeWidth(10) == L.SIDECAR_BADGE_WIDTH and SidecarHUD.BadgeWidth(80) > L.SIDECAR_BADGE_WIDTH
+    return ok, ok and "OK" or "bad strip math"
 end)
 
 TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor; no radial satellites", function()
