@@ -288,9 +288,9 @@ local function ShowHelp()
     print("|cff00ff00=== Pockets Commands ===|r")
     print("|cffffff00/pockets show|r - Show/hide the HUD")
     print("|cffffff00/pockets toggle|r - Toggle the full inventory view")
-    print("|cffffff00/pockets categoryview [grid|list]|r - Show or set the Category body view")
-    print("|cffffff00/pockets hud [mini|radial|glance]|r - Show or set the HUD mode (default glance)")
-    print("|cffffff00/pockets recentpreview [on|off]|r - Show or set the large icon + tooltip preview when hovering Recent items (default off)")
+    print("|cffffff00/pockets categoryview [grid||list]|r - Show or set the Category body view")
+    print("|cffffff00/pockets hud [mini||radial||glance]|r - Show or set the HUD mode (default glance)")
+    print("|cffffff00/pockets recentpreview [on||off]|r - Show or set the large icon + tooltip preview when hovering Recent items (default off)")
     print("|cffffff00/pockets help|r - Show this help")
     print("|cffffff00/pockets help dev|r - Show debug/testing commands")
     print("=========================")
@@ -298,8 +298,8 @@ end
 
 local function ShowDevHelp()
     print("|cff00ff00=== Pockets Developer Commands ===|r")
-    print("|cffffff00/pockets debug on|off|r - Enable/disable debug mode")
-    print("|cffffff00/pockets debug verbose on|off|r - Enable/disable verbose logging")
+    print("|cffffff00/pockets debug on||off|r - Enable/disable debug mode")
+    print("|cffffff00/pockets debug verbose on||off|r - Enable/disable verbose logging")
     print("|cffffff00/pockets debug inventory|r - Dump current inventory state")
     print("|cffffff00/pockets debug categories|r - Dump category summary")
     print("|cffffff00/pockets debug estimator|r - Dump capacity estimator state")
@@ -337,7 +337,7 @@ local function HandleCommand(msg)
         elseif requested == "" then
             print("[Pockets] Category view is currently " .. tostring(Pockets.SavedSettings.categoryViewMode))
         else
-            print("[Pockets] Usage: /pockets categoryview grid|list")
+            print("[Pockets] Usage: /pockets categoryview grid||list")
         end
     elseif cmd == "hud" then
         local Mode = Pockets.Constants.HUD_MODE
@@ -351,7 +351,7 @@ local function HandleCommand(msg)
         elseif requested == "" then
             print("[Pockets] HUD mode is currently " .. tostring(Pockets.SavedSettings.hudMode):lower())
         else
-            print("[Pockets] Usage: /pockets hud mini|radial|glance")
+            print("[Pockets] Usage: /pockets hud mini||radial||glance")
         end
     elseif cmd == "recentpreview" then
         local requested = (args[2] or ""):lower()
@@ -362,7 +362,7 @@ local function HandleCommand(msg)
             print("[Pockets] Recent-item hover preview is currently "
                 .. (Pockets.SavedSettings.recentItemPreviewEnabled and "on" or "off"))
         else
-            print("[Pockets] Usage: /pockets recentpreview on|off")
+            print("[Pockets] Usage: /pockets recentpreview on||off")
         end
     elseif cmd == "debug" then
         Pockets.Debug:HandleCommand(args)
