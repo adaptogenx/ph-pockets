@@ -6,7 +6,7 @@
     every game action manually.
 ]]
 
--- luacheck: globals PocketsCharDB
+-- luacheck: globals PocketsCharDB C_Texture
 
 local _, Pockets = ...
 
@@ -260,6 +260,54 @@ function Debug:DumpPortrait()
     print("[Pockets] Saved to PocketsDB.debugPortrait - /reload to write it to disk.")
 end
 
+-- Draws the native portrait-ring atlas at 3x in the screen centre with a
+-- 10-native-pixel grid (every 5th line brighter), so the circle's position
+-- inside the 95x95 art can be measured from a screenshot. Toggle with the
+-- same command. Also saves the atlas info to PocketsDB.debugRing.
+function Debug:ToggleRingView()
+    local ATLAS = "UI-Frame-PortraitMetal-CornerTopLeft"
+    if self.ringView then
+        self.ringView:SetShown(not self.ringView:IsShown())
+        return
+    end
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(ATLAS)
+    local saved = {}
+    if info then
+        for k, v in pairs(info) do
+            saved[#saved + 1] = tostring(k) .. "=" .. tostring(v)
+        end
+        table.sort(saved)
+    else
+        saved[1] = "no atlas info"
+    end
+    PocketsDB.debugRing = saved
+
+    local scale = 3
+    local frame = CreateFrame("Frame", "PocketsRingView", UIParent)
+    frame:SetSize(95 * scale, 95 * scale)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    frame:SetFrameStrata("DIALOG")
+    local bg = frame:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(frame)
+    bg:SetColorTexture(0.2, 0.25, 0.3, 1)
+    local tex = frame:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints(frame)
+    tex:SetAtlas(ATLAS)
+    for i = 0, 95, 10 do
+        local strong = i % 50 == 0
+        local v = frame:CreateTexture(nil, "OVERLAY")
+        v:SetColorTexture(1, strong and 0.2 or 1, strong and 0.2 or 0, strong and 0.9 or 0.35)
+        v:SetSize(1, 95 * scale)
+        v:SetPoint("TOPLEFT", frame, "TOPLEFT", i * scale, 0)
+        local h = frame:CreateTexture(nil, "OVERLAY")
+        h:SetColorTexture(1, strong and 0.2 or 1, strong and 0.2 or 0, strong and 0.9 or 0.35)
+        h:SetSize(95 * scale, 1)
+        h:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -i * scale)
+    end
+    self.ringView = frame
+    print("[Pockets] Ring view shown (grid = 10 native px; red = 0/50). Run again to hide. /reload to save atlas info.")
+end
+
 function Debug:DumpEvents()
     print(COLOR_YELLOW .. "=== Pockets EventBus Subscribers ===" .. COLOR_RESET)
     for eventName, list in pairs(Pockets.Services.EventBus.subscribers) do
@@ -311,8 +359,10 @@ function Debug:HandleCommand(args)
         self:DumpButtonRegions()
     elseif subCmd == "portrait" then
         self:DumpPortrait()
+    elseif subCmd == "ring" then
+        self:ToggleRingView()
     else
-        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions, portrait")
+        print("[Pockets] Debug commands: on, off, verbose, inventory, categories, estimator, events, bags, secure, client, shell, regions, portrait, ring")
     end
 end
 
