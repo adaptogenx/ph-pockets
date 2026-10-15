@@ -378,7 +378,7 @@ function RadialGlance.ConfigureStripIcon(btn, item)
         btn:Hide()
         return
     end
-    btn.icon:SetTexture(item.texture)
+    PHUI.SetSmoothTexture(btn.icon, item.texture)
     btn.count:SetText((item.quantity or 0) > 1 and tostring(item.quantity) or "")
     local color = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
     local c = btn.defaultBorder

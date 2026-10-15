@@ -94,7 +94,7 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
     end)
     InventoryState.GetGeneralCapacity = original
     InventoryState.GetSpecializedCapacities = originalSpec
-    local pass = ok and text == "23/46" and lit == CapacityRing.DEFAULT_SEGMENTS / 2 and not specializedCalled
+    local pass = ok and text == "23/46" and lit == CapacityRing.LitSegments(0.5, Shell.mini.ring.segmentCount) and not specializedCalled
     return pass, pass and "OK" or string.format("text=%s lit=%s spec=%s", tostring(text), tostring(lit), tostring(specializedCalled))
 end)
 

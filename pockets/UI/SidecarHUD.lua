@@ -119,7 +119,7 @@ end
 
 -- Sets icon + text; returns the width this badge needs for its text.
 local function SetBadge(badge, icon, text)
-    badge.icon:SetTexture(icon)
+    PHUI.SetSmoothTexture(badge.icon, icon)
     badge.text:SetText(text)
     return SidecarHUD.BadgeWidth(badge.text:GetStringWidth())
 end

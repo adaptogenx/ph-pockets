@@ -22,6 +22,8 @@
     This file only owns generic, reusable visual primitives.
 ]]
 
+-- luacheck: globals GetPhysicalScreenSize
+
 local _, Pockets = ...
 
 Pockets.UI.PHUI = Pockets.UI.PHUI or {}
@@ -176,6 +178,33 @@ PHUI.Backdrops = {
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     },
 }
+
+--------------------------------------------------
+-- Crisp rendering helpers
+--------------------------------------------------
+
+-- Rounds a size (UI units) to a whole number of physical screen pixels at
+-- the current effective scale, so edges land on pixel boundaries instead of
+-- straddling two (never below one pixel). Unchanged if the client can't
+-- report its resolution.
+function PHUI.PixelSnap(value)
+    if not GetPhysicalScreenSize or not UIParent then
+        return value
+    end
+    local _, height = GetPhysicalScreenSize()
+    local scale = UIParent:GetEffectiveScale()
+    if not height or height <= 0 or not scale or scale <= 0 then
+        return value
+    end
+    local pixel = (768 / height) / scale
+    return math.max(pixel, math.floor(value / pixel + 0.5) * pixel)
+end
+
+-- Sets an icon texture with trilinear filtering, which smooths the
+-- minification of small stock icons instead of leaving them blocky.
+function PHUI.SetSmoothTexture(texture, path)
+    texture:SetTexture(path, nil, nil, "TRILINEAR")
+end
 
 --------------------------------------------------
 -- Backdrop application

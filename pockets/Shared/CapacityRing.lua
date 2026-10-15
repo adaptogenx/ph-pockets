@@ -52,9 +52,12 @@ end
 -- The ring is centred in its own square frame; the caller anchors it.
 function CapacityRing:Create(parent, opts)
     opts = opts or {}
-    local diameter = opts.diameter or 48
-    local thickness = opts.thickness or 4
-    local count = opts.segments or CapacityRing.DEFAULT_SEGMENTS
+    local PHUI = Pockets.UI.PHUI
+    local diameter = PHUI.PixelSnap(opts.diameter or 48)
+    local thickness = PHUI.PixelSnap(opts.thickness or 4)
+    -- About one segment per 1.6px of circumference keeps the stepped edge
+    -- finer than a screen pixel at typical scales.
+    local count = opts.segments or math.max(CapacityRing.DEFAULT_SEGMENTS, math.ceil(math.pi * diameter / 1.6))
 
     local ring = CreateFrame("Frame", nil, parent)
     ring:SetSize(diameter, diameter)

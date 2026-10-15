@@ -59,14 +59,14 @@ function CircularPortrait:Create(parent, opts)
     tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
     local coords = opts.iconTexCoord or { 0.08, 0.92, 0.08, 0.92 }
     tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-    if tex.AddMaskTexture and holder.CreateMaskTexture then
+    if opts.iconMask ~= false and tex.AddMaskTexture and holder.CreateMaskTexture then
         local mask = holder:CreateMaskTexture()
         mask:SetTexture(CIRCLE_MASK)
         mask:SetAllPoints(tex)
         tex:AddMaskTexture(mask)
     end
     if opts.rimColor then
-        local rim = Pockets.UI.CapacityRing:Create(holder, { diameter = size, thickness = opts.rimThickness or 2, segments = 64 })
+        local rim = Pockets.UI.CapacityRing:Create(holder, { diameter = size, thickness = opts.rimThickness or 2 })
         rim:SetPoint("CENTER", holder, "CENTER", 0, 0)
         rim:SetFrameLevel(holder:GetFrameLevel() + 5)
         rim:SetColor(opts.rimColor[1], opts.rimColor[2], opts.rimColor[3])
@@ -75,7 +75,7 @@ function CircularPortrait:Create(parent, opts)
     end
     frame.icon = tex
     function frame:SetIcon(icon)
-        tex:SetTexture(icon)
+        PHUI.SetSmoothTexture(tex, icon)
     end
     if opts.icon then
         frame:SetIcon(opts.icon)

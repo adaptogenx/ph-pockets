@@ -46,7 +46,6 @@ function CircularMetricNode:Create(parent, opts)
     local arc = Pockets.UI.CapacityRing:Create(portrait.portrait, {
         diameter = opts.size - 4,
         thickness = 2,
-        segments = 28,
     })
     arc:SetPoint("CENTER", portrait.portrait, "CENTER", 0, 0)
     arc:SetFrameLevel(portrait.portrait:GetFrameLevel() + 10)
