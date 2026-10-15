@@ -75,7 +75,7 @@ function MiniHUD:Build(parent)
 
     -- Ring sits just inside the portrait rim, above the portrait art.
     local ring = Pockets.UI.CapacityRing:Create(mini.portrait, {
-        diameter = L.MINI_PORTRAIT_SIZE - 5,
+        diameter = L.MINI_PORTRAIT_SIZE - 2 * L.MINI_RING_INSET,
         thickness = L.MINI_RING_THICKNESS,
     })
     ring:SetPoint("CENTER", mini.portrait, "CENTER", 0, 0)

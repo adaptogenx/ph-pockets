@@ -329,8 +329,10 @@ Constants.LAYOUT = {
     MINI_WIDTH = 62, -- = widest piece (badge); the root must match so centre maths is exact
     MINI_HEIGHT = 77,
     MINI_PORTRAIT_SIZE = 60,
-    MINI_ICON_SIZE = 43,
-    MINI_RING_THICKNESS = 5,
+    -- Breathing room: rim r30 | 2px gap | ring r26-22 | 4px gap | bag r18.
+    MINI_ICON_SIZE = 36,
+    MINI_RING_THICKNESS = 4,
+    MINI_RING_INSET = 4, -- ring sits this far inside the portrait rim, per side
     MINI_BADGE_WIDTH = 62,
     MINI_BADGE_HEIGHT = 22,
     MINI_BADGE_OVERLAP = 5,
