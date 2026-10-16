@@ -238,8 +238,9 @@ function Shell:BuildGlance()
     end
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
-    -- Always draw above the template chrome's own child frames.
-    glance:SetFrameLevel(frame:GetFrameLevel() + 10)
+    -- Always draw above the template chrome's own child frames (its title
+    -- bar sits on a high frame level and was covering the header text).
+    glance:SetFrameLevel(frame:GetFrameLevel() + 100)
     frame.glance = glance
     self.frame.glance = glance
 

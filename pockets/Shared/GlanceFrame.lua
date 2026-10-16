@@ -59,11 +59,15 @@ GlanceFrame.TOKENS = {
     -- One deliberate content start (frame x) right of the portrait (its
     -- right edge is ~44): title, bag count and attached tabs share it.
     CHROME_START_X = 48,
-    CHROME_HEADER_TOP = 0,
-    CHROME_HEADER_HEIGHT = 32,
+    -- The template's dark top bar (measured ~2..19 UI px below the frame
+    -- top at this scale) IS the title bar: the header lives on it, so its
+    -- height matches the bar and the body starts right beneath.
+    CHROME_HEADER_TOP = 2,
+    CHROME_HEADER_HEIGHT = 18,
     CHROME_CONTENT_HEIGHT = 40,
-    CHROME_BUTTON = 24,
-    CHROME_BUTTON_GAP = 4,
+    CHROME_BUTTON = 16, -- fits the 18px bar
+    CHROME_BUTTON_ICON = 10,
+    CHROME_BUTTON_GAP = 3,
     CHROME_RIGHT_PAD = 8,
     CHROME_BOTTOM = 6,
 }
@@ -198,7 +202,7 @@ function GlanceFrame:Build(frame, opts)
     -- ETA block: fixed width so the header never changes when the value
     -- comes and goes; value then small muted suffix on one line.
     local eta = CreateFrame("Frame", nil, header)
-    eta:SetSize(T.ETA_WIDTH, T.HEADER_HEIGHT - 2)
+    eta:SetSize(T.ETA_WIDTH, (opts.chrome and T.CHROME_HEADER_HEIGHT or T.HEADER_HEIGHT) - 2)
     eta:SetPoint("LEFT", header.titleText, "RIGHT", T.ETA_GAP, 0)
     header.etaBlock = eta
     header.etaValue = PHUI.CreateLabel(eta, "primary", nil, PHUI.Fonts.ETA_VALUE)
@@ -231,7 +235,8 @@ function GlanceFrame:Build(frame, opts)
             -- Wider box with the icon padded inside it (mockup).
             button:SetSize(buttonW, buttonH)
             button.icon:ClearAllPoints()
-            button.icon:SetSize(T.HEADER_BUTTON_ICON, T.HEADER_BUTTON_ICON)
+            local iconSize = opts.chrome and T.CHROME_BUTTON_ICON or T.HEADER_BUTTON_ICON
+            button.icon:SetSize(iconSize, iconSize)
             button.icon:SetPoint("CENTER", button, "CENTER", 0, 0)
         end
         if previous then

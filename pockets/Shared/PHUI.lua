@@ -69,7 +69,7 @@ PHUI.Fonts = {
     -- and the expanded header title so they can never drift apart.
     TITLE = { "Fonts\\FRIZQT__.TTF", 16, "" },
     -- Compact title for the native portrait-frame header (Glance chrome).
-    TITLE_COMPACT = { "Fonts\\FRIZQT__.TTF", 14, "" },
+    TITLE_COMPACT = { "Fonts\\FRIZQT__.TTF", 12, "" },
     ETA_VALUE = { "Fonts\\FRIZQT__.TTF", 13, "" },
     ETA_SUFFIX = { "Fonts\\FRIZQT__.TTF", 10, "" },
     CAPACITY = { "Fonts\\FRIZQT__.TTF", 13, "" },
