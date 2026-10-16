@@ -67,22 +67,25 @@ TestRunner:Register("Sidecar: strip spans the container; icons spaced evenly; al
 end)
 
 TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor", function()
+    local startedMini = Shell:IsMini()
     local p0, _, rp0, x0, y0 = Shell.root:GetPoint()
-    local ok = WithMode(Mode.SIDECAR, function()
+    local ok = WithMode(Mode.MINI, function()
         local w, h = Shell.root:GetSize()
         local p1, _, rp1, x1, y1 = Shell.root:GetPoint()
-        return Shell:IsSidecar() and Pockets.SavedSettings.hudMode == Mode.SIDECAR
+        return Shell:IsMini() and Pockets.SavedSettings.hudMode == Mode.MINI
             and w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
             and p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
             and Shell.sidecar.gold:IsShown()
     end)
-    local hidden = not Shell.sidecar.gold:IsShown() and not Shell.sidecar.ammo:IsShown()
-        and not Shell.sidecar.strip:IsShown()
+    -- After restoring the player's mode, the pieces are hidden unless that
+    -- mode is Mini itself.
+    local hidden = startedMini or (not Shell.sidecar.gold:IsShown() and not Shell.sidecar.ammo:IsShown()
+        and not Shell.sidecar.strip:IsShown())
     return ok and hidden, (ok and hidden) and "OK" or "sidecar mode state wrong"
 end)
 
 TestRunner:Register("Sidecar: gold centres on the Mini when ammo hides; Mini click opens the list", function()
-    local result = WithMode(Mode.SIDECAR, function()
+    local result = WithMode(Mode.MINI, function()
         local sidecar = Shell.sidecar
         local InventoryState = Pockets.Services.InventoryState
         local original = InventoryState.GetSpecializedCapacities

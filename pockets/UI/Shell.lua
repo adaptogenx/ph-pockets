@@ -289,7 +289,7 @@ end
 function Shell:GetHudMode()
     local mode = Pockets.SavedSettings and Pockets.SavedSettings.hudMode
     local Mode = Constants.HUD_MODE
-    if mode == Mode.MINI or mode == Mode.SIDECAR then
+    if mode == Mode.MINI then
         return mode
     end
     return Mode.GLANCE
@@ -299,13 +299,10 @@ function Shell:IsMini()
     return self:GetHudMode() == Constants.HUD_MODE.MINI
 end
 
-function Shell:IsSidecar()
-    return self:GetHudMode() == Constants.HUD_MODE.SIDECAR
-end
-
--- Mini and Sidecar both show the round Mini centre instead of Glance.
+-- Mini mode (the round Mini plus its gold/ammo pills and recent strip)
+-- replaces Glance's content; Glance is the only other mode.
 function Shell:UsesMiniCenter()
-    return self:IsMini() or self:IsSidecar()
+    return self:IsMini()
 end
 
 -- Swaps which presentation the root frame shows and resizes it. The root's
@@ -323,9 +320,6 @@ function Shell:ApplyHudMode()
         root:SetBackdrop(nil)
         self.mini:Show()
         root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
-        if mode ~= Constants.HUD_MODE.SIDECAR then
-            Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
-        end
     else
         self.mini:Hide()
         Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
@@ -344,7 +338,7 @@ end
 -- combat or for an unknown mode.
 function Shell:SetHudMode(mode)
     local Mode = Constants.HUD_MODE
-    if mode ~= Mode.MINI and mode ~= Mode.SIDECAR and mode ~= Mode.GLANCE then
+    if mode ~= Mode.MINI and mode ~= Mode.GLANCE then
         return false
     end
     if self:IsCombatBlocked() then
@@ -1010,9 +1004,7 @@ function Shell:RenderInCombat()
     if self.mini and self:UsesMiniCenter() then
         -- Plain textures/text only: safe to update in combat.
         Pockets.UI.MiniHUD:Render(self.mini)
-        if self:IsSidecar() then
-            Pockets.UI.SidecarHUD:Render(self.sidecar, false)
-        end
+        Pockets.UI.SidecarHUD:Render(self.sidecar, false)
     end
     self:SyncStateFromVisibility()
 end
@@ -1263,9 +1255,7 @@ end
 function Shell:RenderGlance()
     if self:UsesMiniCenter() then
         Pockets.UI.MiniHUD:Render(self.mini)
-        if self:IsSidecar() then
-            Pockets.UI.SidecarHUD:Render(self.sidecar)
-        end
+        Pockets.UI.SidecarHUD:Render(self.sidecar)
         return
     end
     if self:DeferIfItemsBlocked() then

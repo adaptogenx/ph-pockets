@@ -77,15 +77,9 @@ TestRunner:Register("Mini: ring lights segments proportionally (0 none, full all
     return ok, ok and "OK" or "bad segment count"
 end)
 
-TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacity only", function()
+TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacity", function()
     local InventoryState = Pockets.Services.InventoryState
     local original = InventoryState.GetGeneralCapacity
-    local specializedCalled = false
-    local originalSpec = InventoryState.GetSpecializedCapacities
-    InventoryState.GetSpecializedCapacities = function(...)
-        specializedCalled = true
-        return originalSpec(...)
-    end
     InventoryState.GetGeneralCapacity = function() return Cap(23, 46) end
     local ok, text, lit = pcall(function()
         return WithMode(Mode.MINI, function()
@@ -93,9 +87,8 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
         end)
     end)
     InventoryState.GetGeneralCapacity = original
-    InventoryState.GetSpecializedCapacities = originalSpec
-    local pass = ok and text == "23/46" and lit == CapacityRing.DEFAULT_SEGMENTS / 2 and not specializedCalled
-    return pass, pass and "OK" or string.format("text=%s lit=%s spec=%s", tostring(text), tostring(lit), tostring(specializedCalled))
+    local pass = ok and text == "23/46" and lit == CapacityRing.LitSegments(0.5, Shell.mini.ring.segmentCount)
+    return pass, pass and "OK" or string.format("text=%s lit=%s", tostring(text), tostring(lit))
 end)
 
 TestRunner:Register("Mini: footprint matches the Mini layout tokens; no Glance content shown", function()

@@ -63,7 +63,6 @@ Constants.CATEGORY_VIEW_MODE = {
 Constants.HUD_MODE = {
     GLANCE = "GLANCE",
     MINI = "MINI",
-    SIDECAR = "SIDECAR",
 }
 
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
