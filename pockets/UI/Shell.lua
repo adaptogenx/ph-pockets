@@ -816,7 +816,7 @@ function Shell:BuildShell()
         tooltipText = "Back",
         onClick = function() Shell:GoBack() end,
     })
-    header.backButton:SetPoint("LEFT", header, "LEFT", L.SHELL_PADDING, 0)
+    header.backButton:SetPoint("LEFT", header, "LEFT", native and 0 or L.SHELL_PADDING, 0) -- native: ~6px right of the ring
     header.backButton.glyph = PHUI.CreateLabel(header.backButton, "primary", "\226\128\185", PHUI.Fonts.SMALL) -- "<"
     header.backButton.glyph:SetPoint("CENTER", 0, 0)
     if native then
