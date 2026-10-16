@@ -286,10 +286,12 @@ end
 
 -- EXPERIMENT: the category list rendered inside the open native frame.
 -- Geometry (UI px from the HUD's top-left): the title bar ends ~31 down, the
--- inner border is ~14 in from the sides and bottom.
+-- ring ends ~60 down, the inner border is ~14 in from the sides and bottom.
 local NATIVE_WIDTH = 280
-local NATIVE_MIN_HEIGHT = 140 -- shorter and the template's corner art overlaps
-local NATIVE_BODY_TOP = 36
+local NATIVE_MIN_HEIGHT = 150 -- shorter and the template's corner art overlaps
+-- The portrait ring hangs ~60px below the top-left, so the body starts below
+-- it (like Blizzard's Professions window) instead of overlapping it.
+local NATIVE_BODY_TOP = 70
 local NATIVE_BODY_SIDE = 16
 local NATIVE_BODY_BOTTOM = 18
 
