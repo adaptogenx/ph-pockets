@@ -147,6 +147,17 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha)
     if chrome.CloseButton then
         chrome.CloseButton:Hide()
     end
+    -- The template's side rails run the full height of the frame and cut
+    -- through the portrait ring on a frame this short; the corner pieces
+    -- already carry the visible border, so drop the long rails.
+    local nine = chrome.NineSlice
+    if nine then
+        for _, key in ipairs({ "LeftEdge", "RightEdge" }) do
+            if nine[key] then
+                nine[key]:Hide()
+            end
+        end
+    end
     if chrome.SetTitle then
         chrome:SetTitle("")
     end
