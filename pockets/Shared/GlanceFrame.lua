@@ -67,7 +67,10 @@ GlanceFrame.TOKENS = {
     CHROME_BL_KEEP = 38,
     -- How far the native template's art overhangs its rect (left, top, right,
     -- bottom), from the corner pieces' anchors in the portrait-frame dump.
-    CHROME_OVERHANG = { left = 13, top = 16, right = 2, bottom = 8 },
+    -- Inset chosen so the template's ring centre (corner art centre (38.5, 38),
+    -- corner at -13,+16) lands on the Mini portrait's centre (31, 30 from the
+    -- HUD's top-left): opening/closing then keeps the ring where it was.
+    CHROME_OVERHANG = { left = 6, top = 8, right = 2, bottom = 8 },
     CHROME_HEADER_TOP = 0,
     CHROME_HEADER_HEIGHT = 32,
     CHROME_CONTENT_HEIGHT = 40,
@@ -140,7 +143,7 @@ end
 -- title text is set. (The template's close button is hidden only because it
 -- would hide this child frame, not the HUD.) Returns nil when the template
 -- doesn't exist on this client.
-function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
+function GlanceFrame:CreateChrome(frame, portrait, alpha, title, portraitOpts)
     local ok, chrome = pcall(CreateFrame, "Frame", nil, frame, "PortraitFrameTemplate")
     if not ok or not chrome or not chrome.PortraitContainer then
         return nil
@@ -158,6 +161,16 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
         chrome:SetPortraitToAsset(portrait)
     elseif chrome.PortraitContainer.portrait then
         chrome.PortraitContainer.portrait:SetTexture(portrait)
+    end
+    -- Optional: size/centre the bag art to match another HUD's portrait
+    -- (portraitOpts = { size, centerX, centerY } from the frame's TOPLEFT).
+    local art = chrome.PortraitContainer.portrait
+    if portraitOpts and art then
+        art:SetTexture(portrait)
+        art:SetTexCoord(0, 1, 0, 1)
+        art:SetSize(portraitOpts.size, portraitOpts.size)
+        art:ClearAllPoints()
+        art:SetPoint("CENTER", frame, "TOPLEFT", portraitOpts.centerX, portraitOpts.centerY)
     end
     if chrome.CloseButton then
         chrome.CloseButton:Hide()

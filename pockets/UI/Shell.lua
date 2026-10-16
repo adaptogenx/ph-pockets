@@ -226,6 +226,43 @@ end
 -- component opts) - a frame anchored by a single point with only one
 -- dimension known can resolve to a fully indeterminate position, which
 -- is exactly what silently blanked every earlier version of this HUD.
+-- The Mini's dark disc and zoned capacity ring, drawn inside the native
+-- frame's portrait hole so the gauge survives the Mini -> native switch.
+-- Children of the chrome (hidden with it), at frame levels between the
+-- template's portrait container (399) and its border art (499).
+function Shell:BuildNativeGauge(root, chrome)
+    local cx, cy = L.MINI_WIDTH / 2, -L.MINI_PORTRAIT_SIZE / 2
+    local discFrame = CreateFrame("Frame", nil, chrome)
+    discFrame:SetFrameLevel(380)
+    discFrame:SetSize(51, 51) -- the template ring's inner hole
+    discFrame:SetPoint("CENTER", root, "TOPLEFT", cx, cy)
+    local disc = discFrame:CreateTexture(nil, "BACKGROUND")
+    disc:SetAllPoints(discFrame)
+    disc:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    local bg = PHUI.Colors.BG_DARK
+    disc:SetVertexColor(bg[1], bg[2], bg[3], 1)
+
+    local ring = Pockets.UI.CapacityRing:Create(chrome, {
+        diameter = L.MINI_PORTRAIT_SIZE - 2 * L.MINI_RING_INSET,
+        thickness = L.MINI_RING_THICKNESS,
+    })
+    ring:SetPoint("CENTER", root, "TOPLEFT", cx, cy)
+    ring:SetFrameLevel(450)
+    ring:SetColorFn(function(fraction)
+        local c = Pockets.UI.Layout:GetCapacityColor(fraction)
+        return c.r, c.g, c.b
+    end)
+    self.nativeRing = ring
+end
+
+-- Keeps the native frame's ring in step with the main-bag capacity.
+function Shell:RenderNativeRing()
+    if self.nativeRing then
+        local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
+        self.nativeRing:SetFraction(Pockets.UI.MiniHUD.GetFraction(capacity))
+    end
+end
+
 -- WIP (feature/glance-native-template): render ONLY the native
 -- PortraitFrameTemplate with its own title text in the header; everything
 -- else Glance normally builds (our header buttons, ETA, bag/gold/recent
@@ -238,8 +275,15 @@ function Shell:BuildGlance()
     -- Native Forever portrait frame (bag icon in the ring) when the client
     -- has the template; otherwise the plain PHUI backdrop stays.
     local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA,
-        GLANCE_NATIVE_PREVIEW and "pockets" or nil)
+        GLANCE_NATIVE_PREVIEW and "pockets" or nil, {
+            size = L.MINI_ICON_SIZE,
+            centerX = L.MINI_WIDTH / 2,
+            centerY = -L.MINI_PORTRAIT_SIZE / 2,
+        })
     frame.chrome = chrome
+    if chrome then
+        self:BuildNativeGauge(frame, chrome)
+    end
     if chrome then
         frame:SetBackdrop(nil)
     end
@@ -1313,6 +1357,7 @@ end
 --------------------------------------------------
 
 function Shell:RenderGlance()
+    self:RenderNativeRing()
     if self:UsesMiniCenter() then
         if not self.nativeOpen then
             Pockets.UI.MiniHUD:Render(self.mini)
