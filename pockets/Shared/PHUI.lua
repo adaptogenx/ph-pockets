@@ -446,6 +446,8 @@ PHUI.Icons = {
     -- borderless like PLUS (the arrow art is its own button face).
     NEXT = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up",
     NEXT_PUSHED = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Down",
+    -- Back arrow: the spellbook previous-page sibling of NEXT.
+    PREV = "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up",
 }
 
 --- Borderless icon button: a plain Blizzard texture with no backdrop/box

@@ -801,10 +801,11 @@ function Shell:BuildShell()
     local header = CreateFrame("Frame", nil, shell, "BackdropTemplate")
     -- Native: a transparent strip over the template's title bar, to the right
     -- of the portrait ring; the template's own title/X are used.
-    -- The template's title bar is centred ~27px below the frame's top-left
-    -- (measured from the opened frame), so the 26px header sits at y = 14.
-    header:SetPoint("TOPLEFT", shell, "TOPLEFT", native and 66 or 0, native and -14 or 0)
-    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", native and -8 or 0, native and -14 or 0)
+    -- The template's title bar is centred ~19px below the frame's top-left
+    -- (its X button sits at the chrome's top-right, -2/+1, 24px tall, and the
+    -- chrome is inset 8px), so the 26px header sits at y = 6.
+    header:SetPoint("TOPLEFT", shell, "TOPLEFT", native and 66 or 0, native and -6 or 0)
+    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", native and -8 or 0, native and -6 or 0)
     header:SetHeight(L.SHELL_HEADER_HEIGHT)
     shell.header = header
     if not native then
@@ -819,10 +820,15 @@ function Shell:BuildShell()
     header.backButton.glyph = PHUI.CreateLabel(header.backButton, "primary", "\226\128\185", PHUI.Fonts.SMALL) -- "<"
     header.backButton.glyph:SetPoint("CENTER", 0, 0)
     if native then
-        -- Bigger arrow, full header height (the 20px / small-font default
-        -- read as a speck on the title bar).
-        header.backButton:SetSize(26, 26)
-        header.backButton.glyph:SetFont("Fonts\\FRIZQT__.TTF", 30, "")
+        -- A real arrow texture (a font glyph read as a speck) in a box that
+        -- fits the title bar's height, like the loot / plus buttons.
+        header.backButton:SetSize(22, 22)
+        header.backButton.glyph:Hide()
+        local arrow = header.backButton:CreateTexture(nil, "OVERLAY")
+        arrow:SetSize(24, 24)
+        arrow:SetPoint("CENTER", header.backButton, "CENTER", 0, 0)
+        arrow:SetTexture(PHUI.Icons.PREV)
+        header.backButton.arrow = arrow
     end
 
     header.titleText = PHUI.CreateLabel(header, "primary", "Pockets", PHUI.Fonts.TITLE)
