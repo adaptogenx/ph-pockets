@@ -12,6 +12,8 @@
     tokens below are the chassis' own, in logical pixels at scale 1.
 ]]
 
+-- luacheck: globals C_Texture
+
 local _, Pockets = ...
 
 Pockets.UI.GlanceFrame = Pockets.UI.GlanceFrame or {}
@@ -59,6 +61,12 @@ GlanceFrame.TOKENS = {
     -- One deliberate content start (frame x) right of the portrait (its
     -- right edge is ~44): title, bag count and attached tabs share it.
     CHROME_START_X = 48,
+    -- Bottom-left corner art is 100px tall with a vertical rail up its left
+    -- side; on this short frame it reaches above the frame top and runs
+    -- through the portrait ring. Only the part below the ring (ring bottom
+    -- is ~52 native px under the frame top; the piece's bottom is 94 below)
+    -- is kept.
+    CHROME_BL_KEEP = 38,
     CHROME_HEADER_TOP = 0,
     CHROME_HEADER_HEIGHT = 32,
     CHROME_CONTENT_HEIGHT = 40,
@@ -151,6 +159,16 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
     -- through the portrait ring on a frame this short; the corner pieces
     -- already carry the visible border, so drop the long rails.
     local nine = chrome.NineSlice
+    local bl = nine and nine.BottomLeftCorner
+    if bl and bl.GetAtlas and C_Texture and C_Texture.GetAtlasInfo then
+        local info = bl:GetAtlas() and C_Texture.GetAtlasInfo(bl:GetAtlas())
+        if info and info.height and info.height > T.CHROME_BL_KEEP then
+            local frac = T.CHROME_BL_KEEP / info.height
+            local top, bottom = info.topTexCoord, info.bottomTexCoord
+            bl:SetHeight(T.CHROME_BL_KEEP)
+            bl:SetTexCoord(info.leftTexCoord, info.rightTexCoord, bottom - (bottom - top) * frac, bottom)
+        end
+    end
     if nine then
         for _, key in ipairs({ "LeftEdge", "RightEdge" }) do
             if nine[key] then
