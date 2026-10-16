@@ -247,12 +247,36 @@ function Shell:BuildNativeGauge(root, chrome)
         thickness = L.MINI_RING_THICKNESS,
     })
     ring:SetPoint("CENTER", root, "TOPLEFT", cx, cy)
-    ring:SetFrameLevel(450)
+    -- Above the template's border art (499; hints at 515): its ring has an
+    -- inner shadow that was covering most of our ring's thickness.
+    ring:SetFrameLevel(520)
     ring:SetColorFn(function(fraction)
         local c = Pockets.UI.Layout:GetCapacityColor(fraction)
         return c.r, c.g, c.b
     end)
     self.nativeRing = ring
+
+    -- Clicking the bag collapses the open frame back to the Mini. Drags are
+    -- forwarded so the frame can still be moved from the portrait.
+    local btn = CreateFrame("Button", nil, chrome)
+    btn:SetSize(L.MINI_PORTRAIT_SIZE, L.MINI_PORTRAIT_SIZE)
+    btn:SetPoint("CENTER", root, "TOPLEFT", cx, cy)
+    btn:SetFrameLevel(530)
+    btn:RegisterForClicks("AnyUp")
+    btn:SetScript("OnClick", function()
+        if Shell.nativeOpen then
+            Shell:SetNativeOpen(false)
+        end
+    end)
+    btn:RegisterForDrag("LeftButton")
+    btn:SetScript("OnDragStart", function()
+        local handler = root:GetScript("OnDragStart")
+        if handler then handler(root) end
+    end)
+    btn:SetScript("OnDragStop", function()
+        local handler = root:GetScript("OnDragStop")
+        if handler then handler(root) end
+    end)
 end
 
 -- Keeps the native frame's ring in step with the main-bag capacity.
