@@ -159,6 +159,11 @@ function Shell:ShouldShowAmmoRow(ammoCapacity)
 end
 
 function Shell:GetParentState(state)
+    -- EXPERIMENT: with the native frame open, its own category list replaces
+    -- the old Menu, so Back from a category returns to the HUD (GLANCE).
+    if state == self.STATE.CATEGORY and self.nativeOpen then
+        return self.STATE.GLANCE
+    end
     return ESCAPE_PARENT[state]
 end
 
@@ -279,6 +284,68 @@ function Shell:BuildNativeGauge(root, chrome)
     end)
 end
 
+-- EXPERIMENT: the category list rendered inside the open native frame.
+-- Geometry (UI px from the HUD's top-left): the title bar ends ~31 down, the
+-- inner border is ~14 in from the sides and bottom.
+local NATIVE_WIDTH = 280
+local NATIVE_MIN_HEIGHT = 140 -- shorter and the template's corner art overlaps
+local NATIVE_BODY_TOP = 36
+local NATIVE_BODY_SIDE = 16
+local NATIVE_BODY_BOTTOM = 18
+
+function Shell:BuildNativeBody(root, chrome)
+    local body = CreateFrame("Frame", nil, chrome)
+    body:SetFrameLevel(520)
+    body:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_BODY_SIDE, -NATIVE_BODY_TOP)
+    body:SetPoint("TOPRIGHT", root, "TOPRIGHT", -NATIVE_BODY_SIDE, -NATIVE_BODY_TOP)
+    body:SetHeight(1)
+    self.nativeBody = body
+    self.nativeRows = {}
+end
+
+-- Rows for every non-empty category (same data and click as the old Menu),
+-- then the frame is sized to fit them. Out of combat only for the resize.
+function Shell:RenderNativeBody()
+    local body = self.nativeBody
+    if not body then
+        return
+    end
+    local visible = {}
+    for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
+        if entry.count > 0 then
+            table.insert(visible, entry)
+        end
+    end
+    local rowWidth = NATIVE_WIDTH - 2 * NATIVE_BODY_SIDE
+    for index, entry in ipairs(visible) do
+        local row = self.nativeRows[index]
+        if not row then
+            row = CreateMenuRow(body, rowWidth)
+            self.nativeRows[index] = row
+        end
+        row.categoryID = entry.categoryID
+        row.icon:SetTexture(entry.icon)
+        row.label:SetText(entry.label)
+        row.count:SetText(tostring(entry.count))
+        row:SetWidth(rowWidth)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
+        row:SetScript("OnClick", function()
+            Shell:SetState(Shell.STATE.CATEGORY, { categoryID = entry.categoryID })
+        end)
+        row:Show()
+    end
+    for index = #visible + 1, #self.nativeRows do
+        self.nativeRows[index]:Hide()
+    end
+    body:SetHeight(math.max(1, #visible * L.LIST_ROW_HEIGHT))
+    if not self:IsCombatBlocked() then
+        local height = math.max(NATIVE_MIN_HEIGHT,
+            NATIVE_BODY_TOP + #visible * L.LIST_ROW_HEIGHT + NATIVE_BODY_BOTTOM)
+        self.root:SetSize(NATIVE_WIDTH, height)
+    end
+end
+
 -- Keeps the native frame's ring in step with the main-bag capacity.
 function Shell:RenderNativeRing()
     if self.nativeRing then
@@ -307,6 +374,7 @@ function Shell:BuildGlance()
     frame.chrome = chrome
     if chrome then
         self:BuildNativeGauge(frame, chrome)
+        self:BuildNativeBody(frame, chrome)
     end
     if chrome then
         frame:SetBackdrop(nil)
@@ -413,7 +481,7 @@ function Shell:ApplyHudMode()
         if root.chrome.CloseButton then
             root.chrome.CloseButton:Show()
         end
-        root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
+        self:RenderNativeBody() -- category list; sizes the frame to fit
     elseif mode ~= Constants.HUD_MODE.GLANCE then
         root.glance:Hide()
         if root.chrome then
@@ -1383,7 +1451,9 @@ end
 function Shell:RenderGlance()
     self:RenderNativeRing()
     if self:UsesMiniCenter() then
-        if not self.nativeOpen then
+        if self.nativeOpen then
+            self:RenderNativeBody()
+        else
             Pockets.UI.MiniHUD:Render(self.mini)
             Pockets.UI.SidecarHUD:Render(self.sidecar)
         end
