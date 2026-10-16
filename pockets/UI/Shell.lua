@@ -68,7 +68,29 @@ local ESCAPE_PARENT = {
 -- SEARCH passes false - Quick Search has "No footer" by design (product
 -- intent: it is not another inventory-browsing surface), so its total
 -- height must not reserve footer space that will never be shown.
+-- Native (PortraitFrameTemplate) chrome around the expanded panel. Geometry in
+-- UI px: the title bar + portrait ring take the top EXP_HEADER; the body sits
+-- EXP_SIDE in from the frame sides (so the viewport stays BodyViewportWidth
+-- wide: SHELL_WIDTH + EXP_WIDTH_EXTRA - 2 * EXP_SIDE); the footer bar sits on
+-- the bottom inner border.
+local EXP_HEADER = 62
+local EXP_SIDE = 16
+local EXP_FOOTER_SIDE = 12
+local EXP_BOTTOM = 14
+local EXP_WIDTH_EXTRA = 2 * (EXP_SIDE - L.SHELL_PADDING)
+
+local function IsNativeShell()
+    return Shell.expanded ~= nil and Shell.expanded.chrome ~= nil
+end
+
 local function TotalHeightForBody(bodyHeight, includeFooter)
+    if IsNativeShell() then
+        local total = EXP_HEADER + bodyHeight + EXP_BOTTOM
+        if includeFooter ~= false then
+            total = total + L.SHELL_FOOTER_HEIGHT
+        end
+        return total
+    end
     if includeFooter == false then
         return L.SHELL_HEADER_HEIGHT + bodyHeight
     end
@@ -235,7 +257,7 @@ end
 -- frame's portrait hole so the gauge survives the Mini -> native switch.
 -- Children of the chrome (hidden with it), at frame levels between the
 -- template's portrait container (399) and its border art (499).
-function Shell:BuildNativeGauge(root, chrome)
+function Shell:BuildNativeGauge(root, chrome, onPortraitClick)
     local cx, cy = L.MINI_WIDTH / 2, -L.MINI_PORTRAIT_SIZE / 2
     local discFrame = CreateFrame("Frame", nil, chrome)
     discFrame:SetFrameLevel(380)
@@ -259,20 +281,19 @@ function Shell:BuildNativeGauge(root, chrome)
         local c = Pockets.UI.Layout:GetCapacityColor(fraction)
         return c.r, c.g, c.b
     end)
-    self.nativeRing = ring
+    root.gaugeRing = ring
+    if root == self.root then
+        self.nativeRing = ring
+    end
 
-    -- Clicking the bag collapses the open frame back to the Mini. Drags are
+    -- Clicking the bag runs onPortraitClick (collapse / close). Drags are
     -- forwarded so the frame can still be moved from the portrait.
     local btn = CreateFrame("Button", nil, chrome)
     btn:SetSize(L.MINI_PORTRAIT_SIZE, L.MINI_PORTRAIT_SIZE)
     btn:SetPoint("CENTER", root, "TOPLEFT", cx, cy)
     btn:SetFrameLevel(530)
     btn:RegisterForClicks("AnyUp")
-    btn:SetScript("OnClick", function()
-        if Shell.nativeOpen then
-            Shell:SetNativeOpen(false)
-        end
-    end)
+    btn:SetScript("OnClick", onPortraitClick)
     btn:RegisterForDrag("LeftButton")
     btn:SetScript("OnDragStart", function()
         local handler = root:GetScript("OnDragStart")
@@ -513,9 +534,12 @@ end
 
 -- Keeps the native frame's ring in step with the main-bag capacity.
 function Shell:RenderNativeRing()
-    if self.nativeRing then
-        local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
-        self.nativeRing:SetFraction(Pockets.UI.MiniHUD.GetFraction(capacity))
+    local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
+    local fraction = Pockets.UI.MiniHUD.GetFraction(capacity)
+    for _, frame in ipairs({ self.root, self.expanded }) do
+        if frame and frame.gaugeRing then
+            frame.gaugeRing:SetFraction(fraction)
+        end
     end
 end
 
@@ -538,7 +562,11 @@ function Shell:BuildGlance()
         })
     frame.chrome = chrome
     if chrome then
-        self:BuildNativeGauge(frame, chrome)
+        self:BuildNativeGauge(frame, chrome, function()
+            if Shell.nativeOpen then
+                Shell:SetNativeOpen(false)
+            end
+        end)
         self:BuildNativeBody(frame, chrome)
     end
     if chrome then
@@ -720,7 +748,25 @@ end
 
 function Shell:BuildShell()
     local frame = self.expanded
+    -- Native Forever window chrome (same portrait/ring/title bar as the
+    -- opened Mini): the shell and everything in it draw above the template's
+    -- own pieces (levels 399-515). Falls back to the plain backdrop panel
+    -- when the template is missing.
+    local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, nil, "", {
+        size = L.MINI_ICON_SIZE,
+        centerX = L.MINI_WIDTH / 2,
+        centerY = -L.MINI_PORTRAIT_SIZE / 2,
+    })
+    frame.chrome = chrome
+    if chrome then
+        frame:SetBackdrop(nil)
+        self:BuildNativeGauge(frame, chrome, function() Shell:SetState(Shell.STATE.GLANCE) end)
+    end
+    local native = chrome ~= nil
     local shell = CreateFrame("Frame", nil, frame)
+    if native then
+        shell:SetFrameLevel(frame:GetFrameLevel() + 600)
+    end
     -- shell fills frame's rect exactly - frame itself is the one thing
     -- Shell:ApplyDimensions ever resizes (§3 "one logical root frame").
     shell:SetAllPoints(frame)
@@ -738,11 +784,15 @@ function Shell:BuildShell()
     -- slightly more opaque than the body so it reads as a distinct,
     -- structurally-bordered chrome band rather than a strip laid over it.
     local header = CreateFrame("Frame", nil, shell, "BackdropTemplate")
-    header:SetPoint("TOPLEFT", shell, "TOPLEFT", 0, 0)
-    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", 0, 0)
+    -- Native: a transparent strip over the template's title bar, to the right
+    -- of the portrait ring; the template's own title/X are used.
+    header:SetPoint("TOPLEFT", shell, "TOPLEFT", native and 66 or 0, native and -2 or 0)
+    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", native and -8 or 0, native and -2 or 0)
     header:SetHeight(L.SHELL_HEADER_HEIGHT)
     shell.header = header
-    PHUI.ApplyBackdrop(header, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
+    if not native then
+        PHUI.ApplyBackdrop(header, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
+    end
 
     header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
         tooltipText = "Back",
@@ -761,11 +811,16 @@ function Shell:BuildShell()
     -- Glance, never through the Back/Escape hierarchy. Built and anchored
     -- once here, never hidden/recreated per state, so its position can
     -- never shift between Menu/Category/All.
-    header.closeButton = PHUI.CreateCloseButton(header, {
-        size = L.SHELL_HEADER_CLOSE_WIDTH,
-        onClick = function() Shell:SetState(Shell.STATE.GLANCE) end,
-    })
-    header.closeButton:SetPoint("RIGHT", header, "RIGHT", -L.SHELL_PADDING, 0)
+    if native then
+        header.closeButton = chrome.CloseButton -- the template's own X
+        header.closeButton:SetScript("OnClick", function() Shell:SetState(Shell.STATE.GLANCE) end)
+    else
+        header.closeButton = PHUI.CreateCloseButton(header, {
+            size = L.SHELL_HEADER_CLOSE_WIDTH,
+            onClick = function() Shell:SetState(Shell.STATE.GLANCE) end,
+        })
+        header.closeButton:SetPoint("RIGHT", header, "RIGHT", -L.SHELL_PADDING, 0)
+    end
 
     -- Contextual action (+ / search) sits immediately LEFT of the
     -- always-present X, never in the far-right slot itself.
@@ -811,8 +866,8 @@ function Shell:BuildShell()
     -- connected panel since their left/right/shared edges are coincident
     -- with the root frame's own border, not offset from it.
     shell.footer = CreateFrame("Frame", nil, shell, "BackdropTemplate")
-    shell.footer:SetPoint("BOTTOMLEFT", shell, "BOTTOMLEFT", 0, 0)
-    shell.footer:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", 0, 0)
+    shell.footer:SetPoint("BOTTOMLEFT", shell, "BOTTOMLEFT", native and EXP_FOOTER_SIDE or 0, native and EXP_BOTTOM or 0)
+    shell.footer:SetPoint("BOTTOMRIGHT", shell, "BOTTOMRIGHT", native and -EXP_FOOTER_SIDE or 0, native and EXP_BOTTOM or 0)
     shell.footer:SetHeight(L.SHELL_FOOTER_HEIGHT)
     PHUI.ApplyBackdrop(shell.footer, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
 
@@ -865,8 +920,13 @@ function Shell:BuildShell()
     -- UI/ScrollBar.lua's compact custom Slider lives in that same existing
     -- padding gutter as a sibling, never reserving extra width itself.
     shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell)
-    shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
-    shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
+    if native then
+        shell.scrollFrame:SetPoint("TOPLEFT", shell, "TOPLEFT", EXP_SIDE, -(EXP_HEADER + L.SHELL_PADDING))
+        shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(EXP_SIDE - EXP_FOOTER_SIDE), L.SHELL_PADDING)
+    else
+        shell.scrollFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
+        shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -L.SHELL_PADDING, L.SHELL_PADDING)
+    end
     shell.scrollBar = Pockets.UI.ScrollBar:Create(shell.scrollFrame)
 
     shell.content = CreateFrame("Frame", nil, shell.scrollFrame)
@@ -898,8 +958,13 @@ function Shell:BuildShell()
     -- panel anchored the same way scrollFrame is (under header, inset by
     -- SHELL_PADDING) but sized purely from its own content each render.
     shell.searchPanel = CreateFrame("Frame", nil, shell)
-    shell.searchPanel:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
-    shell.searchPanel:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -L.SHELL_PADDING, -L.SHELL_PADDING)
+    if native then
+        shell.searchPanel:SetPoint("TOPLEFT", shell, "TOPLEFT", EXP_SIDE, -(EXP_HEADER + L.SHELL_PADDING))
+        shell.searchPanel:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -EXP_SIDE, -(EXP_HEADER + L.SHELL_PADDING))
+    else
+        shell.searchPanel:SetPoint("TOPLEFT", header, "BOTTOMLEFT", L.SHELL_PADDING, -L.SHELL_PADDING)
+        shell.searchPanel:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -L.SHELL_PADDING, -L.SHELL_PADDING)
+    end
     shell.searchPanel:Hide()
 
     shell.searchPanel.icon = shell.searchPanel:CreateTexture(nil, "ARTWORK")
@@ -1244,7 +1309,8 @@ end
 -- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
 -- right/down from that fixed point.
 function Shell:ApplyDimensions(bodyHeight, includeFooter)
-    self.expanded:SetSize(L.SHELL_WIDTH, TotalHeightForBody(bodyHeight, includeFooter))
+    local width = L.SHELL_WIDTH + (IsNativeShell() and EXP_WIDTH_EXTRA or 0)
+    self.expanded:SetSize(width, TotalHeightForBody(bodyHeight, includeFooter))
 end
 
 -- Explicit body-clear lifecycle step (§7): hides every kind of body
@@ -1582,7 +1648,9 @@ end
 -- visibility; used by Render and Prewarm.
 function Shell:RenderExpandedContent(state)
     local frame = self.frame
-    PHUI.ApplyBackdrop(self.expanded, { bgAlpha = L.EXPANDED_BODY_ALPHA })
+    if not self.expanded.chrome then
+        PHUI.ApplyBackdrop(self.expanded, { bgAlpha = L.EXPANDED_BODY_ALPHA })
+    end
 
     self:ConfigureHeader()
 
@@ -1678,28 +1746,40 @@ function Shell:ConfigureHeader()
 
     header.backButton:Show()
     header.closeButton:Show()
-    header.titleText:ClearAllPoints()
-    header.titleText:SetPoint("LEFT", header, "LEFT", TITLE_LEFT_OFFSET, 0)
-    header.titleText:SetPoint("RIGHT", header, "RIGHT", -TITLE_RIGHT_OFFSET, 0)
+    local chrome = self.expanded.chrome
+    if chrome then
+        header.titleText:Hide() -- the template's own title text is used
+        header.closeButton:Show()
+    else
+        header.titleText:ClearAllPoints()
+        header.titleText:SetPoint("LEFT", header, "LEFT", TITLE_LEFT_OFFSET, 0)
+        header.titleText:SetPoint("RIGHT", header, "RIGHT", -TITLE_RIGHT_OFFSET, 0)
+    end
+    local function SetTitle(text)
+        header.titleText:SetText(text)
+        if chrome then
+            chrome:SetTitle(text)
+        end
+    end
 
     if state == self.STATE.MENU then
-        header.titleText:SetText("Pockets")
+        SetTitle("Pockets")
         header.plusButton:Show()
         header.lootButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.CATEGORY then
-        header.titleText:SetText(Constants.CATEGORY_LABEL[self.context.categoryID] or "")
+        SetTitle(Constants.CATEGORY_LABEL[self.context.categoryID] or "")
         header.plusButton:Show()
         header.lootButton:Show()
         header.searchBox:Hide()
     elseif state == self.STATE.ALL then
-        header.titleText:SetText("All")
+        SetTitle("All")
         header.plusButton:Hide() -- already in All Items - its slot becomes Search (§3)
         header.lootButton:Hide() -- the search box occupies that zone
         header.searchBox:Show()
     elseif state == self.STATE.LOOT then
         -- Just [ < ] Loot Log [ X ] - nothing contextual.
-        header.titleText:SetText("Loot Log")
+        SetTitle("Loot Log")
         header.plusButton:Hide()
         header.lootButton:Hide()
         header.searchBox:Hide()
@@ -1708,7 +1788,7 @@ function Shell:ConfigureHeader()
         -- [ < ] Search [ X ]. header.searchBox is All Items' OWN search
         -- field, not this one; Quick Search has its own dedicated
         -- EditBox in searchPanel (see RenderSearch).
-        header.titleText:SetText("Search")
+        SetTitle("Search")
         header.plusButton:Hide()
         header.lootButton:Hide()
         header.searchBox:Hide()
