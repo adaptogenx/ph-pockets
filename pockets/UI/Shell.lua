@@ -1779,7 +1779,9 @@ function Shell:RenderCategory(categoryID)
         return
     end
     self:ClearBody()
-    if Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
+    -- EXPERIMENT: categories opened from the native frame always use the
+    -- vertical list (not the large-icon grid), whatever the saved view mode.
+    if self.nativeOpen or Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
         self:RenderCategoryList(categoryID)
     else
         self:RenderCategoryGrid(categoryID)
