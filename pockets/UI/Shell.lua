@@ -326,6 +326,33 @@ local NATIVE_FOOTER_HEIGHT = L.SHELL_FOOTER_HEIGHT
 local NATIVE_BODY_BOTTOM = NATIVE_FOOTER_BOTTOM + NATIVE_FOOTER_HEIGHT + 8
 local NATIVE_FEEDBACK_HEIGHT = 36
 
+-- The native frame's search field: dark rounded box, magnifier icon, faint
+-- "Search" hint. One look for the opened frame and the All Items view.
+local function CreateStyledSearchBox(parent)
+    local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    box:SetHeight(NATIVE_SEARCH_HEIGHT)
+    box:SetAutoFocus(false)
+    box:SetFontObject("GameFontNormalSmall")
+    box:SetTextColor(PHUI.Colors.TEXT_PRIMARY[1], PHUI.Colors.TEXT_PRIMARY[2], PHUI.Colors.TEXT_PRIMARY[3])
+    box:SetTextInsets(22, 6, 0, 0)
+    box:SetMaxLetters(40)
+    PHUI.ApplyBackdrop(box, {
+        backdrop = PHUI.Backdrops.ROUNDED_SMALL, -- lightly rounded, thin
+        bgColor = PHUI.Colors.BADGE_BG,
+        bgAlpha = 0.85,
+    })
+    box.icon = box:CreateTexture(nil, "OVERLAY")
+    box.icon:SetSize(L.SEARCH_ICON_SIZE, L.SEARCH_ICON_SIZE)
+    box.icon:SetPoint("LEFT", box, "LEFT", 5, 0)
+    box.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+    box.hint = PHUI.CreateLabel(box, "muted", "Search", PHUI.Fonts.SMALL)
+    box.hint:SetPoint("LEFT", box, "LEFT", 22, 0)
+    function box:RefreshHint()
+        self.hint:SetShown(self:GetText() == "")
+    end
+    return box
+end
+
 function Shell:BuildNativeBody(root, chrome)
     -- Inset panel behind the list, like Professions' content panels. Uses
     -- Blizzard's template when this client has it, otherwise nothing.
@@ -379,29 +406,12 @@ function Shell:BuildNativeBody(root, chrome)
     body.feedback:Hide()
 
     -- Search box: in the strip under the title bar, to the right of the ring.
-    local box = CreateFrame("EditBox", nil, chrome, "BackdropTemplate")
+    local box = CreateStyledSearchBox(chrome)
     box:SetFrameLevel(530)
-    box:SetHeight(NATIVE_SEARCH_HEIGHT)
     box:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_SEARCH_LEFT, -NATIVE_SEARCH_TOP)
     box:SetPoint("TOPRIGHT", root, "TOPRIGHT", -NATIVE_BODY_SIDE, -NATIVE_SEARCH_TOP)
-    box:SetAutoFocus(false)
-    box:SetFontObject("GameFontNormalSmall")
-    box:SetTextColor(PHUI.Colors.TEXT_PRIMARY[1], PHUI.Colors.TEXT_PRIMARY[2], PHUI.Colors.TEXT_PRIMARY[3])
-    box:SetTextInsets(22, 6, 0, 0)
-    box:SetMaxLetters(40)
-    PHUI.ApplyBackdrop(box, {
-        backdrop = PHUI.Backdrops.ROUNDED_SMALL, -- lightly rounded, thin
-        bgColor = PHUI.Colors.BADGE_BG,
-        bgAlpha = 0.85,
-    })
-    box.icon = box:CreateTexture(nil, "OVERLAY")
-    box.icon:SetSize(L.SEARCH_ICON_SIZE, L.SEARCH_ICON_SIZE)
-    box.icon:SetPoint("LEFT", box, "LEFT", 5, 0)
-    box.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
-    box.hint = PHUI.CreateLabel(box, "muted", "Search", PHUI.Fonts.SMALL)
-    box.hint:SetPoint("LEFT", box, "LEFT", 22, 0)
     box:SetScript("OnTextChanged", function(self)
-        self.hint:SetShown(self:GetText() == "")
+        self:RefreshHint()
         Shell:RenderNativeBody()
     end)
     box:SetScript("OnEscapePressed", function(self)
@@ -618,8 +628,16 @@ function Shell:BuildGlance()
             onClick = function() Shell:OpenLootLog() end,
         })
         logButton:SetFrameLevel(530)
-        logButton:SetPoint("RIGHT", chrome.CloseButton, "LEFT", -6, 0)
+        -- [Loot Log] [+ All Items] [X], same order as the expanded header.
+        local plusButton = PHUI.CreateNativeIconButton(chrome, 20, PHUI.Icons.PLUS, {
+            tooltipText = "All Items",
+            onClick = function() Shell:SetState(Shell.STATE.ALL) end,
+        })
+        plusButton:SetFrameLevel(530)
+        plusButton:SetPoint("RIGHT", chrome.CloseButton, "LEFT", -6, 0)
+        logButton:SetPoint("RIGHT", plusButton, "LEFT", -4, 0)
         self.nativeLogButton = logButton
+        self.nativePlusButton = plusButton
     end
 
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
@@ -869,23 +887,25 @@ function Shell:BuildShell()
     })
     header.lootButton:SetPoint("RIGHT", header.plusButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
 
-    header.searchBox = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
-    -- Same height as Quick Search's own editBox (SEARCH_INPUT_HEIGHT) so
-    -- both search inputs read as the same control, not two different sizes.
-    header.searchBox:SetHeight(L.SEARCH_INPUT_HEIGHT)
-    header.searchBox:SetWidth(L.SHELL_HEADER_RIGHT_WIDTH - 6)
     if native then
-        -- Same place as the opened frame's search box: the strip under the
-        -- title bar, right of the portrait ring.
-        header.searchBox:ClearAllPoints()
-        header.searchBox:SetHeight(NATIVE_SEARCH_HEIGHT)
-        header.searchBox:SetPoint("TOPLEFT", shell, "TOPLEFT", NATIVE_SEARCH_LEFT + 6, -NATIVE_SEARCH_TOP - 1)
-        header.searchBox:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -(EXP_SIDE + 6), -NATIVE_SEARCH_TOP - 1)
+        -- Same look and place as the opened frame's search field: the strip
+        -- under the title bar, right of the portrait ring.
+        header.searchBox = CreateStyledSearchBox(header)
+        header.searchBox:SetPoint("TOPLEFT", shell, "TOPLEFT", NATIVE_SEARCH_LEFT, -NATIVE_SEARCH_TOP)
+        header.searchBox:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -EXP_SIDE, -NATIVE_SEARCH_TOP)
     else
+        header.searchBox = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
+        -- Same height as Quick Search's own editBox (SEARCH_INPUT_HEIGHT) so
+        -- both search inputs read as the same control, not two different sizes.
+        header.searchBox:SetHeight(L.SEARCH_INPUT_HEIGHT)
+        header.searchBox:SetWidth(L.SHELL_HEADER_RIGHT_WIDTH - 6)
         header.searchBox:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+        header.searchBox:SetAutoFocus(false)
     end
-    header.searchBox:SetAutoFocus(false)
     header.searchBox:SetScript("OnTextChanged", function(box)
+        if box.RefreshHint then
+            box:RefreshHint()
+        end
         Shell:RenderAll(box:GetText())
     end)
     -- Same reasoning as searchPanel.editBox's own OnEscapePressed below -
@@ -1816,8 +1836,10 @@ function Shell:ConfigureHeader()
         header.searchBox:Hide()
     elseif state == self.STATE.ALL then
         SetTitle("All")
-        header.plusButton:Hide() -- already in All Items - its slot becomes Search (§3)
-        header.lootButton:Hide() -- the search box occupies that zone
+        -- Native: search lives in its own strip, so every header keeps the
+        -- same Loot Log / All buttons. Old panel: search takes their zone.
+        header.plusButton:SetShown(self.expanded.chrome ~= nil)
+        header.lootButton:SetShown(self.expanded.chrome ~= nil)
         header.searchBox:Show()
     elseif state == self.STATE.LOOT then
         -- Just [ < ] Loot Log [ X ] - nothing contextual.
