@@ -55,12 +55,7 @@ GlanceFrame.TOKENS = {
     -- The header sits right of it; the content row starts right of it too
     -- and the portrait overlaps both rows.
     -- 0.77 * the native 62px portrait = 48px.
-    CHROME_SCALE = 0.77, -- legacy; the portrait below is 48px (0.77 * 62)
-    -- Round bag portrait overlapping the panel's top-left corner.
-    CHROME_PORTRAIT_SIZE = 48,
-    CHROME_PORTRAIT_ICON = 34,
-    CHROME_PORTRAIT_X = -4,
-    CHROME_PORTRAIT_Y = 5,
+    CHROME_SCALE = 0.77,
     -- One deliberate content start (frame x) right of the portrait (its
     -- right edge is ~44): title, bag count and attached tabs share it.
     CHROME_START_X = 48,
@@ -131,30 +126,33 @@ end
 -- Native chrome (Forever's PortraitFrameTemplate)
 --------------------------------------------------
 
--- Chrome for the Glance HUD: a themed panel filling `frame` plus a round
--- bag portrait overlapping its top-left corner (the same CircularPortrait
--- the Mini uses). This replaces Forever's PortraitFrameTemplate, whose own
--- border/title pieces sit at very high frame levels and whose ~95px corner
--- art overlaps itself on a frame this short (measured with
--- /pockets debug portrait). Always returns a frame; our own header supplies
--- the title and buttons.
+-- Creates a PortraitFrameTemplate child filling `frame`, showing `portrait`
+-- (a texture path/fileID) in the native ring. Returns nil when the template
+-- doesn't exist on this client (callers keep their plain backdrop). Our own
+-- header replaces the template's title and close button.
 function GlanceFrame:CreateChrome(frame, portrait, alpha)
-    local chrome = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    chrome:SetAllPoints(frame)
+    local ok, chrome = pcall(CreateFrame, "Frame", nil, frame, "PortraitFrameTemplate")
+    if not ok or not chrome or not chrome.PortraitContainer then
+        return nil
+    end
+    chrome:SetScale(T.CHROME_SCALE)
+    chrome:SetAllPoints(frame) -- anchors resolve in screen space: still fills the frame
     chrome:SetFrameLevel(frame:GetFrameLevel())
     chrome:EnableMouse(false)
-    PHUI.ApplyBackdrop(chrome, { bgAlpha = alpha })
-
-    local round = Pockets.UI.CircularPortrait:Create(chrome, {
-        size = T.CHROME_PORTRAIT_SIZE,
-        icon = portrait,
-        iconSize = T.CHROME_PORTRAIT_ICON,
-        iconTexCoord = { 0, 1, 0, 1 },
-        rimColor = PHUI.Colors.BORDER_BRONZE,
-    })
-    round:SetPoint("TOPLEFT", chrome, "TOPLEFT", T.CHROME_PORTRAIT_X, T.CHROME_PORTRAIT_Y)
-    round:SetFrameLevel(chrome:GetFrameLevel() + 5)
-    chrome.portrait = round
+    if chrome.SetPortraitToAsset then
+        chrome:SetPortraitToAsset(portrait)
+    elseif chrome.PortraitContainer.portrait then
+        chrome.PortraitContainer.portrait:SetTexture(portrait)
+    end
+    if chrome.CloseButton then
+        chrome.CloseButton:Hide()
+    end
+    if chrome.SetTitle then
+        chrome:SetTitle("")
+    end
+    if chrome.Bg and alpha then
+        chrome.Bg:SetAlpha(alpha)
+    end
     return chrome
 end
 
