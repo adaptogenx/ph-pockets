@@ -274,6 +274,12 @@ function Shell:BuildGlance()
     -- Mini HUD: built once, shown instead of Glance when the player picks it.
     self.mini = Pockets.UI.MiniHUD:Build(frame)
     self.mini:Hide()
+    -- EXPERIMENT: the template's X collapses the native frame back to the Mini.
+    if chrome and chrome.CloseButton then
+        chrome.CloseButton:SetScript("OnClick", function()
+            Shell:SetNativeOpen(false)
+        end)
+    end
 
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
     -- footprint so the Mini never moves). Dragging a badge or strip icon
@@ -328,7 +334,19 @@ function Shell:ApplyHudMode()
     local root = self.root
     local T = Pockets.UI.GlanceFrame.TOKENS
     local mode = self:GetHudMode()
-    if mode ~= Constants.HUD_MODE.GLANCE then
+    if mode ~= Constants.HUD_MODE.GLANCE and self.nativeOpen and root.chrome then
+        -- EXPERIMENT: the Mini has opened up into the native frame. Same
+        -- TOPLEFT anchor; the Mini and its sidecar give way to the template.
+        root.glance:Hide()
+        self.mini:Hide()
+        Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
+        root:SetBackdrop(nil)
+        root.chrome:Show()
+        if root.chrome.CloseButton then
+            root.chrome.CloseButton:Show()
+        end
+        root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
+    elseif mode ~= Constants.HUD_MODE.GLANCE then
         root.glance:Hide()
         if root.chrome then
             root.chrome:Hide()
@@ -337,6 +355,10 @@ function Shell:ApplyHudMode()
         self.mini:Show()
         root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
     else
+        self.nativeOpen = false
+        if root.chrome and root.chrome.CloseButton then
+            root.chrome.CloseButton:Hide()
+        end
         self.mini:Hide()
         Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
         root.glance:Show()
@@ -348,6 +370,18 @@ function Shell:ApplyHudMode()
         root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
     end
     self.appliedHudMode = mode
+end
+
+-- EXPERIMENT: Mini <-> native frame. Out of combat only (it resizes the
+-- root). Returns whether the state changed.
+function Shell:SetNativeOpen(open)
+    if not self:IsMini() or not self.root.chrome or self:IsCombatBlocked() then
+        return false
+    end
+    self.nativeOpen = open and true or false
+    self:ApplyHudMode()
+    self:Render()
+    return true
 end
 
 -- Persists and applies a HUD mode. Returns false (and changes nothing) in
@@ -696,7 +730,13 @@ function Shell:Initialize()
     -- flushes it once the drag has fully settled, so no resize can ever
     -- happen mid-move.
     frame:SetScript("OnClick", function()
-        if Shell.state == Shell.STATE.GLANCE then
+        if Shell.state ~= Shell.STATE.GLANCE or Shell.nativeOpen then
+            return
+        end
+        if Shell:IsMini() and frame.chrome then
+            -- EXPERIMENT: clicking the Mini opens the native frame.
+            Shell:SetNativeOpen(true)
+        else
             Shell:SetState(Shell.STATE.MENU)
         end
     end)
@@ -1019,8 +1059,10 @@ function Shell:RenderInCombat()
     pool:RefreshCounts()
     if self.mini and self:UsesMiniCenter() then
         -- Plain textures/text only: safe to update in combat.
-        Pockets.UI.MiniHUD:Render(self.mini)
-        Pockets.UI.SidecarHUD:Render(self.sidecar, false)
+        if not self.nativeOpen then
+            Pockets.UI.MiniHUD:Render(self.mini)
+            Pockets.UI.SidecarHUD:Render(self.sidecar, false)
+        end
     end
     self:SyncStateFromVisibility()
 end
@@ -1272,8 +1314,10 @@ end
 
 function Shell:RenderGlance()
     if self:UsesMiniCenter() then
-        Pockets.UI.MiniHUD:Render(self.mini)
-        Pockets.UI.SidecarHUD:Render(self.sidecar)
+        if not self.nativeOpen then
+            Pockets.UI.MiniHUD:Render(self.mini)
+            Pockets.UI.SidecarHUD:Render(self.sidecar)
+        end
         return
     end
     if self:DeferIfItemsBlocked() then
