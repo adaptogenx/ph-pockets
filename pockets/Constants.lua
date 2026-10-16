@@ -63,7 +63,6 @@ Constants.CATEGORY_VIEW_MODE = {
 Constants.HUD_MODE = {
     GLANCE = "GLANCE",
     MINI = "MINI",
-    RADIAL = "RADIAL",
     SIDECAR = "SIDECAR",
 }
 
@@ -355,28 +354,6 @@ Constants.LAYOUT = {
     SIDECAR_STRIP_HEIGHT = 22,
     SIDECAR_STRIP_BELOW = 4, -- gap under the Mini
 
-    -- Radial Glance (Outer Ring TDD §3): eight fixed semantic slots on a
-    -- ring around the Mini center. Slots clockwise from the top:
-    -- 1 gold, 2 ammo, 3-4 specialized bags, 5-8 recent items (newest first).
-    RADIAL_SLOTS = 4, -- metric satellites: gold, ammo, up to two specialized bags
-    RADIAL_ARC_STEP = 48, -- degrees between satellites: ~a quarter circle for three
-    RADIAL_RADIUS = 76, -- arc radius; clears the 65x77 Mini and its hanging badge
-    RADIAL_NODE_SIZE = 42,
-    RADIAL_NODE_ICON = 30,
-    RADIAL_BADGE_WIDTH = 42,
-    RADIAL_GOLD_BADGE_WIDTH = 52,
-    RADIAL_BADGE_HEIGHT = 14,
-    RADIAL_BADGE_OVERLAP = 6,
-    -- Recent strip right under the radial: 5 exact 24px icons, 6px apart,
-    -- inside a rounded border (8px side padding, 6px top/bottom).
-    RADIAL_STRIP_ICONS = 5,
-    RADIAL_STRIP_ICON = 24,
-    RADIAL_STRIP_GAP = 6,
-    RADIAL_STRIP_PAD_X = 8,
-    RADIAL_STRIP_WIDTH = 160, -- full width (5 icons); the strip shrinks to fit fewer
-    RADIAL_STRIP_HEIGHT = 36,
-    RADIAL_STRIP_OFFSET = 4, -- gap below the lowest visible radial element
-    RADIAL_MAX_SHIFT = 24, -- most the ring may slide to stay on screen
     EXPANDED_BODY_ALPHA = 0.92,
     EXPANDED_CHROME_ALPHA = 0.96,
 

@@ -6,7 +6,7 @@
     No labels. The root keeps the Mini footprint, so the Mini never moves;
     badges and strip are children of the root. Gold sits on the Mini midpoint alone,
     stacks above Ammo when present; the strip is content-sized and hidden
-    when empty. Reuses RadialGlance's data model and recent strip. Nothing
+    when empty. Nothing
     here uses items - clicks only navigate. Reads domain state only; frames
     are built once.
 ]]
@@ -15,7 +15,6 @@ local _, Pockets = ...
 
 Pockets.UI.SidecarHUD = Pockets.UI.SidecarHUD or {}
 local SidecarHUD = Pockets.UI.SidecarHUD
-local RadialGlance = Pockets.UI.RadialGlance
 local PHUI = Pockets.UI.PHUI
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
@@ -33,17 +32,175 @@ SidecarHUD.STRIP_SPEC = {
 -- Pure helpers (unit-testable)
 --------------------------------------------------
 
--- Gold amount (copper) and ammo model (or nil when not applicable), from the
--- same rules the Radial uses: an ammo bag, or any carried ammo.
+-- Gold amount (copper) and ammo model (or nil when not applicable): an
+-- ammo bag, or any carried ammo (any character can carry ammo, not just
+-- ones with a quiver).
 function SidecarHUD.BuildModel(gold, specialized, ammoItems)
-    local models = RadialGlance.BuildModel(gold, specialized, ammoItems)
+    local ammoCount = 0
+    for _, item in ipairs(ammoItems or {}) do
+        ammoCount = ammoCount + (item.quantity or 0)
+    end
     local ammo
-    for _, model in ipairs(models) do
-        if model.isAmmo or model.kind == "ammo" then
-            ammo = model
+    for _, cap in ipairs(specialized or {}) do
+        if cap.class == "ammo" and (cap.total or 0) > 0 then
+            ammo = { kind = "bag", cap = cap, isAmmo = true, ammoCount = ammoCount }
         end
     end
+    -- Loose ammo with no quiver: icon + arrow count only.
+    if not ammo and ammoCount > 0 then
+        ammo = { kind = "ammo", item = ammoItems[1], ammoCount = ammoCount }
+    end
     return { gold = gold or 0, ammo = ammo }
+end
+
+-- The newest recent items for the strip (newest first, max 5).
+function SidecarHUD.BuildRecent(recent)
+    local out = {}
+    for i = 1, math.min(#(recent or {}), SidecarHUD.STRIP_SPEC.icons) do
+        out[i] = recent[i]
+    end
+    return out
+end
+
+-- Strip width for n icons: side padding + icons + gaps between them.
+function SidecarHUD.StripWidth(n, spec)
+    spec = spec or SidecarHUD.STRIP_SPEC
+    n = math.max(1, math.min(n, spec.icons))
+    return 2 * spec.padX + n * spec.icon + (n - 1) * spec.gap
+end
+
+-- Compact carried money that keeps its denomination: "45c", "12s",
+-- "152g", "12.4kg", "1.2mg".
+function SidecarHUD.FormatGold(copper)
+    copper = math.floor(tonumber(copper) or 0)
+    if copper < 0 then
+        copper = 0
+    end
+    local gold = math.floor(copper / 10000)
+    if gold >= 1000000 then
+        return string.format("%.1fmg", gold / 1000000)
+    elseif gold >= 10000 then
+        return string.format("%.1fkg", gold / 1000)
+    elseif gold > 0 then
+        return string.format("%dg", gold)
+    end
+    local silver = math.floor(copper / 100)
+    if silver > 0 then
+        return string.format("%ds", silver)
+    end
+    return string.format("%dc", copper)
+end
+
+-- Stack-style count: "100", "9999", "12k".
+function SidecarHUD.FormatCount(n)
+    n = math.floor(tonumber(n) or 0)
+    if n >= 10000 then
+        return string.format("%dk", math.floor(n / 1000))
+    end
+    return tostring(n)
+end
+
+-- Recent strip: fixed-size frame (never resizes with content), five plain
+-- 24px icon buttons. Hover = item tooltip (+ big preview when enabled);
+-- click = open Recent. Never uses the item.
+function SidecarHUD.CreateStrip(root, handlers, spec)
+    spec = spec or SidecarHUD.STRIP_SPEC
+    local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
+    strip:SetSize(SidecarHUD.StripWidth(spec.icons, spec), spec.height)
+    if spec.backdrop then -- the Sidecar strip has no outer frame
+        PHUI.ApplyBackdrop(strip, {
+            backdrop = spec.backdrop,
+            bgColor = PHUI.Colors.BG_DARK,
+            bgAlpha = L.GLANCE_ALPHA,
+            borderColor = PHUI.Colors.BORDER_BRONZE,
+        })
+    end
+    strip:Hide()
+    strip.icons = {}
+    local bronze = PHUI.Colors.BORDER_BRONZE
+    for i = 1, spec.icons do
+        local btn = CreateFrame("Button", nil, strip, "BackdropTemplate")
+        btn:SetSize(spec.icon, spec.icon)
+        btn:SetPoint("LEFT", strip, "LEFT",
+            spec.padX + (i - 1) * (spec.icon + spec.gap), 0)
+        btn:RegisterForClicks("AnyUp")
+        btn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        btn:SetBackdropColor(0.16, 0.14, 0.11, 0.95) -- visible slot behind each icon
+        btn.icon = btn:CreateTexture(nil, "ARTWORK")
+        btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+        btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        btn.count = PHUI.CreateLabel(btn, "primary", nil, PHUI.Fonts.NODE_STACK)
+        btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        btn.count:SetJustifyH("RIGHT")
+        btn:SetScript("OnClick", function() handlers.openRecent() end)
+        btn:SetScript("OnEnter", function(self)
+            if self.onEnter then self.onEnter(self) end
+        end)
+        btn:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+            if self.onLeave then self.onLeave(self) end
+        end)
+        btn:RegisterForDrag("LeftButton")
+        btn:SetScript("OnDragStart", handlers.dragStart)
+        btn:SetScript("OnDragStop", handlers.dragStop)
+        btn.defaultBorder = bronze
+        btn:Hide()
+        strip.icons[i] = btn
+    end
+    return strip
+end
+
+-- Real item tooltip on hover (bag slot when known, else the link/id), plus
+-- the big floating preview when the player enabled it. Display only.
+function SidecarHUD.ItemHover(item)
+    local function enter(node)
+        GameTooltip:SetOwner(node, "ANCHOR_RIGHT")
+        local BagAPI = Pockets.Adapters.BagAPI
+        local ok = false
+        if item.bagID and item.slotID then
+            ok = pcall(BagAPI.SetTooltipToBagItem, BagAPI, GameTooltip, item.bagID, item.slotID)
+        end
+        if not ok then
+            local link = item.itemLink or (item.itemID and ("item:" .. item.itemID))
+            ok = link ~= nil and pcall(GameTooltip.SetHyperlink, GameTooltip, link)
+        end
+        if ok then
+            GameTooltip:Show()
+        else
+            GameTooltip:Hide()
+        end
+        if Pockets.SavedSettings.recentItemPreviewEnabled then
+            Pockets.UI.ItemPreview:Show(item)
+        end
+    end
+    local function leave()
+        Pockets.UI.ItemPreview:Hide()
+    end
+    return enter, leave
+end
+
+-- Configures one strip icon (or hides it) for a recent-item record.
+function SidecarHUD.ConfigureStripIcon(btn, item)
+    if not item then
+        btn:Hide()
+        return
+    end
+    btn.icon:SetTexture(item.texture)
+    btn.count:SetText((item.quantity or 0) > 1 and tostring(item.quantity) or "")
+    local color = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
+    local c = btn.defaultBorder
+    if color and item.quality > 1 then
+        btn:SetBackdropBorderColor(color.r, color.g, color.b, 1)
+    else
+        btn:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+    end
+    btn.onEnter, btn.onLeave = SidecarHUD.ItemHover(item)
+    btn:Show()
 end
 
 -- Gap between strip icons so five of them span exactly `width` (never less
@@ -132,12 +289,13 @@ local function SetBadge(badge, icon, text)
     return SidecarHUD.BadgeWidth(badge.text:GetStringWidth())
 end
 
--- root: the HUD root (TOPLEFT = Mini's top-left). handlers as RadialGlance's.
+-- root: the HUD root (TOPLEFT = Mini's top-left). handlers: { openRecent,
+-- openAmmo, dragStart, dragStop }.
 function SidecarHUD:Build(root, handlers)
     local sidecar = { root = root, handlers = handlers }
     sidecar.gold = CreateBadge(root, handlers)
     sidecar.ammo = CreateBadge(root, handlers)
-    sidecar.strip = RadialGlance.CreateStrip(root, handlers, SidecarHUD.STRIP_SPEC)
+    sidecar.strip = SidecarHUD.CreateStrip(root, handlers, SidecarHUD.STRIP_SPEC)
     return sidecar
 end
 
@@ -217,13 +375,13 @@ function SidecarHUD:Render(sidecar, layout)
         Pockets.Adapters.MoneyAPI:GetMoney(),
         InventoryState:GetSpecializedCapacities(),
         Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.AMMO))
-    local recent = RadialGlance.BuildRecent(
-        Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.RECENT), SidecarHUD.STRIP_SPEC)
+    local recent = SidecarHUD.BuildRecent(
+        Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.RECENT))
     Pockets.UI.ItemPreview:Hide()
     sidecar.model = model
 
     local gold = sidecar.gold
-    local sideW = SetBadge(gold, Constants.GOLD_ICON, RadialGlance.FormatGold(model.gold))
+    local sideW = SetBadge(gold, Constants.GOLD_ICON, SidecarHUD.FormatGold(model.gold))
     local money = Pockets.UI.MoneyFormat:Format(model.gold)
     gold.onEnter = function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -236,7 +394,7 @@ function SidecarHUD:Render(sidecar, layout)
     if model.ammo then
         local m = model.ammo
         local icon = m.kind == "ammo" and m.item.texture or m.cap.texture
-        sideW = math.max(sideW, SetBadge(ammo, icon, RadialGlance.FormatCount(m.ammoCount or 0)))
+        sideW = math.max(sideW, SetBadge(ammo, icon, SidecarHUD.FormatCount(m.ammoCount or 0)))
         ammo.onEnter = function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Ammo: " .. (m.ammoCount or 0))
@@ -249,7 +407,7 @@ function SidecarHUD:Render(sidecar, layout)
     end
 
     for i, btn in ipairs(sidecar.strip.icons) do
-        RadialGlance.ConfigureStripIcon(btn, recent[i])
+        SidecarHUD.ConfigureStripIcon(btn, recent[i])
     end
     sidecar.sideW = sideW
     sidecar.strip:SetShown(#recent > 0)

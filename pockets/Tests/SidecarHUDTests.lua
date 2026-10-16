@@ -1,6 +1,6 @@
 --[[
     Tests/SidecarHUDTests.lua - Sidecar HUD: layout tokens, gold fixed /
-    ammo conditional, content-sized recent strip, no radial satellites,
+    ammo conditional, content-sized recent strip, no leftover pieces,
     mode persistence, anchor, and click routing.
 ]]
 
@@ -9,7 +9,6 @@ local _, Pockets = ...
 local TestRunner = Pockets.Tests.TestRunner
 local Shell = Pockets.UI.Shell
 local SidecarHUD = Pockets.UI.SidecarHUD
-local RadialGlance = Pockets.UI.RadialGlance
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
 local Mode = Constants.HUD_MODE
@@ -67,19 +66,15 @@ TestRunner:Register("Sidecar: strip spans the container; icons spaced evenly; al
     return ok, ok and "OK" or "bad strip math"
 end)
 
-TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor; no radial satellites", function()
+TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor", function()
     local p0, _, rp0, x0, y0 = Shell.root:GetPoint()
     local ok = WithMode(Mode.SIDECAR, function()
         local w, h = Shell.root:GetSize()
         local p1, _, rp1, x1, y1 = Shell.root:GetPoint()
-        local radialShown = false
-        for _, node in ipairs(Shell.radial.nodes) do
-            radialShown = radialShown or node:IsShown()
-        end
         return Shell:IsSidecar() and Pockets.SavedSettings.hudMode == Mode.SIDECAR
             and w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
             and p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
-            and Shell.sidecar.gold:IsShown() and not radialShown and not Shell.radial.strip:IsShown()
+            and Shell.sidecar.gold:IsShown()
     end)
     local hidden = not Shell.sidecar.gold:IsShown() and not Shell.sidecar.ammo:IsShown()
         and not Shell.sidecar.strip:IsShown()
@@ -112,4 +107,32 @@ TestRunner:Register("Sidecar: gold centres on the Mini when ammo hides; Mini cli
             and Shell:GetState() == Shell.STATE.MENU
     end)
     return result, result and "OK" or "ammo/gold/strip/click behavior wrong"
+end)
+
+TestRunner:Register("Sidecar: gold stays compact and keeps its denomination", function()
+    local F = SidecarHUD.FormatGold
+    local ok = F(0) == "0c" and F(45) == "45c" and F(1200) == "12s" and F(1520000) == "152g"
+        and F(124000000) == "12.4kg" and F(12000000000) == "1.2mg" and F(-5) == "0c" and F(nil) == "0c"
+    return ok, ok and "OK" or string.format("%s %s %s", F(1520000), F(124000000), F(12000000000))
+end)
+
+TestRunner:Register("Sidecar: recent node hover shows the big preview only when enabled", function()
+    local node = Shell.sidecar.strip.icons[1]
+    local settings = Pockets.SavedSettings
+    local original = settings.recentItemPreviewEnabled
+    local record = { itemID = 6948, texture = "Interface\\Icons\\INV_Misc_Rune_01", quantity = 1 }
+    local enter, leave = SidecarHUD.ItemHover(record)
+    settings.recentItemPreviewEnabled = false
+    enter(node)
+    local frame = Pockets.UI.ItemPreview.frame
+    local offOK = not (frame and frame:IsShown())
+    settings.recentItemPreviewEnabled = true
+    enter(node)
+    local onOK = Pockets.UI.ItemPreview.frame:IsShown()
+    leave(node)
+    local hidden = not Pockets.UI.ItemPreview.frame:IsShown()
+    GameTooltip:Hide()
+    settings.recentItemPreviewEnabled = original
+    local ok = offOK and onOK and hidden
+    return ok, ok and "OK" or string.format("off=%s on=%s hidden=%s", tostring(offOK), tostring(onOK), tostring(hidden))
 end)
