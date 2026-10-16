@@ -229,8 +229,7 @@ end
 function Shell:BuildGlance()
     local frame = self.root
     local T = Pockets.UI.GlanceFrame.TOKENS
-    -- Native Forever portrait frame (bag icon in the ring) when the client
-    -- has the template; otherwise the plain PHUI backdrop stays.
+    -- Themed panel with the round bag portrait overlapping its corner.
     local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA)
     frame.chrome = chrome
     if chrome then
@@ -238,7 +237,7 @@ function Shell:BuildGlance()
     end
     local glance = CreateFrame("Frame", nil, frame)
     glance:SetAllPoints(frame)
-    -- Always draw above the template chrome's own child frames.
+    -- Always draw above the chrome panel and portrait.
     glance:SetFrameLevel(frame:GetFrameLevel() + 10)
     frame.glance = glance
     self.frame.glance = glance
