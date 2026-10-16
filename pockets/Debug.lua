@@ -232,9 +232,20 @@ function Debug:DumpPortrait()
             extra = " tex=" .. tostring(obj:GetTexture())
         end
         local point, _, relPoint, x, y = obj:GetPoint(1)
-        out(string.format("%s%s [%s] shown=%s %.0fx%.0f pt=%s/%s %.0f,%.0f%s", indent, tostring(key),
+        -- Stacking info: frames report strata + level; textures their draw
+        -- layer and (for regions) the parent frame's level.
+        local stack = ""
+        if obj.GetFrameLevel then
+            stack = string.format(" strata=%s level=%s", tostring(obj:GetFrameStrata()), tostring(obj:GetFrameLevel()))
+        elseif obj.GetDrawLayer then
+            local layer, sub = obj:GetDrawLayer()
+            local parent = obj:GetParent()
+            stack = string.format(" layer=%s/%s parentLevel=%s", tostring(layer), tostring(sub),
+                tostring(parent and parent.GetFrameLevel and parent:GetFrameLevel()))
+        end
+        out(string.format("%s%s [%s] shown=%s %.0fx%.0f pt=%s/%s %.0f,%.0f%s%s", indent, tostring(key),
             tostring(obj:GetObjectType()), tostring(obj:IsShown()), w or -1, h or -1,
-            tostring(point), tostring(relPoint), x or 0, y or 0, extra))
+            tostring(point), tostring(relPoint), x or 0, y or 0, extra, stack))
     end
     local function dump(frame, indent, depth)
         local names = {}
@@ -254,6 +265,11 @@ function Debug:DumpPortrait()
         end
     end
     print(COLOR_YELLOW .. "=== Pockets Portrait Template ===" .. COLOR_RESET)
+    local Shell = Pockets.UI.Shell
+    describe(Shell.root, "  ", "ROOT")
+    describe(chrome, "  ", "CHROME")
+    describe(Shell.root.glance, "  ", "GLANCE")
+    describe(Shell.root.glance.header, "  ", "GLANCE.header")
     dump(chrome, "  ", 2)
     PocketsDB.debugPortrait = lines
     print(COLOR_YELLOW .. "=================================" .. COLOR_RESET)
