@@ -581,6 +581,16 @@ function Shell:BuildGlance()
             Shell:SetNativeOpen(false)
         end)
     end
+    -- EXPERIMENT: Loot Log button on the title bar, just left of the X.
+    if chrome and chrome.CloseButton then
+        local logButton = PHUI.CreateIconButton(chrome, 20, PHUI.Icons.SCROLL, {
+            tooltipText = "Loot Log",
+            onClick = function() Shell:OpenLootLog() end,
+        })
+        logButton:SetFrameLevel(530)
+        logButton:SetPoint("RIGHT", chrome.CloseButton, "LEFT", -6, 0)
+        self.nativeLogButton = logButton
+    end
 
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
     -- footprint so the Mini never moves). Dragging a badge or strip icon
