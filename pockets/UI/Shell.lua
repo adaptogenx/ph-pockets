@@ -226,12 +226,19 @@ end
 -- component opts) - a frame anchored by a single point with only one
 -- dimension known can resolve to a fully indeterminate position, which
 -- is exactly what silently blanked every earlier version of this HUD.
+-- WIP (feature/glance-native-template): render ONLY the native
+-- PortraitFrameTemplate with its own title text in the header; everything
+-- else Glance normally builds (our header buttons, ETA, bag/gold/recent
+-- row, tabs) is skipped. Flip to false to restore the full Glance.
+local GLANCE_NATIVE_PREVIEW = true
+
 function Shell:BuildGlance()
     local frame = self.root
     local T = Pockets.UI.GlanceFrame.TOKENS
     -- Native Forever portrait frame (bag icon in the ring) when the client
     -- has the template; otherwise the plain PHUI backdrop stays.
-    local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA)
+    local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA,
+        GLANCE_NATIVE_PREVIEW and "pockets" or nil)
     frame.chrome = chrome
     if chrome then
         frame:SetBackdrop(nil)
@@ -247,12 +254,17 @@ function Shell:BuildGlance()
 
     -- Header (title, ETA, Search/Log/Expand), bag capacity, money, five
     -- Recent icons and the specialized-bag tabs: see UI/PocketsGlance.lua.
-    Pockets.UI.PocketsGlance:Build(glance, {
-        openSearch = function() Shell:SetState(Shell.STATE.SEARCH) end,
-        openLog = function() Shell:OpenLootLog() end,
-        openAll = function() Shell:SetState(Shell.STATE.ALL) end,
-        openMenu = function() Shell:SetState(Shell.STATE.MENU) end,
-    }, chrome ~= nil)
+    if GLANCE_NATIVE_PREVIEW then
+        glance.hudHeight = Pockets.UI.GlanceFrame.TOKENS.CHROME_HUD_HEIGHT
+        glance.tabs = {}
+    else
+        Pockets.UI.PocketsGlance:Build(glance, {
+            openSearch = function() Shell:SetState(Shell.STATE.SEARCH) end,
+            openLog = function() Shell:OpenLootLog() end,
+            openAll = function() Shell:SetState(Shell.STATE.ALL) end,
+            openMenu = function() Shell:SetState(Shell.STATE.MENU) end,
+        }, chrome ~= nil)
+    end
     -- Fixed HUD size from the chassis (depends on chrome); never resized after
     -- (except by a deliberate Mini/Glance mode switch - ApplyHudMode).
     frame:SetSize(T.HUD_WIDTH, glance.hudHeight)
@@ -1085,8 +1097,10 @@ function Shell:BuildSecureControls()
         o:Hide()
         RegisterStateDriver(o, "visibility", "[combat] show; hide")
     end
-    Overlay(self.frame.glance.header.plusButton, "open")
-    Overlay(self.frame.glance.bagRow, "open")
+    if self.frame.glance.header then -- absent in GLANCE_NATIVE_PREVIEW
+        Overlay(self.frame.glance.header.plusButton, "open")
+        Overlay(self.frame.glance.bagRow, "open")
+    end
     for _, tab in ipairs(self.frame.glance.tabs) do
         Overlay(tab, "open")
     end
@@ -1264,7 +1278,9 @@ function Shell:RenderGlance()
         return
     end
     -- Values only: the HUD's size and anchor never change here.
-    Pockets.UI.PocketsGlance:Render(self.frame.glance)
+    if not GLANCE_NATIVE_PREVIEW then
+        Pockets.UI.PocketsGlance:Render(self.frame.glance)
+    end
 end
 
 --------------------------------------------------

@@ -130,7 +130,7 @@ end
 -- (a texture path/fileID) in the native ring. Returns nil when the template
 -- doesn't exist on this client (callers keep their plain backdrop). Our own
 -- header replaces the template's title and close button.
-function GlanceFrame:CreateChrome(frame, portrait, alpha)
+function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
     local ok, chrome = pcall(CreateFrame, "Frame", nil, frame, "PortraitFrameTemplate")
     if not ok or not chrome or not chrome.PortraitContainer then
         return nil
@@ -159,7 +159,7 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha)
         end
     end
     if chrome.SetTitle then
-        chrome:SetTitle("")
+        chrome:SetTitle(title or "")
     end
     if chrome.Bg and alpha then
         chrome.Bg:SetAlpha(alpha)
