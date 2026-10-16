@@ -763,6 +763,19 @@ function Shell:BuildShell()
         self:BuildNativeGauge(frame, chrome, function() Shell:SetState(Shell.STATE.GLANCE) end)
     end
     local native = chrome ~= nil
+    -- Same inner box as the opened frame's list: Blizzard's inset panel
+    -- behind the body (when this client has the template).
+    if native then
+        local ok, inset = pcall(CreateFrame, "Frame", nil, chrome, "InsetFrameTemplate")
+        if ok and inset then
+            inset:SetFrameLevel(505)
+            inset:SetPoint("TOPLEFT", frame, "TOPLEFT", EXP_SIDE - 4, -(EXP_HEADER + L.SHELL_PADDING - 4))
+            inset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EXP_SIDE - 4),
+                EXP_BOTTOM + L.SHELL_FOOTER_HEIGHT + 4)
+            inset:EnableMouse(false)
+            frame.inset = inset
+        end
+    end
     local shell = CreateFrame("Frame", nil, frame)
     if native then
         shell:SetFrameLevel(frame:GetFrameLevel() + 600)
@@ -786,8 +799,10 @@ function Shell:BuildShell()
     local header = CreateFrame("Frame", nil, shell, "BackdropTemplate")
     -- Native: a transparent strip over the template's title bar, to the right
     -- of the portrait ring; the template's own title/X are used.
-    header:SetPoint("TOPLEFT", shell, "TOPLEFT", native and 66 or 0, native and -2 or 0)
-    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", native and -8 or 0, native and -2 or 0)
+    -- The template's title bar is centred ~27px below the frame's top-left
+    -- (measured from the opened frame), so the 26px header sits at y = 14.
+    header:SetPoint("TOPLEFT", shell, "TOPLEFT", native and 66 or 0, native and -14 or 0)
+    header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", native and -8 or 0, native and -14 or 0)
     header:SetHeight(L.SHELL_HEADER_HEIGHT)
     shell.header = header
     if not native then
@@ -801,6 +816,12 @@ function Shell:BuildShell()
     header.backButton:SetPoint("LEFT", header, "LEFT", L.SHELL_PADDING, 0)
     header.backButton.glyph = PHUI.CreateLabel(header.backButton, "primary", "\226\128\185", PHUI.Fonts.SMALL) -- "<"
     header.backButton.glyph:SetPoint("CENTER", 0, 0)
+    if native then
+        -- Bigger arrow, full header height (the 20px / small-font default
+        -- read as a speck on the title bar).
+        header.backButton:SetSize(26, 26)
+        header.backButton.glyph:SetFont("Fonts\\FRIZQT__.TTF", 24, "")
+    end
 
     header.titleText = PHUI.CreateLabel(header, "primary", "Pockets", PHUI.Fonts.TITLE)
     header.titleText:SetJustifyH("LEFT")
@@ -844,7 +865,16 @@ function Shell:BuildShell()
     -- both search inputs read as the same control, not two different sizes.
     header.searchBox:SetHeight(L.SEARCH_INPUT_HEIGHT)
     header.searchBox:SetWidth(L.SHELL_HEADER_RIGHT_WIDTH - 6)
-    header.searchBox:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+    if native then
+        -- Same place as the opened frame's search box: the strip under the
+        -- title bar, right of the portrait ring.
+        header.searchBox:ClearAllPoints()
+        header.searchBox:SetHeight(NATIVE_SEARCH_HEIGHT)
+        header.searchBox:SetPoint("TOPLEFT", shell, "TOPLEFT", NATIVE_SEARCH_LEFT + 6, -NATIVE_SEARCH_TOP - 1)
+        header.searchBox:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -(EXP_SIDE + 6), -NATIVE_SEARCH_TOP - 1)
+    else
+        header.searchBox:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+    end
     header.searchBox:SetAutoFocus(false)
     header.searchBox:SetScript("OnTextChanged", function(box)
         Shell:RenderAll(box:GetText())
