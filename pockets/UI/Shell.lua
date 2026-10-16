@@ -366,7 +366,11 @@ function Shell:BuildNativeBody(root, chrome)
     box:SetTextColor(PHUI.Colors.TEXT_PRIMARY[1], PHUI.Colors.TEXT_PRIMARY[2], PHUI.Colors.TEXT_PRIMARY[3])
     box:SetTextInsets(22, 6, 0, 0)
     box:SetMaxLetters(40)
-    PHUI.ApplyBackdrop(box, { backdrop = PHUI.Backdrops.BADGE, bgColor = PHUI.Colors.BADGE_BG, bgAlpha = 0.85 })
+    PHUI.ApplyBackdrop(box, {
+        backdrop = PHUI.Backdrops.ROUNDED_SMALL, -- lightly rounded, thin
+        bgColor = PHUI.Colors.BADGE_BG,
+        bgAlpha = 0.85,
+    })
     box.icon = box:CreateTexture(nil, "OVERLAY")
     box.icon:SetSize(L.SEARCH_ICON_SIZE, L.SEARCH_ICON_SIZE)
     box.icon:SetPoint("LEFT", box, "LEFT", 5, 0)
