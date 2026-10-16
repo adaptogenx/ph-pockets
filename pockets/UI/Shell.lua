@@ -296,7 +296,11 @@ local NATIVE_SEARCH_HEIGHT = 22
 -- The list starts below the ring (like Blizzard's Professions window).
 local NATIVE_BODY_TOP = 66
 local NATIVE_BODY_SIDE = 16
-local NATIVE_BODY_BOTTOM = 18
+-- Footer (Bag / Gold / Ammo, same rows as the old panel) sits on the bottom
+-- inner border; the list/inset end just above it.
+local NATIVE_FOOTER_BOTTOM = 14
+local NATIVE_FOOTER_HEIGHT = L.SHELL_FOOTER_HEIGHT
+local NATIVE_BODY_BOTTOM = NATIVE_FOOTER_BOTTOM + NATIVE_FOOTER_HEIGHT + 8
 local NATIVE_FEEDBACK_HEIGHT = 36
 
 function Shell:BuildNativeBody(root, chrome)
@@ -310,6 +314,33 @@ function Shell:BuildNativeBody(root, chrome)
         inset:EnableMouse(false)
         self.nativeInset = inset
     end
+
+    -- Footer bar: same look and metric rows as the old panel's footer.
+    local footer = CreateFrame("Frame", nil, chrome, "BackdropTemplate")
+    footer:SetFrameLevel(530)
+    footer:SetHeight(NATIVE_FOOTER_HEIGHT)
+    footer:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", NATIVE_BODY_SIDE - 4, NATIVE_FOOTER_BOTTOM)
+    footer:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -(NATIVE_BODY_SIDE - 4), NATIVE_FOOTER_BOTTOM)
+    PHUI.ApplyBackdrop(footer, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
+    local function FooterMetric(texture, iconOpts, style)
+        return Pockets.UI.MetricRow:Create(footer, {
+            width = 1,
+            height = L.GLANCE_METRIC_ROW_HEIGHT,
+            iconSize = L.GLANCE_METRIC_ICON_SIZE,
+            gap = L.GLANCE_METRIC_ICON_TEXT_GAP,
+            texture = texture,
+            iconOpts = iconOpts,
+            hasSecondary = false,
+            primaryStyle = style,
+        })
+    end
+    footer.bag = FooterMetric(Constants.HUD_ICON, { insetTexCoord = false }, "primary")
+    footer.bag:SetPoint("LEFT", footer, "LEFT", L.SHELL_PADDING, 0)
+    footer.gold = FooterMetric(Constants.GOLD_ICON, { insetTexCoord = false }, "muted")
+    footer.ammo = FooterMetric(Constants.CATEGORY_ICON.ammo, nil, "primary")
+    footer.ammo:SetPoint("RIGHT", footer, "RIGHT", -L.SHELL_PADDING, 0)
+    footer.ammo:Hide()
+    self.nativeFooter = footer
 
     local body = CreateFrame("Frame", nil, chrome)
     body:SetFrameLevel(520)
@@ -462,6 +493,10 @@ function Shell:RenderNativeBody()
         extra = NATIVE_FEEDBACK_HEIGHT
     else
         body.feedback:Hide()
+    end
+
+    if self.nativeFooter then
+        self:ConfigureFooterRows(self.nativeFooter)
     end
 
     local contentHeight = #entries * L.LIST_ROW_HEIGHT + extra
@@ -2228,30 +2263,40 @@ end
 
 function Shell:ConfigureFooter()
     local shell = self.frame.shell
+    self:ConfigureFooterRows({
+        bag = shell.footerBagRow,
+        gold = shell.footerGoldRow,
+        ammo = shell.footerAmmoRow,
+    })
+end
+
+-- Fills a footer's Bag / Gold / Ammo metric rows (the old panel's footer and
+-- the native frame's share this).
+function Shell:ConfigureFooterRows(rows)
     local InventoryState = Pockets.Services.InventoryState
 
     local capacity = InventoryState:GetGeneralCapacity()
     local color = Layout:GetCapacityColor(capacity.utilization)
-    shell.footerBagRow:SetPrimary(string.format("%d/%d", capacity.used, capacity.total))
-    shell.footerBagRow:SetPrimaryColor(color.r, color.g, color.b)
-    ResizeFooterMetric(shell.footerBagRow)
+    rows.bag:SetPrimary(string.format("%d/%d", capacity.used, capacity.total))
+    rows.bag:SetPrimaryColor(color.r, color.g, color.b)
+    ResizeFooterMetric(rows.bag)
 
-    shell.footerGoldRow:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
-    ResizeFooterMetric(shell.footerGoldRow)
-    shell.footerGoldRow:ClearAllPoints()
+    rows.gold:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
+    ResizeFooterMetric(rows.gold)
+    rows.gold:ClearAllPoints()
     -- Same gap the Gold icon already keeps against ITS OWN text
     -- (GLANCE_METRIC_ICON_TEXT_GAP) - using the smaller ACTION_GAP here
     -- left the coin sitting lopsided: barely any breathing room after
     -- Bag's count, then a bigger gap before Gold's own text.
-    shell.footerGoldRow:SetPoint("LEFT", shell.footerBagRow, "RIGHT", L.GLANCE_METRIC_ICON_TEXT_GAP, 0)
+    rows.gold:SetPoint("LEFT", rows.bag, "RIGHT", L.GLANCE_METRIC_ICON_TEXT_GAP, 0)
 
     local ammoCapacity = InventoryState:GetAmmoCapacity()
     if self:ShouldShowAmmoRow(ammoCapacity) then
-        shell.footerAmmoRow:SetPrimary(string.format("%d/%d", ammoCapacity.used, ammoCapacity.total))
-        ResizeFooterMetric(shell.footerAmmoRow)
-        shell.footerAmmoRow:Show()
+        rows.ammo:SetPrimary(string.format("%d/%d", ammoCapacity.used, ammoCapacity.total))
+        ResizeFooterMetric(rows.ammo)
+        rows.ammo:Show()
     else
-        shell.footerAmmoRow:Hide()
+        rows.ammo:Hide()
     end
 end
 
