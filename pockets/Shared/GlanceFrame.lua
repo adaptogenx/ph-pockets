@@ -12,8 +12,6 @@
     tokens below are the chassis' own, in logical pixels at scale 1.
 ]]
 
--- luacheck: globals C_Texture
-
 local _, Pockets = ...
 
 Pockets.UI.GlanceFrame = Pockets.UI.GlanceFrame or {}
@@ -134,18 +132,17 @@ end
 -- Native chrome (Forever's PortraitFrameTemplate)
 --------------------------------------------------
 
--- Creates a PortraitFrameTemplate child filling `frame`, showing `portrait`
--- (a texture path/fileID) in the native ring. Returns nil when the template
--- doesn't exist on this client (callers keep their plain backdrop). Our own
--- header replaces the template's title and close button.
+-- Plain, unmodified PortraitFrameTemplate filling `frame`: no scale, no
+-- cropping, no hidden pieces. Only the bag icon goes in the portrait and the
+-- title text is set. (The template's close button is hidden only because it
+-- would hide this child frame, not the HUD.) Returns nil when the template
+-- doesn't exist on this client.
 function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
     local ok, chrome = pcall(CreateFrame, "Frame", nil, frame, "PortraitFrameTemplate")
     if not ok or not chrome or not chrome.PortraitContainer then
         return nil
     end
-    chrome:SetScale(T.CHROME_SCALE)
-    chrome:SetAllPoints(frame) -- anchors resolve in screen space: still fills the frame
-    chrome:SetFrameLevel(frame:GetFrameLevel())
+    chrome:SetAllPoints(frame)
     chrome:EnableMouse(false)
     if chrome.SetPortraitToAsset then
         chrome:SetPortraitToAsset(portrait)
@@ -155,32 +152,8 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
     if chrome.CloseButton then
         chrome.CloseButton:Hide()
     end
-    -- The template's side rails run the full height of the frame and cut
-    -- through the portrait ring on a frame this short; the corner pieces
-    -- already carry the visible border, so drop the long rails.
-    local nine = chrome.NineSlice
-    local bl = nine and nine.BottomLeftCorner
-    if bl and bl.GetAtlas and C_Texture and C_Texture.GetAtlasInfo then
-        local info = bl:GetAtlas() and C_Texture.GetAtlasInfo(bl:GetAtlas())
-        if info and info.height and info.height > T.CHROME_BL_KEEP then
-            local frac = T.CHROME_BL_KEEP / info.height
-            local top, bottom = info.topTexCoord, info.bottomTexCoord
-            bl:SetHeight(T.CHROME_BL_KEEP)
-            bl:SetTexCoord(info.leftTexCoord, info.rightTexCoord, bottom - (bottom - top) * frac, bottom)
-        end
-    end
-    if nine then
-        for _, key in ipairs({ "LeftEdge", "RightEdge" }) do
-            if nine[key] then
-                nine[key]:Hide()
-            end
-        end
-    end
     if chrome.SetTitle then
         chrome:SetTitle(title or "")
-    end
-    if chrome.Bg and alpha then
-        chrome.Bg:SetAlpha(alpha)
     end
     return chrome
 end

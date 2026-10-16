@@ -255,7 +255,9 @@ function Shell:BuildGlance()
     -- Header (title, ETA, Search/Log/Expand), bag capacity, money, five
     -- Recent icons and the specialized-bag tabs: see UI/PocketsGlance.lua.
     if GLANCE_NATIVE_PREVIEW then
-        glance.hudHeight = Pockets.UI.GlanceFrame.TOKENS.CHROME_HUD_HEIGHT
+        -- Tall enough for the template's corner art (about 95px each, top and
+        -- bottom) not to overlap, at its natural scale.
+        glance.hudHeight = 200
         glance.tabs = {}
     else
         Pockets.UI.PocketsGlance:Build(glance, {
