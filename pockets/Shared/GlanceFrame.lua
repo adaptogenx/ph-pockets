@@ -65,6 +65,9 @@ GlanceFrame.TOKENS = {
     -- is ~52 native px under the frame top; the piece's bottom is 94 below)
     -- is kept.
     CHROME_BL_KEEP = 38,
+    -- How far the native template's art overhangs its rect (left, top, right,
+    -- bottom), from the corner pieces' anchors in the portrait-frame dump.
+    CHROME_OVERHANG = { left = 13, top = 16, right = 2, bottom = 8 },
     CHROME_HEADER_TOP = 0,
     CHROME_HEADER_HEIGHT = 32,
     CHROME_CONTENT_HEIGHT = 40,
@@ -142,7 +145,14 @@ function GlanceFrame:CreateChrome(frame, portrait, alpha, title)
     if not ok or not chrome or not chrome.PortraitContainer then
         return nil
     end
-    chrome:SetAllPoints(frame)
+    -- The template's art overhangs its own rect (corners sit at -13/+16 left
+    -- and up, +2/-8 right and down, measured with /pockets debug portrait).
+    -- Inset the template by that overhang so the VISIBLE top-left corner lands
+    -- exactly on the HUD's top-left anchor (and nothing is clipped at the
+    -- screen's top/left edge).
+    local o = T.CHROME_OVERHANG
+    chrome:SetPoint("TOPLEFT", frame, "TOPLEFT", o.left, -o.top)
+    chrome:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -o.right, o.bottom)
     chrome:EnableMouse(false)
     if chrome.SetPortraitToAsset then
         chrome:SetPortraitToAsset(portrait)
