@@ -284,18 +284,33 @@ function Shell:BuildNativeGauge(root, chrome)
     end)
 end
 
--- EXPERIMENT: the category list rendered inside the open native frame.
--- Geometry (UI px from the HUD's top-left): the title bar ends ~31 down, the
--- ring ends ~60 down, the inner border is ~14 in from the sides and bottom.
+-- EXPERIMENT: the category list (and search) rendered inside the open
+-- native frame. Geometry (UI px from the HUD's top-left): the title bar ends
+-- ~31 down and the portrait ring ~60 down / ~60 across; the inner border is
+-- ~14 in from the sides and bottom.
 local NATIVE_WIDTH = 280
 local NATIVE_MIN_HEIGHT = 150 -- shorter and the template's corner art overlaps
--- The portrait ring hangs ~60px below the top-left, so the body starts below
--- it (like Blizzard's Professions window) instead of overlapping it.
-local NATIVE_BODY_TOP = 70
+local NATIVE_SEARCH_LEFT = 68 -- clear of the ring (ends ~60)
+local NATIVE_SEARCH_TOP = 36 -- just under the title bar
+local NATIVE_SEARCH_HEIGHT = 22
+-- The list starts below the ring (like Blizzard's Professions window).
+local NATIVE_BODY_TOP = 66
 local NATIVE_BODY_SIDE = 16
 local NATIVE_BODY_BOTTOM = 18
+local NATIVE_FEEDBACK_HEIGHT = 36
 
 function Shell:BuildNativeBody(root, chrome)
+    -- Inset panel behind the list, like Professions' content panels. Uses
+    -- Blizzard's template when this client has it, otherwise nothing.
+    local ok, inset = pcall(CreateFrame, "Frame", nil, chrome, "InsetFrameTemplate")
+    if ok and inset then
+        inset:SetFrameLevel(505)
+        inset:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_BODY_SIDE - 4, -(NATIVE_BODY_TOP - 4))
+        inset:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -(NATIVE_BODY_SIDE - 4), NATIVE_BODY_BOTTOM - 6)
+        inset:EnableMouse(false)
+        self.nativeInset = inset
+    end
+
     local body = CreateFrame("Frame", nil, chrome)
     body:SetFrameLevel(520)
     body:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_BODY_SIDE, -NATIVE_BODY_TOP)
@@ -303,47 +318,156 @@ function Shell:BuildNativeBody(root, chrome)
     body:SetHeight(1)
     self.nativeBody = body
     self.nativeRows = {}
+
+    body.feedback = PHUI.CreateLabel(body, "muted", nil, PHUI.Fonts.SMALL)
+    body.feedback:SetPoint("TOPLEFT", body, "TOPLEFT", L.LIST_ROW_PADDING, -6)
+    body.feedback:SetJustifyH("LEFT")
+    body.feedback:Hide()
+
+    -- Search box: in the strip under the title bar, to the right of the ring.
+    local box = CreateFrame("EditBox", nil, chrome, "BackdropTemplate")
+    box:SetFrameLevel(530)
+    box:SetHeight(NATIVE_SEARCH_HEIGHT)
+    box:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_SEARCH_LEFT, -NATIVE_SEARCH_TOP)
+    box:SetPoint("TOPRIGHT", root, "TOPRIGHT", -NATIVE_BODY_SIDE, -NATIVE_SEARCH_TOP)
+    box:SetAutoFocus(false)
+    box:SetFontObject("GameFontNormalSmall")
+    box:SetTextColor(PHUI.Colors.TEXT_PRIMARY[1], PHUI.Colors.TEXT_PRIMARY[2], PHUI.Colors.TEXT_PRIMARY[3])
+    box:SetTextInsets(22, 6, 0, 0)
+    box:SetMaxLetters(40)
+    PHUI.ApplyBackdrop(box, { backdrop = PHUI.Backdrops.BADGE, bgColor = PHUI.Colors.BADGE_BG, bgAlpha = 0.85 })
+    box.icon = box:CreateTexture(nil, "OVERLAY")
+    box.icon:SetSize(L.SEARCH_ICON_SIZE, L.SEARCH_ICON_SIZE)
+    box.icon:SetPoint("LEFT", box, "LEFT", 5, 0)
+    box.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+    box.hint = PHUI.CreateLabel(box, "muted", "Search", PHUI.Fonts.SMALL)
+    box.hint:SetPoint("LEFT", box, "LEFT", 22, 0)
+    box:SetScript("OnTextChanged", function(self)
+        self.hint:SetShown(self:GetText() == "")
+        Shell:RenderNativeBody()
+    end)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText("")
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    self.nativeSearch = box
 end
 
--- Rows for every non-empty category (same data and click as the old Menu),
--- then the frame is sized to fit them. Out of combat only for the resize.
+-- Collapses the open frame and clears any search.
+function Shell:ResetNativeSearch()
+    if self.nativeSearch then
+        self.nativeSearch:SetText("")
+        self.nativeSearch:ClearFocus()
+    end
+end
+
+-- Rows for either the category list (no query) or ranked search results,
+-- then the frame is sized to fit. Rows are plain buttons: results show the
+-- item's tooltip on hover and open its category on click - nothing here
+-- uses an item. Out of combat only for the resize.
 function Shell:RenderNativeBody()
     local body = self.nativeBody
     if not body then
         return
     end
-    local visible = {}
-    for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
-        if entry.count > 0 then
-            table.insert(visible, entry)
+    local query = self.nativeSearch and self.nativeSearch:GetText() or ""
+
+    -- Build the rows to show: { icon, label, count, quality, item, categoryID }.
+    local entries, feedback = {}, nil
+    if query == "" then
+        for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
+            if entry.count > 0 then
+                table.insert(entries, {
+                    icon = entry.icon, label = entry.label, count = entry.count,
+                    categoryID = entry.categoryID,
+                })
+            end
+        end
+    else
+        local matches, total = Pockets.UI.Search:RankedItemMatches(Pockets.API.GetAllAggregatedItems(), query)
+        if total == 0 then
+            feedback = "No items found"
+        elseif total > L.SEARCH_OVERFLOW_LIMIT then
+            feedback = string.format("%d items found\nKeep typing...", total)
+        else
+            for index = 1, math.min(total, L.SEARCH_MAX_RESULT_ROWS) do
+                local item = matches[index]
+                table.insert(entries, {
+                    icon = item.texture,
+                    label = item.name or item.itemLink or ("item:" .. tostring(item.itemID)),
+                    count = item.quantity, quality = item.quality, item = item,
+                    categoryID = item.categoryID,
+                })
+            end
+            if total > #entries then
+                feedback = string.format("and %d more. Keep typing to filter.", total - #entries)
+            end
         end
     end
+
     local rowWidth = NATIVE_WIDTH - 2 * NATIVE_BODY_SIDE
-    for index, entry in ipairs(visible) do
+    for index, entry in ipairs(entries) do
         local row = self.nativeRows[index]
         if not row then
             row = CreateMenuRow(body, rowWidth)
             self.nativeRows[index] = row
         end
-        row.categoryID = entry.categoryID
         row.icon:SetTexture(entry.icon)
         row.label:SetText(entry.label)
+        local color = entry.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[entry.quality]
+        if color and entry.quality > 1 then
+            row.label:SetTextColor(color.r, color.g, color.b)
+        else
+            PHUI.ApplyTextStyle(row.label, "primary")
+        end
         row.count:SetText(tostring(entry.count))
         row:SetWidth(rowWidth)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
+        local categoryID = entry.categoryID
         row:SetScript("OnClick", function()
-            Shell:SetState(Shell.STATE.CATEGORY, { categoryID = entry.categoryID })
+            if categoryID then
+                Shell:SetState(Shell.STATE.CATEGORY, { categoryID = categoryID })
+            end
         end)
+        local item = entry.item
+        if item then
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                local link = item.itemLink or (item.itemID and ("item:" .. item.itemID))
+                if not (link and pcall(GameTooltip.SetHyperlink, GameTooltip, link)) then
+                    GameTooltip:Hide()
+                    return
+                end
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        else
+            row:SetScript("OnEnter", nil)
+            row:SetScript("OnLeave", nil)
+        end
         row:Show()
     end
-    for index = #visible + 1, #self.nativeRows do
+    for index = #entries + 1, #self.nativeRows do
         self.nativeRows[index]:Hide()
     end
-    body:SetHeight(math.max(1, #visible * L.LIST_ROW_HEIGHT))
+
+    local extra = 0
+    if feedback then
+        body.feedback:SetText(feedback)
+        body.feedback:ClearAllPoints()
+        body.feedback:SetPoint("TOPLEFT", body, "TOPLEFT", L.LIST_ROW_PADDING, -(#entries * L.LIST_ROW_HEIGHT) - 6)
+        body.feedback:Show()
+        extra = NATIVE_FEEDBACK_HEIGHT
+    else
+        body.feedback:Hide()
+    end
+
+    local contentHeight = #entries * L.LIST_ROW_HEIGHT + extra
+    body:SetHeight(math.max(1, contentHeight))
     if not self:IsCombatBlocked() then
-        local height = math.max(NATIVE_MIN_HEIGHT,
-            NATIVE_BODY_TOP + #visible * L.LIST_ROW_HEIGHT + NATIVE_BODY_BOTTOM)
+        local height = math.max(NATIVE_MIN_HEIGHT, NATIVE_BODY_TOP + contentHeight + NATIVE_BODY_BOTTOM)
         self.root:SetSize(NATIVE_WIDTH, height)
     end
 end
@@ -517,6 +641,9 @@ function Shell:SetNativeOpen(open)
         return false
     end
     self.nativeOpen = open and true or false
+    if not open then
+        self:ResetNativeSearch()
+    end
     self:ApplyHudMode()
     self:Render()
     return true
