@@ -309,7 +309,9 @@ end
 -- native frame. Geometry (UI px from the HUD's top-left): the title bar ends
 -- ~31 down and the portrait ring ~60 down / ~60 across; the inner border is
 -- ~14 in from the sides and bottom.
-local NATIVE_WIDTH = 280
+-- Same outer width as the expanded panel (category list, All Items, ...) so the
+-- window never changes width between views.
+local NATIVE_WIDTH = L.SHELL_WIDTH + EXP_WIDTH_EXTRA
 local NATIVE_MIN_HEIGHT = 150 -- shorter and the template's corner art overlaps
 local NATIVE_SEARCH_LEFT = 68 -- clear of the ring (ends ~60)
 local NATIVE_SEARCH_TOP = 36 -- just under the title bar
@@ -820,7 +822,7 @@ function Shell:BuildShell()
         -- Bigger arrow, full header height (the 20px / small-font default
         -- read as a speck on the title bar).
         header.backButton:SetSize(26, 26)
-        header.backButton.glyph:SetFont("Fonts\\FRIZQT__.TTF", 24, "")
+        header.backButton.glyph:SetFont("Fonts\\FRIZQT__.TTF", 30, "")
     end
 
     header.titleText = PHUI.CreateLabel(header, "primary", "Pockets", PHUI.Fonts.TITLE)
