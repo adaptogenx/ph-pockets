@@ -790,6 +790,7 @@ function Shell:BuildShell()
     shell.menuRows = {}
     shell.categoryHeaders = {}
     shell.categoryListRows = {}
+    shell.allListRows = {}
 
     -- Header: fixed [back][title][right] zones (§3 header contracts) -
     -- the control occupying a zone changes, the zone itself never moves.
@@ -1371,6 +1372,9 @@ function Shell:ClearBody()
     -- pool key) rather than Acquire/ReleaseAll'd per render like Grid's,
     -- so they're hidden explicitly instead of through the pool.
     for _, row in ipairs(shell.categoryListRows) do
+        row:Hide()
+    end
+    for _, row in ipairs(shell.allListRows) do
         row:Hide()
     end
     Pockets.UI.LootLog:Hide(shell.lootView)
@@ -2032,6 +2036,29 @@ local function CreateCategoryListRow(poolAnchor)
     return row
 end
 
+-- Fills one list row (item name in its quality colour, right-aligned qty) and
+-- binds it to the item's real bag slot. Shared by the category list and the
+-- native All Items list.
+local function ConfigureListRow(row, item, rowWidth)
+    row:SetWidth(rowWidth)
+    row.name:SetText(item.name or item.itemLink or ("item:" .. tostring(item.itemID)))
+    local qualityColor = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
+    if qualityColor and item.quality > 1 then
+        row.name:SetTextColor(qualityColor.r, qualityColor.g, qualityColor.b)
+    else
+        PHUI.ApplyTextStyle(row.name, "primary")
+    end
+    row.qty:SetText(tostring(item.quantity))
+
+    Pockets.UI.ItemButtonPool:Configure(row, item)
+    -- Configure() shows the button's own built-in stack-count badge (meant
+    -- for a 40x40 square button) - redundant on a wide row that already has
+    -- a right-aligned qty column.
+    if row.Count then
+        row.Count:Hide()
+    end
+end
+
 function Shell:RenderCategoryList(categoryID)
     if self:DeferIfItemsBlocked() then
         return
@@ -2062,24 +2089,7 @@ function Shell:RenderCategoryList(categoryID)
             shell.categoryListRows[index] = row
         end
 
-        row:SetWidth(rowWidth)
-        row.name:SetText(item.name or item.itemLink or ("item:" .. tostring(item.itemID)))
-        local qualityColor = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
-        if qualityColor and item.quality > 1 then
-            row.name:SetTextColor(qualityColor.r, qualityColor.g, qualityColor.b)
-        else
-            PHUI.ApplyTextStyle(row.name, "primary")
-        end
-        row.qty:SetText(tostring(item.quantity))
-
-        Pockets.UI.ItemButtonPool:Configure(row, item)
-        -- Configure() shows the button's own built-in stack-count badge
-        -- (anchored to the button's own corner, meant for a 40x40 square
-        -- button) - redundant and badly placed on a wide row that
-        -- already has its own right-aligned qty column above.
-        if row.Count then
-            row.Count:Hide()
-        end
+        ConfigureListRow(row, item, rowWidth)
 
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
@@ -2307,11 +2317,81 @@ local function BuildFlatSearchResults(query)
     return out
 end
 
+-- EXPERIMENT: All Items as a vertical list under the same collapsible
+-- category headers (or a flat list for a search query), instead of the icon
+-- grid. Rows are the same real item buttons the category list uses.
+function Shell:RenderAllList(query)
+    local shell = self.frame.shell
+    local content = shell.content
+    local rowWidth = BodyViewportWidth()
+    local hasQuery = query ~= nil and query ~= ""
+    local collapsedByID = Pockets.CharDB.collapsedCategories
+
+    local rowIndex = 0
+    local function PlaceRow(item, y)
+        rowIndex = rowIndex + 1
+        local row = shell.allListRows[rowIndex]
+        if not row then
+            row = CreateCategoryListRow(shell.categoryListPoolAnchor)
+            shell.allListRows[rowIndex] = row
+        end
+        ConfigureListRow(row, item, rowWidth)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        row:Show()
+    end
+
+    local cursorY = 0
+    if hasQuery then
+        for _, item in ipairs(BuildFlatSearchResults(query)) do
+            PlaceRow(item, cursorY)
+            cursorY = cursorY + L.LIST_ROW_HEIGHT
+        end
+    else
+        for index, section in ipairs(BuildCategorySections()) do
+            if index > 1 then
+                cursorY = cursorY + PHUI.Spacing.PANEL_PADDING
+            end
+            local categoryID = section.categoryID
+            local collapsed = collapsedByID[categoryID] and true or false
+            local header = EnsureCategoryHeader(content, shell.categoryHeaders, index)
+            header:SetScript("OnClick", function()
+                collapsedByID[categoryID] = not collapsedByID[categoryID]
+                Shell:RenderAll(query)
+            end)
+            header:SetWidth(rowWidth)
+            header:SetLabel(section.label, #section.buttonRecords)
+            header:SetCollapsed(collapsed)
+            header:ClearAllPoints()
+            header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -cursorY)
+            header:Show()
+            cursorY = cursorY + L.CATEGORY_HEADER_HEIGHT
+
+            if not collapsed then
+                for _, item in ipairs(section.buttonRecords) do
+                    PlaceRow(item, cursorY)
+                    cursorY = cursorY + L.LIST_ROW_HEIGHT
+                end
+            end
+        end
+    end
+
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(cursorY, MaxListContentHeight(), 0)
+    self:ApplyDimensions(bodyHeight)
+    content:SetWidth(rowWidth)
+    content:SetHeight(math.max(cursorY, 1))
+    SetScrollBarShown(shell, cursorY, usedContentHeight)
+end
+
 function Shell:RenderAll(query)
     if self:DeferIfItemsBlocked() then
         return
     end
     self:ClearBody()
+    if IsNativeShell() then
+        self:RenderAllList(query)
+        return
+    end
     local shell = self.frame.shell
     local content = shell.content
     local pool = Pockets.UI.ItemButtonPool
