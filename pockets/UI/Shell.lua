@@ -2317,70 +2317,42 @@ local function BuildFlatSearchResults(query)
     return out
 end
 
--- EXPERIMENT: All Items as a vertical list under the same collapsible
--- category headers (or a flat list for a search query), instead of the icon
--- grid. Rows are the same real item buttons the category list uses.
+-- EXPERIMENT: All Items as ONE alphabetical vertical list (case-insensitive by
+-- name; a search query just filters it). Rows are the same real item buttons
+-- the category list uses.
 function Shell:RenderAllList(query)
     local shell = self.frame.shell
     local content = shell.content
     local rowWidth = BodyViewportWidth()
     local hasQuery = query ~= nil and query ~= ""
-    local collapsedByID = Pockets.CharDB.collapsedCategories
 
-    local rowIndex = 0
-    local function PlaceRow(item, y)
-        rowIndex = rowIndex + 1
-        local row = shell.allListRows[rowIndex]
+    local items = hasQuery and BuildFlatSearchResults(query) or Pockets.API.GetAllAggregatedItems()
+    table.sort(items, function(a, b)
+        local an, bn = (a.name or ""):lower(), (b.name or ""):lower()
+        if an ~= bn then
+            return an < bn
+        end
+        return (a.itemID or 0) < (b.itemID or 0)
+    end)
+
+    for index, item in ipairs(items) do
+        local row = shell.allListRows[index]
         if not row then
             row = CreateCategoryListRow(shell.categoryListPoolAnchor)
-            shell.allListRows[rowIndex] = row
+            shell.allListRows[index] = row
         end
         ConfigureListRow(row, item, rowWidth)
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
         row:Show()
     end
 
-    local cursorY = 0
-    if hasQuery then
-        for _, item in ipairs(BuildFlatSearchResults(query)) do
-            PlaceRow(item, cursorY)
-            cursorY = cursorY + L.LIST_ROW_HEIGHT
-        end
-    else
-        for index, section in ipairs(BuildCategorySections()) do
-            if index > 1 then
-                cursorY = cursorY + PHUI.Spacing.PANEL_PADDING
-            end
-            local categoryID = section.categoryID
-            local collapsed = collapsedByID[categoryID] and true or false
-            local header = EnsureCategoryHeader(content, shell.categoryHeaders, index)
-            header:SetScript("OnClick", function()
-                collapsedByID[categoryID] = not collapsedByID[categoryID]
-                Shell:RenderAll(query)
-            end)
-            header:SetWidth(rowWidth)
-            header:SetLabel(section.label, #section.buttonRecords)
-            header:SetCollapsed(collapsed)
-            header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -cursorY)
-            header:Show()
-            cursorY = cursorY + L.CATEGORY_HEADER_HEIGHT
-
-            if not collapsed then
-                for _, item in ipairs(section.buttonRecords) do
-                    PlaceRow(item, cursorY)
-                    cursorY = cursorY + L.LIST_ROW_HEIGHT
-                end
-            end
-        end
-    end
-
-    local usedContentHeight, bodyHeight = ResolveDynamicHeight(cursorY, MaxListContentHeight(), 0)
+    local contentHeight = #items * L.LIST_ROW_HEIGHT
+    local usedContentHeight, bodyHeight = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
     self:ApplyDimensions(bodyHeight)
     content:SetWidth(rowWidth)
-    content:SetHeight(math.max(cursorY, 1))
-    SetScrollBarShown(shell, cursorY, usedContentHeight)
+    content:SetHeight(math.max(contentHeight, 1))
+    SetScrollBarShown(shell, contentHeight, usedContentHeight)
 end
 
 function Shell:RenderAll(query)
