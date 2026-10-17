@@ -881,6 +881,12 @@ function Shell:BuildShell()
     if native then
         -- The same Back element the opened frame uses, at the same spot.
         header.backButton = CreateBackButton(header, shell, function() Shell:GoBack() end)
+        -- Combat only: while a prewarmed category page is showing, this plain
+        -- Back sits above the secure Back overlay (which would close
+        -- everything) and returns to the category list instead.
+        shell.combatBack = CreateBackButton(header, shell, function() Shell:HideCombatPage() end)
+        shell.combatBack:SetFrameLevel(600)
+        shell.combatBack:Hide()
     else
         header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
             tooltipText = "Back",
@@ -1554,6 +1560,9 @@ function Shell:SyncStateFromVisibility()
     else
         self.state = self.STATE.GLANCE
         self.expandedVisible = false
+        if self.combatPage then
+            self:HideCombatPage()
+        end
     end
     self:SetEscapeCatcherShown(self:EscapeActive())
 end
@@ -1722,6 +1731,9 @@ function Shell:Prewarm()
     self.state, self.context = target, {}
     local ok, err = pcall(function()
         self:RenderExpandedContent(target)
+        if target == self.STATE.MENU then
+            self:BuildCombatPages()
+        end
     end)
     self.state, self.context = savedState, savedContext
     if ok then
@@ -1802,6 +1814,7 @@ end
 -- visibility; used by Render and Prewarm.
 function Shell:RenderExpandedContent(state)
     local frame = self.frame
+    self:ResetCombatPages()
     if not self.expanded.chrome then
         PHUI.ApplyBackdrop(self.expanded, { bgAlpha = L.EXPANDED_BODY_ALPHA })
     end
@@ -1998,6 +2011,10 @@ function Shell:RenderMenu()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
         row:SetScript("OnClick", function()
+            if Shell:IsCombatBlocked() then
+                Shell:ShowCombatPage(entry.categoryID)
+                return
+            end
             Shell:SetState(Shell.STATE.CATEGORY, { categoryID = entry.categoryID })
         end)
         row:Show()
@@ -2214,6 +2231,118 @@ function Shell:RenderCategoryList(categoryID)
 
     content:SetHeight(math.max(contentHeight, 1))
     SetScrollBarShown(shell, contentHeight, usedContentHeight)
+end
+
+--------------------------------------------------
+-- COMBAT CATEGORY PAGES (Mini mode)
+-- In combat nothing can be re-laid-out (item buttons are protected), so the
+-- category list can't navigate by re-rendering. Instead Prewarm builds one
+-- hidden scroll page per category out of combat - real item-button rows,
+-- same look as the category list - and in combat a category row only
+-- Show()/Hide()s plain parent frames, which combat lockdown allows.
+--------------------------------------------------
+
+function Shell:CreateCombatPage(shell)
+    local page = {}
+    page.scroll = CreateFrame("ScrollFrame", nil, shell)
+    for i = 1, shell.scrollFrame:GetNumPoints() do
+        page.scroll:SetPoint(shell.scrollFrame:GetPoint(i))
+    end
+    page.content = CreateFrame("Frame", nil, page.scroll)
+    page.content:SetWidth(BodyViewportWidth())
+    page.content:SetHeight(1)
+    page.scroll:SetScrollChild(page.content)
+    page.bar = Pockets.UI.ScrollBar:Create(page.scroll)
+    page.bar:Hide()
+    page.scroll:Hide()
+    return page
+end
+
+-- Out of combat only (called from Prewarm).
+function Shell:BuildCombatPages()
+    local shell = self.frame.shell
+    shell.combatPages = shell.combatPages or {}
+    local pool = Pockets.UI.ItemButtonPool
+    local rowWidth = BodyViewportWidth()
+    local present = {}
+    for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
+        if entry.count > 0 then
+            local categoryID = entry.categoryID
+            present[categoryID] = true
+            local page = shell.combatPages[categoryID]
+            if not page then
+                page = self:CreateCombatPage(shell)
+                shell.combatPages[categoryID] = page
+            end
+            pool:ReleaseAll(page.content)
+            local items = Pockets.API.GetAggregatedCategoryItems(categoryID)
+            for index, item in ipairs(items) do
+                local row = CreateCategoryListRow(page.content)
+                ConfigureListRow(row, item, rowWidth)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
+                row:Show()
+            end
+            local contentHeight = #items * L.LIST_ROW_HEIGHT
+            local usedContentHeight = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
+            page.content:SetHeight(math.max(contentHeight, 1))
+            Pockets.UI.ScrollBar:Update(page.bar, contentHeight, usedContentHeight)
+            page.bar:Hide() -- only shown with its page
+        end
+    end
+    -- Categories that emptied out: drop their rows.
+    for categoryID, page in pairs(shell.combatPages) do
+        if not present[categoryID] then
+            pool:ReleaseAll(page.content)
+        end
+    end
+end
+
+-- Plain Show/Hide only: allowed in combat.
+function Shell:ShowCombatPage(categoryID)
+    local shell = self.frame.shell
+    local page = shell.combatPages and shell.combatPages[categoryID]
+    if not page then
+        return
+    end
+    self:ResetCombatPages()
+    shell.scrollFrame:Hide()
+    shell.scrollBar:Hide()
+    page.scroll:Show()
+    page.bar:SetShown(page.bar.shown)
+    self.combatPage = categoryID
+    local chrome = self.expanded.chrome
+    if chrome then
+        chrome:SetTitle((Constants.CATEGORY_LABEL[categoryID] or ""):lower())
+    end
+    shell.combatBack:Show()
+end
+
+function Shell:HideCombatPage()
+    self:ResetCombatPages()
+    local shell = self.frame.shell
+    shell.scrollFrame:Show()
+    shell.scrollBar:SetShown(shell.scrollBar.shown)
+    local chrome = self.expanded.chrome
+    if chrome then
+        chrome:SetTitle("pockets")
+    end
+end
+
+-- Hides every combat page and its Back; leaves the main body untouched.
+function Shell:ResetCombatPages()
+    local shell = self.frame and self.frame.shell
+    if not shell then
+        return
+    end
+    for _, page in pairs(shell.combatPages or {}) do
+        page.scroll:Hide()
+        page.bar:Hide()
+    end
+    if shell.combatBack then
+        shell.combatBack:Hide()
+    end
+    self.combatPage = nil
 end
 
 --------------------------------------------------
