@@ -2510,11 +2510,24 @@ function Shell:ConfigureFooterRows(rows)
 
     local ammoCapacity = InventoryState:GetAmmoCapacity()
     if self:ShouldShowAmmoRow(ammoCapacity) then
+        -- An ammo bag: its slot usage.
         rows.ammo:SetPrimary(string.format("%d/%d", ammoCapacity.used, ammoCapacity.total))
         ResizeFooterMetric(rows.ammo)
         rows.ammo:Show()
     else
-        rows.ammo:Hide()
+        -- No ammo bag, but ammo carried in normal bags (any class can): the
+        -- arrow / bullet count, same as the Mini's ammo pill.
+        local carried = 0
+        for _, item in ipairs(Pockets.API.GetAggregatedCategoryItems(Constants.CATEGORY.AMMO)) do
+            carried = carried + (item.quantity or 0)
+        end
+        if carried > 0 then
+            rows.ammo:SetPrimary(tostring(carried))
+            ResizeFooterMetric(rows.ammo)
+            rows.ammo:Show()
+        else
+            rows.ammo:Hide()
+        end
     end
 end
 
