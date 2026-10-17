@@ -206,7 +206,7 @@ local function CreateMenuRow(parent, rowWidth)
     row.icon:SetSize(L.LIST_ICON_SIZE, L.LIST_ICON_SIZE)
     row.icon:SetPoint("LEFT", row, "LEFT", L.LIST_ROW_PADDING, 0)
 
-    row.count = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
+    row.count = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.NORMAL)
     row.count:SetPoint("RIGHT", row, "RIGHT", -(L.LIST_ROW_PADDING + L.LIST_ROW_CHEVRON_WIDTH + L.LIST_ROW_GAP), 0)
     row.count:SetWidth(L.LIST_ROW_COUNT_WIDTH)
     row.count:SetJustifyH("RIGHT")
@@ -225,7 +225,7 @@ local function CreateMenuRow(parent, rowWidth)
     row.chevron:SetJustifyH("CENTER")
     row.chevron:SetPoint("RIGHT", row, "RIGHT", -L.LIST_ROW_PADDING, 0)
 
-    row.label = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
+    row.label = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.NORMAL)
     row.label:SetPoint("LEFT", row.icon, "RIGHT", L.LIST_ROW_GAP, 0)
     row.label:SetPoint("RIGHT", row.count, "LEFT", -L.LIST_ROW_GAP, 0)
     row.label:SetJustifyH("LEFT")
@@ -2046,7 +2046,7 @@ local function CreateCategoryListRow(poolAnchor)
         -- giving a whole-row hover glow for free, matching Menu rows'
         -- own hover highlight.
 
-        row.name = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.SMALL)
+        row.name = PHUI.CreateLabel(row, "primary", nil, PHUI.Fonts.NORMAL)
         row.name:SetPoint("LEFT", row.icon, "RIGHT", L.LIST_ROW_GAP, 0)
         row.name:SetJustifyH("LEFT")
         row.name:SetWordWrap(false)
@@ -2057,7 +2057,7 @@ local function CreateCategoryListRow(poolAnchor)
         -- narrows the row further (wasted-space pass). qty sits flush
         -- against the row's own right edge instead, reclaiming that
         -- width for the name column.
-        row.qty = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.SMALL)
+        row.qty = PHUI.CreateLabel(row, "muted", nil, PHUI.Fonts.NORMAL)
         row.qty:SetPoint("RIGHT", row, "RIGHT", -L.LIST_ROW_PADDING, 0)
         row.qty:SetWidth(L.LIST_ROW_COUNT_WIDTH)
         row.qty:SetJustifyH("RIGHT")

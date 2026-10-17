@@ -276,11 +276,12 @@ Constants.LAYOUT = {
     -- FLEX | COUNT | CHEVRON - only LABEL/FLEX ever changes width, and
     -- item rows reserve the same trailing CHEVRON column (left empty)
     -- so their count lines up with category rows' count exactly.
-    LIST_ROW_HEIGHT = 30,
-    LIST_ICON_SIZE = 24,
-    LIST_ROW_PADDING = 4,
-    LIST_ROW_GAP = 4,
-    LIST_ROW_COUNT_WIDTH = 26,
+    -- Sized for the 356px native panels: 32px icons, normal-size text.
+    LIST_ROW_HEIGHT = 36,
+    LIST_ICON_SIZE = 30,
+    LIST_ROW_PADDING = 6,
+    LIST_ROW_GAP = 8,
+    LIST_ROW_COUNT_WIDTH = 40,
     LIST_ROW_CHEVRON_WIDTH = 16,
 
     -- Shared list-row visible-row cap (height-management pass) - both
