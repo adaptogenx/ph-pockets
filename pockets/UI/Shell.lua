@@ -191,11 +191,6 @@ function Shell:ShouldShowAmmoRow(ammoCapacity)
 end
 
 function Shell:GetParentState(state)
-    -- EXPERIMENT: with the native frame open, its own category list replaces
-    -- the old Menu, so Back from a category returns to the HUD (GLANCE).
-    if state == self.STATE.CATEGORY and self.nativeOpen then
-        return self.STATE.GLANCE
-    end
     return ESCAPE_PARENT[state]
 end
 
@@ -316,28 +311,14 @@ function Shell:BuildNativeGauge(root, chrome, onPortraitClick)
     end)
 end
 
--- EXPERIMENT: the category list (and search) rendered inside the open
--- native frame. Geometry (UI px from the HUD's top-left): the title bar ends
--- ~31 down and the portrait ring ~60 down / ~60 across; the inner border is
--- ~14 in from the sides and bottom.
--- Same outer width as the expanded panel (category list, All Items, ...) so the
--- window never changes width between views.
-local NATIVE_WIDTH = L.NATIVE_PANEL_WIDTH
-local NATIVE_SEARCH_LEFT = 68 -- clear of the ring (ends ~60)
-local NATIVE_SEARCH_TOP = 36 -- just under the title bar
+-- Search strip geometry (UI px from the panel's top-left): under the title
+-- bar, clear of the portrait ring (ends ~60).
+local NATIVE_SEARCH_LEFT = 68
+local NATIVE_SEARCH_TOP = 36
 local NATIVE_SEARCH_HEIGHT = 22
--- The list starts below the ring (like Blizzard's Professions window).
-local NATIVE_BODY_TOP = 66
-local NATIVE_BODY_SIDE = 16
--- Footer (Bag / Gold / Ammo, same rows as the old panel) sits on the bottom
--- inner border; the list/inset end just above it.
-local NATIVE_FOOTER_BOTTOM = 14
-local NATIVE_FOOTER_HEIGHT = L.SHELL_FOOTER_HEIGHT
-local NATIVE_BODY_BOTTOM = NATIVE_FOOTER_BOTTOM + NATIVE_FOOTER_HEIGHT + 8
-local NATIVE_FEEDBACK_HEIGHT = 36
 
--- The native frame's search field: dark rounded box, magnifier icon, faint
--- "Search" hint. One look for the opened frame and the All Items view.
+-- The native panel's search field: dark rounded box, magnifier icon, faint
+-- "Search" hint. One look for the category list and the All Items view.
 local function CreateStyledSearchBox(parent)
     local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
     box:SetHeight(NATIVE_SEARCH_HEIGHT)
@@ -398,197 +379,6 @@ local function CreateBackButton(parent, frame, onClick)
     return button
 end
 
-function Shell:BuildNativeBody(root, chrome)
-    -- Inset panel behind the list, like Professions' content panels. Uses
-    -- Blizzard's template when this client has it, otherwise nothing.
-    local ok, inset = pcall(CreateFrame, "Frame", nil, chrome, "InsetFrameTemplate")
-    if ok and inset then
-        inset:SetFrameLevel(505)
-        inset:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_BODY_SIDE - 4, -(NATIVE_BODY_TOP - 4))
-        inset:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -(NATIVE_BODY_SIDE - 4), NATIVE_BODY_BOTTOM - 6)
-        inset:EnableMouse(false)
-        self.nativeInset = inset
-    end
-
-    -- Footer bar: same look and metric rows as the old panel's footer.
-    local footer = CreateFrame("Frame", nil, chrome, "BackdropTemplate")
-    footer:SetFrameLevel(530)
-    footer:SetHeight(NATIVE_FOOTER_HEIGHT)
-    footer:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", NATIVE_BODY_SIDE - 4, NATIVE_FOOTER_BOTTOM)
-    footer:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -(NATIVE_BODY_SIDE - 4), NATIVE_FOOTER_BOTTOM)
-    PHUI.ApplyBackdrop(footer, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
-    local function FooterMetric(texture, iconOpts, style)
-        return Pockets.UI.MetricRow:Create(footer, {
-            width = 1,
-            height = L.GLANCE_METRIC_ROW_HEIGHT,
-            iconSize = L.GLANCE_METRIC_ICON_SIZE,
-            gap = L.GLANCE_METRIC_ICON_TEXT_GAP,
-            texture = texture,
-            iconOpts = iconOpts,
-            hasSecondary = false,
-            primaryStyle = style,
-        })
-    end
-    footer.bag = FooterMetric(Constants.HUD_ICON, { insetTexCoord = false }, "primary")
-    footer.bag:SetPoint("LEFT", footer, "LEFT", L.SHELL_PADDING, 0)
-    footer.gold = FooterMetric(Constants.GOLD_ICON, { insetTexCoord = false }, "muted")
-    footer.ammo = FooterMetric(Constants.CATEGORY_ICON.ammo, nil, "primary")
-    footer.ammo:SetPoint("RIGHT", footer, "RIGHT", -L.SHELL_PADDING, 0)
-    footer.ammo:Hide()
-    self.nativeFooter = footer
-
-    local body = CreateFrame("Frame", nil, chrome)
-    body:SetFrameLevel(520)
-    body:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_BODY_SIDE, -NATIVE_BODY_TOP)
-    body:SetPoint("TOPRIGHT", root, "TOPRIGHT", -NATIVE_BODY_SIDE, -NATIVE_BODY_TOP)
-    body:SetHeight(1)
-    self.nativeBody = body
-    self.nativeRows = {}
-
-    body.feedback = PHUI.CreateLabel(body, "muted", nil, PHUI.Fonts.SMALL)
-    body.feedback:SetPoint("TOPLEFT", body, "TOPLEFT", L.LIST_ROW_PADDING, -6)
-    body.feedback:SetJustifyH("LEFT")
-    body.feedback:Hide()
-
-    -- Search box: in the strip under the title bar, to the right of the ring.
-    local box = CreateStyledSearchBox(chrome)
-    box:SetFrameLevel(530)
-    box:SetPoint("TOPLEFT", root, "TOPLEFT", NATIVE_SEARCH_LEFT, -NATIVE_SEARCH_TOP)
-    box:SetPoint("TOPRIGHT", root, "TOPRIGHT", -NATIVE_BODY_SIDE, -NATIVE_SEARCH_TOP)
-    box:SetScript("OnTextChanged", function(self)
-        self:RefreshHint()
-        Shell:RenderNativeBody()
-    end)
-    box:SetScript("OnEscapePressed", function(self)
-        self:SetText("")
-        self:ClearFocus()
-    end)
-    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-    self.nativeSearch = box
-end
-
--- Collapses the open frame and clears any search.
-function Shell:ResetNativeSearch()
-    if self.nativeSearch then
-        self.nativeSearch:SetText("")
-        self.nativeSearch:ClearFocus()
-    end
-end
-
--- Rows for either the category list (no query) or ranked search results,
--- then the frame is sized to fit. Rows are plain buttons: results show the
--- item's tooltip on hover and open its category on click - nothing here
--- uses an item. Out of combat only for the resize.
-function Shell:RenderNativeBody()
-    local body = self.nativeBody
-    if not body then
-        return
-    end
-    local query = self.nativeSearch and self.nativeSearch:GetText() or ""
-
-    -- Build the rows to show: { icon, label, count, quality, item, categoryID }.
-    local entries, feedback = {}, nil
-    if query == "" then
-        for _, entry in ipairs(Pockets.API.GetCategorySummary()) do
-            if entry.count > 0 then
-                table.insert(entries, {
-                    icon = entry.icon, label = entry.label, count = entry.count,
-                    categoryID = entry.categoryID,
-                })
-            end
-        end
-    else
-        local matches, total = Pockets.UI.Search:RankedItemMatches(Pockets.API.GetAllAggregatedItems(), query)
-        if total == 0 then
-            feedback = "No items found"
-        elseif total > L.SEARCH_OVERFLOW_LIMIT then
-            feedback = string.format("%d items found\nKeep typing...", total)
-        else
-            for index = 1, math.min(total, L.SEARCH_MAX_RESULT_ROWS) do
-                local item = matches[index]
-                table.insert(entries, {
-                    icon = item.texture,
-                    label = item.name or item.itemLink or ("item:" .. tostring(item.itemID)),
-                    count = item.quantity, quality = item.quality, item = item,
-                    categoryID = item.categoryID,
-                })
-            end
-            if total > #entries then
-                feedback = string.format("and %d more. Keep typing to filter.", total - #entries)
-            end
-        end
-    end
-
-    local rowWidth = NATIVE_WIDTH - 2 * NATIVE_BODY_SIDE
-    for index, entry in ipairs(entries) do
-        local row = self.nativeRows[index]
-        if not row then
-            row = CreateMenuRow(body, rowWidth)
-            self.nativeRows[index] = row
-        end
-        row.icon:SetTexture(entry.icon)
-        row.label:SetText(entry.label)
-        local color = entry.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[entry.quality]
-        if color and entry.quality > 1 then
-            row.label:SetTextColor(color.r, color.g, color.b)
-        else
-            PHUI.ApplyTextStyle(row.label, "primary")
-        end
-        row.count:SetText(tostring(entry.count))
-        row:SetWidth(rowWidth)
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -(index - 1) * L.LIST_ROW_HEIGHT)
-        local categoryID = entry.categoryID
-        row:SetScript("OnClick", function()
-            if categoryID then
-                Shell:SetState(Shell.STATE.CATEGORY, { categoryID = categoryID })
-            end
-        end)
-        local item = entry.item
-        if item then
-            row:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                local link = item.itemLink or (item.itemID and ("item:" .. item.itemID))
-                if not (link and pcall(GameTooltip.SetHyperlink, GameTooltip, link)) then
-                    GameTooltip:Hide()
-                    return
-                end
-                GameTooltip:Show()
-            end)
-            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        else
-            row:SetScript("OnEnter", nil)
-            row:SetScript("OnLeave", nil)
-        end
-        row:Show()
-    end
-    for index = #entries + 1, #self.nativeRows do
-        self.nativeRows[index]:Hide()
-    end
-
-    local extra = 0
-    if feedback then
-        body.feedback:SetText(feedback)
-        body.feedback:ClearAllPoints()
-        body.feedback:SetPoint("TOPLEFT", body, "TOPLEFT", L.LIST_ROW_PADDING, -(#entries * L.LIST_ROW_HEIGHT) - 6)
-        body.feedback:Show()
-        extra = NATIVE_FEEDBACK_HEIGHT
-    else
-        body.feedback:Hide()
-    end
-
-    if self.nativeFooter then
-        self:ConfigureFooterRows(self.nativeFooter)
-    end
-
-    local contentHeight = #entries * L.LIST_ROW_HEIGHT + extra
-    body:SetHeight(math.max(1, contentHeight))
-    if not self:IsCombatBlocked() then
-        -- Same height as the expanded panels: fixed, whatever the content.
-        self.root:SetSize(NATIVE_WIDTH, TotalHeightForBody(0, true))
-    end
-end
-
 -- Keeps the native frame's ring in step with the main-bag capacity.
 function Shell:RenderNativeRing()
     local capacity = Pockets.Services.InventoryState:GetGeneralCapacity()
@@ -620,11 +410,10 @@ function Shell:BuildGlance()
     frame.chrome = chrome
     if chrome then
         self:BuildNativeGauge(frame, chrome, function()
-            if Shell.nativeOpen then
-                Shell:SetNativeOpen(false)
+            if not Shell:IsCombatBlocked() then
+                Shell:SetState(Shell.STATE.MENU)
             end
         end)
-        self:BuildNativeBody(frame, chrome)
     end
     if chrome then
         frame:SetBackdrop(nil)
@@ -660,19 +449,6 @@ function Shell:BuildGlance()
     -- Mini HUD: built once, shown instead of Glance when the player picks it.
     self.mini = Pockets.UI.MiniHUD:Build(frame)
     self.mini:Hide()
-    -- EXPERIMENT: the template's X collapses the native frame back to the Mini.
-    if chrome and chrome.CloseButton then
-        chrome.CloseButton:SetScript("OnClick", function()
-            Shell:SetNativeOpen(false)
-        end)
-    end
-    -- EXPERIMENT: Loot Log / All Items buttons on the title bar (shared builder).
-    if chrome and chrome.CloseButton then
-        self.nativePlusButton, self.nativeLogButton = CreateTitleActions(chrome)
-        -- Back on the opened frame's category page: works like a close.
-        self.nativeBackButton = CreateBackButton(chrome, frame, function() Shell:SetNativeOpen(false) end)
-    end
-
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
     -- footprint so the Mini never moves). Dragging a badge or strip icon
     -- moves the HUD through the root's own drag handlers.
@@ -726,19 +502,7 @@ function Shell:ApplyHudMode()
     local root = self.root
     local T = Pockets.UI.GlanceFrame.TOKENS
     local mode = self:GetHudMode()
-    if mode ~= Constants.HUD_MODE.GLANCE and self.nativeOpen and root.chrome then
-        -- EXPERIMENT: the Mini has opened up into the native frame. Same
-        -- TOPLEFT anchor; the Mini and its sidecar give way to the template.
-        root.glance:Hide()
-        self.mini:Hide()
-        Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
-        root:SetBackdrop(nil)
-        root.chrome:Show()
-        if root.chrome.CloseButton then
-            root.chrome.CloseButton:Show()
-        end
-        self:RenderNativeBody() -- category list; sizes the frame to fit
-    elseif mode ~= Constants.HUD_MODE.GLANCE then
+    if mode ~= Constants.HUD_MODE.GLANCE then
         root.glance:Hide()
         if root.chrome then
             root.chrome:Hide()
@@ -747,7 +511,6 @@ function Shell:ApplyHudMode()
         self.mini:Show()
         root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
     else
-        self.nativeOpen = false
         if root.chrome and root.chrome.CloseButton then
             root.chrome.CloseButton:Hide()
         end
@@ -762,35 +525,6 @@ function Shell:ApplyHudMode()
         root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
     end
     self.appliedHudMode = mode
-end
-
--- EXPERIMENT: Mini <-> native frame. Out of combat only (it resizes the
--- root). Returns whether the state changed.
-function Shell:SetNativeOpen(open)
-    if not self:IsMini() or not self.root.chrome then
-        return false
-    end
-    if self:IsCombatBlocked() then
-        -- Combat close: the root can't be resized, but the chrome and Mini
-        -- are plain frames - swap them directly. ApplyHudMode (resize) is
-        -- forced once combat ends.
-        if open or not self.nativeOpen then
-            return false
-        end
-        self.nativeOpen = false
-        self.root.chrome:Hide()
-        self.mini:Show()
-        self.appliedHudMode = nil
-        self:Render()
-        return true
-    end
-    self.nativeOpen = open and true or false
-    if not open then
-        self:ResetNativeSearch()
-    end
-    self:ApplyHudMode()
-    self:Render()
-    return true
 end
 
 -- Persists and applies a HUD mode. Returns false (and changes nothing) in
@@ -951,6 +685,13 @@ function Shell:BuildShell()
     header.searchBox:SetScript("OnTextChanged", function(box)
         if box.RefreshHint then
             box:RefreshHint()
+        end
+        if Shell.state == Shell.STATE.MENU then
+            -- Typing on the category list searches all items.
+            if box:GetText() ~= "" and not Shell:IsCombatBlocked() then
+                Shell:SetState(Shell.STATE.ALL)
+            end
+            return
         end
         Shell:RenderAll(box:GetText())
     end)
@@ -1161,15 +902,12 @@ function Shell:Initialize()
 
     if self.useSecure then
         frame:SetFrameRef("expanded", expanded)
-        -- Only while the root still has the Mini's footprint (combat can't
-        -- resize it, so an opened frame keeps its larger width) and only in
-        -- combat; out of combat the normal insecure OnClick below runs.
-        frame:SetAttribute("_onclick", string.format([[
+        -- Combat only; out of combat the normal insecure OnClick below runs.
+        frame:SetAttribute("_onclick", [[
             if not PlayerInCombat() then return end
-            if self:GetWidth() > %d then return end
             self:GetFrameRef("expanded"):Show()
             self:Hide()
-        ]], L.MINI_WIDTH + 2))
+        ]])
         frame:HookScript("PostClick", function()
             if Shell:IsCombatBlocked() then
                 Shell:OnSecureToggle()
@@ -1246,15 +984,10 @@ function Shell:Initialize()
         if Shell:IsCombatBlocked() then
             return -- the secure snippet handles combat
         end
-        if Shell.state ~= Shell.STATE.GLANCE or Shell.nativeOpen then
+        if Shell.state ~= Shell.STATE.GLANCE then
             return
         end
-        if Shell:IsMini() and frame.chrome then
-            -- EXPERIMENT: clicking the Mini opens the native frame.
-            Shell:SetNativeOpen(true)
-        else
-            Shell:SetState(Shell.STATE.MENU)
-        end
+        Shell:SetState(Shell.STATE.MENU)
     end)
 
     -- Escape dismisses straight to Glance (HandleEscape), never stepping
@@ -1287,6 +1020,8 @@ function Shell:Initialize()
     Pockets.Services.EventBus:Subscribe(Constants.DOMAIN_EVENT.COMBAT_STATE_CHANGED, function(payload)
         if payload and payload.inCombat == false then
             self:OnCombatEnded()
+        elseif payload and payload.inCombat == true then
+            self:SetSearchEnabled(false)
         end
     end, self)
 
@@ -1438,14 +1173,11 @@ function Shell:CloseAll()
     if self.state ~= self.STATE.GLANCE then
         self:SetState(self.STATE.GLANCE)
     end
-    if self.nativeOpen then
-        self:SetNativeOpen(false)
-    end
 end
 
 -- True while something is open that Escape should dismiss.
 function Shell:EscapeActive()
-    return self.state ~= self.STATE.GLANCE or self.nativeOpen == true
+    return self.state ~= self.STATE.GLANCE
 end
 
 function Shell:HandleEscape()
@@ -1535,7 +1267,23 @@ end
 
 -- PLAYER_REGEN_ENABLED: repair secure bindings from current state, then
 -- paint whatever was deferred.
+-- The search strip needs a re-layout to show results, which combat forbids.
+function Shell:SetSearchEnabled(enabled)
+    local box = self.frame and self.frame.shell and self.frame.shell.header.searchBox
+    if not box then
+        return
+    end
+    if not enabled then
+        box:ClearFocus()
+    end
+    if box.SetEnabled then
+        box:SetEnabled(enabled)
+    end
+    box:SetAlpha(enabled and 1 or 0.5)
+end
+
 function Shell:OnCombatEnded()
+    self:SetSearchEnabled(true)
     self:UpdateCombatBindings()
     local pool = Pockets.UI.ItemButtonPool
     local hadDeferred = pool:Reconcile()
@@ -1597,10 +1345,8 @@ function Shell:RenderInCombat()
     pool:RefreshCounts()
     if self.mini and self:UsesMiniCenter() then
         -- Plain textures/text only: safe to update in combat.
-        if not self.nativeOpen then
-            Pockets.UI.MiniHUD:Render(self.mini)
-            Pockets.UI.SidecarHUD:Render(self.sidecar, false)
-        end
+        Pockets.UI.MiniHUD:Render(self.mini)
+        Pockets.UI.SidecarHUD:Render(self.sidecar, false)
     end
     self:SyncStateFromVisibility()
 end
@@ -1668,18 +1414,7 @@ local function MakeSecureClicker(name, parent, action)
     b:RegisterForClicks("AnyUp")
     Shell.pageClickers = Shell.pageClickers or {}
     table.insert(Shell.pageClickers, b)
-    b:HookScript("PreClick", function()
-        Shell.pageShownBeforeClick = Shell:AnyCombatPageShown()
-    end)
     b:HookScript("PostClick", function()
-        -- The overlay swallows the click in combat: X / portrait / Back on the
-        -- opened frame fold it back to the Mini through the plain-Lua path.
-        -- (Back out of a category page only returns to the list.)
-        local backedOutOfPage = action == "back" and Shell.pageShownBeforeClick
-        if (action == "nativeclose" or action == "close" or action == "back") and Shell.nativeOpen
-            and not backedOutOfPage then
-            Shell:SetNativeOpen(false)
-        end
         Shell:SyncCombatPageUI()
         Shell:OnSecureToggle()
     end)
@@ -1770,10 +1505,10 @@ function Shell:UpdateCombatBindings()
 end
 
 -- The view a combat open shows: it can't be laid out then, so it is built
--- ahead of time. The Mini opens to its category list out of combat, so it
--- gets the same list (Menu) in combat; Glance keeps All Items.
+-- ahead of time. Opening always lands on the category list (Menu), in and
+-- out of combat.
 function Shell:GetCombatOpenState()
-    return self:IsMini() and self.STATE.MENU or self.STATE.ALL
+    return self.STATE.MENU
 end
 
 -- Out-of-combat only: lay out the combat-open view into the (hidden)
@@ -1848,13 +1583,8 @@ function Shell:Render()
     self.expandedVisible = state ~= self.STATE.GLANCE and not self.userHidden
 
     if state == self.STATE.GLANCE then
-        self:SetEscapeCatcherShown(self.nativeOpen == true)
-        -- Self-heal: appliedHudMode stays "mini" while the Mini is folded away
-        -- into the opened frame, so a Mini left hidden after a close would
-        -- never be re-applied.
-        local miniLost = self:IsMini() and not self.nativeOpen and self.mini
-            and not self.mini:IsShown()
-        if self.appliedHudMode ~= self:GetHudMode() or miniLost then
+        self:SetEscapeCatcherShown(false)
+        if self.appliedHudMode ~= self:GetHudMode() then
             self:ApplyHudMode()
         end
         self:RenderGlance()
@@ -1922,12 +1652,8 @@ end
 function Shell:RenderGlance()
     self:RenderNativeRing()
     if self:UsesMiniCenter() then
-        if self.nativeOpen then
-            self:RenderNativeBody()
-        else
-            Pockets.UI.MiniHUD:Render(self.mini)
-            Pockets.UI.SidecarHUD:Render(self.sidecar)
-        end
+        Pockets.UI.MiniHUD:Render(self.mini)
+        Pockets.UI.SidecarHUD:Render(self.sidecar)
         return
     end
     if self:DeferIfItemsBlocked() then
@@ -1992,7 +1718,16 @@ function Shell:ConfigureHeader()
         SetTitle("Pockets")
         header.plusButton:Show()
         header.lootButton:Show()
-        header.searchBox:Hide()
+        -- Native: the category list carries the search strip too (typing
+        -- switches to All Items with the query); disabled in combat.
+        if chrome then
+            if header.searchBox:GetText() ~= "" then
+                header.searchBox:SetText("")
+            end
+            header.searchBox:Show()
+        else
+            header.searchBox:Hide()
+        end
     elseif state == self.STATE.CATEGORY then
         SetTitle(Constants.CATEGORY_LABEL[self.context.categoryID] or "")
         header.plusButton:Show()
@@ -2100,7 +1835,7 @@ function Shell:RenderCategory(categoryID)
     self:ClearBody()
     -- EXPERIMENT: categories opened from the native frame always use the
     -- vertical list (not the large-icon grid), whatever the saved view mode.
-    if self.nativeOpen or Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
+    if IsNativeShell() or Pockets.SavedSettings.categoryViewMode == Constants.CATEGORY_VIEW_MODE.LIST then
         self:RenderCategoryList(categoryID)
     else
         self:RenderCategoryGrid(categoryID)
@@ -2392,9 +2127,7 @@ function Shell:SyncCombatPageUI()
             return
         end
     end
-    if self:IsMini() then
-        chrome:SetTitle("pockets")
-    end
+    chrome:SetTitle("pockets")
 end
 
 -- Out of combat only: hand every secure clicker the current main host and
