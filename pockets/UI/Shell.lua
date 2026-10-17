@@ -71,13 +71,12 @@ local ESCAPE_PARENT = {
 -- Native (PortraitFrameTemplate) chrome around the expanded panel. Geometry in
 -- UI px: the title bar + portrait ring take the top EXP_HEADER; the body sits
 -- EXP_SIDE in from the frame sides (so the viewport stays BodyViewportWidth
--- wide: SHELL_WIDTH + EXP_WIDTH_EXTRA - 2 * EXP_SIDE); the footer bar sits on
+-- wide: NATIVE_PANEL_WIDTH - 2 * EXP_SIDE); the footer bar sits on
 -- the bottom inner border.
 local EXP_HEADER = 62
 local EXP_SIDE = 16
 local EXP_FOOTER_SIDE = 12
 local EXP_BOTTOM = 14
-local EXP_WIDTH_EXTRA = 2 * (EXP_SIDE - L.SHELL_PADDING)
 
 local function IsNativeShell()
     return Shell.expanded ~= nil and Shell.expanded.chrome ~= nil
@@ -103,6 +102,9 @@ end
 -- layout (and thus their own dynamic height) before calling
 -- ApplyDimensions, instead of needing the frame already sized first.
 local function BodyViewportWidth()
+    if IsNativeShell() then
+        return L.NATIVE_PANEL_WIDTH - 2 * EXP_SIDE
+    end
     return L.SHELL_WIDTH - L.SHELL_PADDING * 2
 end
 
@@ -311,7 +313,7 @@ end
 -- ~14 in from the sides and bottom.
 -- Same outer width as the expanded panel (category list, All Items, ...) so the
 -- window never changes width between views.
-local NATIVE_WIDTH = L.SHELL_WIDTH + EXP_WIDTH_EXTRA
+local NATIVE_WIDTH = L.NATIVE_PANEL_WIDTH
 local NATIVE_MIN_HEIGHT = 150 -- shorter and the template's corner art overlaps
 local NATIVE_SEARCH_LEFT = 68 -- clear of the ring (ends ~60)
 local NATIVE_SEARCH_TOP = 36 -- just under the title bar
@@ -1378,7 +1380,7 @@ end
 -- Since the frame is TOPLEFT-anchored, growing/shrinking always extends
 -- right/down from that fixed point.
 function Shell:ApplyDimensions(bodyHeight, includeFooter)
-    local width = L.SHELL_WIDTH + (IsNativeShell() and EXP_WIDTH_EXTRA or 0)
+    local width = IsNativeShell() and L.NATIVE_PANEL_WIDTH or L.SHELL_WIDTH
     self.expanded:SetSize(width, TotalHeightForBody(bodyHeight, includeFooter))
 end
 

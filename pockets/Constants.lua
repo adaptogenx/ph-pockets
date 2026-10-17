@@ -233,6 +233,10 @@ Constants.LAYOUT = {
     -- (FlowLayout:PlanFlat) rather than assumed fixed, so this value is
     -- free to change without breaking layout.
     SHELL_WIDTH = 340,
+    -- Outer width of every native-template panel (opened Mini frame, category
+    -- list, All Items, Loot Log, Search). The ONE width: body viewport, rows,
+    -- search box, footer and every other horizontal measure derive from it.
+    NATIVE_PANEL_WIDTH = 300,
     -- Matches PHUI.Spacing.PANEL_PADDING (Shared/PHUI.lua) - Menu/Category/
     -- All are pH's smaller inner-sub-panel style, not the main HUD frame
     -- (that's Glance, which uses PHUI.Spacing.PADDING - see GLANCE_PADDING).
