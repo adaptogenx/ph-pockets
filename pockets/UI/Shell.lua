@@ -2155,6 +2155,7 @@ local function ConfigureListRow(row, item, rowWidth)
     end
     row.qty:SetText(tostring(item.quantity))
 
+    row.hideCount = true -- stays hidden when combat's RefreshCounts reruns SetCount
     Pockets.UI.ItemButtonPool:Configure(row, item)
     -- Configure() shows the button's own built-in stack-count badge (meant
     -- for a 40x40 square button) - redundant on a wide row that already has
@@ -2290,6 +2291,7 @@ function Shell:RenderSearch()
             end
             row.qty:SetText(tostring(item.quantity))
 
+            row.hideCount = true
             Pockets.UI.ItemButtonPool:Configure(row, item)
             -- Same reasoning as RenderCategoryList: the button's own
             -- corner count badge is redundant next to the row's qty
