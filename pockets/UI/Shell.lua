@@ -1543,7 +1543,7 @@ function Shell:SyncStateFromVisibility()
     if self.expanded:IsShown() then
         local shown = self.displayedState
         if not shown or shown == self.STATE.GLANCE then
-            shown = self.STATE.ALL
+            shown = self:GetCombatOpenState()
         end
         self.state = shown
         self.context = self.displayedContext or {}
@@ -1701,21 +1701,29 @@ function Shell:UpdateCombatBindings()
     self.bindingDriver:SetAttribute("key2", key2)
 end
 
--- Out-of-combat only: lay out All Items into the (hidden) expanded frame so
--- it is ready to be shown in combat. Cheap to skip; coalesced by
--- SchedulePrewarm.
+-- The view a combat open shows: it can't be laid out then, so it is built
+-- ahead of time. The Mini opens to its category list out of combat, so it
+-- gets the same list (Menu) in combat; Glance keeps All Items.
+function Shell:GetCombatOpenState()
+    return self:IsMini() and self.STATE.MENU or self.STATE.ALL
+end
+
+-- Out-of-combat only: lay out the combat-open view into the (hidden)
+-- expanded frame so it is ready to be shown in combat. Cheap to skip;
+-- coalesced by SchedulePrewarm.
 function Shell:Prewarm()
     if self.state ~= self.STATE.GLANCE or self:IsCombatBlocked() or self.isDragging then
         return
     end
     local savedState, savedContext = self.state, self.context
-    self.state, self.context = self.STATE.ALL, {}
+    local target = self:GetCombatOpenState()
+    self.state, self.context = target, {}
     local ok, err = pcall(function()
-        self:RenderExpandedContent(self.STATE.ALL)
+        self:RenderExpandedContent(target)
     end)
     self.state, self.context = savedState, savedContext
     if ok then
-        self.laidOutState, self.laidOutContext = self.STATE.ALL, {}
+        self.laidOutState, self.laidOutContext = target, {}
     elseif Pockets.Debug then
         Pockets.Debug:LogError("Shell Prewarm failed: " .. tostring(err))
     end
