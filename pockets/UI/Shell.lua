@@ -1665,6 +1665,11 @@ function Shell:BuildSecureControls()
     Overlay(self.expanded.portraitButton, "close")
     -- Back would need a re-layout to Menu; in combat it closes instead.
     Overlay(self.frame.shell.header.backButton, "close")
+    -- The Mini: in combat a click opens All Items (the root can't be resized
+    -- into the native frame then). Hides along with the Mini.
+    if self.mini then
+        Overlay(self.mini, "open")
+    end
 
     -- Key binding -> secure toggle, active only in combat; out of combat
     -- the normal binding runs Pockets_ToggleFullInventory (full behavior).
