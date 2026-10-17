@@ -1030,7 +1030,13 @@ function Shell:BuildShell()
     -- SHELL_PADDING, regardless of whether a scrollbar is showing - and
     -- UI/ScrollBar.lua's compact custom Slider lives in that same existing
     -- padding gutter as a sibling, never reserving extra width itself.
-    shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell)
+    -- Plain wrapper: in combat a ScrollFrame holding protected item buttons
+    -- can't be shown/hidden itself, but a parent nothing protected anchors to
+    -- can - that is how combat category pages swap (see ShowCombatPage).
+    shell.mainHost = CreateFrame("Frame", nil, shell)
+    shell.mainHost:SetAllPoints(shell)
+    shell.mainHost:SetFrameLevel(shell:GetFrameLevel())
+    shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell.mainHost)
     if native then
         shell.scrollFrame:SetPoint("TOPLEFT", shell, "TOPLEFT", EXP_SIDE, -(EXP_HEADER + L.SHELL_PADDING))
         shell.scrollFrame:SetPoint("BOTTOMRIGHT", shell.footer, "TOPRIGHT", -(EXP_SIDE - EXP_FOOTER_SIDE), L.SHELL_PADDING)
@@ -2244,7 +2250,10 @@ end
 
 function Shell:CreateCombatPage(shell)
     local page = {}
-    page.scroll = CreateFrame("ScrollFrame", nil, shell)
+    page.host = CreateFrame("Frame", nil, shell)
+    page.host:SetAllPoints(shell)
+    page.host:SetFrameLevel(shell:GetFrameLevel())
+    page.scroll = CreateFrame("ScrollFrame", nil, page.host)
     for i = 1, shell.scrollFrame:GetNumPoints() do
         page.scroll:SetPoint(shell.scrollFrame:GetPoint(i))
     end
@@ -2252,9 +2261,8 @@ function Shell:CreateCombatPage(shell)
     page.content:SetWidth(BodyViewportWidth())
     page.content:SetHeight(1)
     page.scroll:SetScrollChild(page.content)
-    page.bar = Pockets.UI.ScrollBar:Create(page.scroll)
-    page.bar:Hide()
-    page.scroll:Hide()
+    page.bar = Pockets.UI.ScrollBar:Create(page.scroll) -- child of page.host
+    page.host:Hide()
     return page
 end
 
@@ -2287,7 +2295,6 @@ function Shell:BuildCombatPages()
             local usedContentHeight = ResolveDynamicHeight(contentHeight, MaxListContentHeight(), 0)
             page.content:SetHeight(math.max(contentHeight, 1))
             Pockets.UI.ScrollBar:Update(page.bar, contentHeight, usedContentHeight)
-            page.bar:Hide() -- only shown with its page
         end
     end
     -- Categories that emptied out: drop their rows.
@@ -2306,10 +2313,8 @@ function Shell:ShowCombatPage(categoryID)
         return
     end
     self:ResetCombatPages()
-    shell.scrollFrame:Hide()
-    shell.scrollBar:Hide()
-    page.scroll:Show()
-    page.bar:SetShown(page.bar.shown)
+    shell.mainHost:Hide()
+    page.host:Show()
     self.combatPage = categoryID
     local chrome = self.expanded.chrome
     if chrome then
@@ -2321,8 +2326,7 @@ end
 function Shell:HideCombatPage()
     self:ResetCombatPages()
     local shell = self.frame.shell
-    shell.scrollFrame:Show()
-    shell.scrollBar:SetShown(shell.scrollBar.shown)
+    shell.mainHost:Show()
     local chrome = self.expanded.chrome
     if chrome then
         chrome:SetTitle("pockets")
@@ -2336,9 +2340,9 @@ function Shell:ResetCombatPages()
         return
     end
     for _, page in pairs(shell.combatPages or {}) do
-        page.scroll:Hide()
-        page.bar:Hide()
+        page.host:Hide()
     end
+    shell.mainHost:Show()
     if shell.combatBack then
         shell.combatBack:Hide()
     end
