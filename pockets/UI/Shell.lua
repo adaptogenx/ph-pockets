@@ -1715,7 +1715,15 @@ function Shell:BuildSecureControls()
     -- The Mini: in combat a click opens All Items (the root can't be resized
     -- into the native frame then). Hides along with the Mini.
     if self.mini then
-        Overlay(self.mini, "open")
+        -- Anchored to the root, NOT to the Mini: a secure frame anchored to a
+        -- frame makes that frame protected, and the combat close must be able
+        -- to Show() the Mini from plain Lua.
+        local o = MakeSecureClicker(nil, self.mini, "open")
+        o:SetPoint("TOPLEFT", self.root, "TOPLEFT", 0, 0)
+        o:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
+        o:SetFrameLevel(self.mini:GetFrameLevel() + 10)
+        o:Hide()
+        RegisterStateDriver(o, "visibility", "[combat] show; hide")
     end
 
     -- Key binding -> secure toggle, active only in combat; out of combat
