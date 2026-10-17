@@ -237,6 +237,10 @@ Constants.LAYOUT = {
     -- list, All Items, Loot Log, Search). The ONE width: body viewport, rows,
     -- search box, footer and every other horizontal measure derive from it.
     NATIVE_PANEL_WIDTH = 300,
+    -- Native panels are ONE fixed height in every view: this many list rows
+    -- visible (longer content scrolls, shorter leaves space), so switching
+    -- between the category list, All Items, Loot Log, etc. never resizes it.
+    NATIVE_BODY_ROWS = 8,
     -- Matches PHUI.Spacing.PANEL_PADDING (Shared/PHUI.lua) - Menu/Category/
     -- All are pH's smaller inner-sub-panel style, not the main HUD frame
     -- (that's Glance, which uses PHUI.Spacing.PADDING - see GLANCE_PADDING).

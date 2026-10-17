@@ -82,13 +82,16 @@ local function IsNativeShell()
     return Shell.expanded ~= nil and Shell.expanded.chrome ~= nil
 end
 
+-- Fixed viewport height of a native panel (see NATIVE_BODY_ROWS).
+local function NativeContentHeight()
+    return L.NATIVE_BODY_ROWS * L.LIST_ROW_HEIGHT
+end
+
 local function TotalHeightForBody(bodyHeight, includeFooter)
     if IsNativeShell() then
-        local total = EXP_HEADER + bodyHeight + EXP_BOTTOM
-        if includeFooter ~= false then
-            total = total + L.SHELL_FOOTER_HEIGHT
-        end
-        return total
+        -- Always the same: the footer's room is reserved even when a view
+        -- hides it, so no view changes the panel's height.
+        return EXP_HEADER + NativeContentHeight() + 2 * L.SHELL_PADDING + EXP_BOTTOM + L.SHELL_FOOTER_HEIGHT
     end
     if includeFooter == false then
         return L.SHELL_HEADER_HEIGHT + bodyHeight
@@ -140,6 +143,11 @@ end
 -- it look disproportionately tall next to its own content (confirmed
 -- regression: a 1-item category rendered ~1.6 rows tall).
 local function ResolveDynamicHeight(contentHeight, maxContentHeight, minContentHeight)
+    if IsNativeShell() then
+        -- Fixed viewport in every view; only the scrollbar depends on content.
+        local fixed = NativeContentHeight()
+        return fixed, fixed + L.SHELL_PADDING * 2, contentHeight > fixed
+    end
     maxContentHeight = maxContentHeight or MaxContentHeight()
     minContentHeight = minContentHeight or MinContentHeight()
     local needsScrollbar = contentHeight > maxContentHeight
@@ -315,7 +323,6 @@ end
 -- Same outer width as the expanded panel (category list, All Items, ...) so the
 -- window never changes width between views.
 local NATIVE_WIDTH = L.NATIVE_PANEL_WIDTH
-local NATIVE_MIN_HEIGHT = 150 -- shorter and the template's corner art overlaps
 local NATIVE_SEARCH_LEFT = 68 -- clear of the ring (ends ~60)
 local NATIVE_SEARCH_TOP = 36 -- just under the title bar
 local NATIVE_SEARCH_HEIGHT = 22
@@ -561,8 +568,8 @@ function Shell:RenderNativeBody()
     local contentHeight = #entries * L.LIST_ROW_HEIGHT + extra
     body:SetHeight(math.max(1, contentHeight))
     if not self:IsCombatBlocked() then
-        local height = math.max(NATIVE_MIN_HEIGHT, NATIVE_BODY_TOP + contentHeight + NATIVE_BODY_BOTTOM)
-        self.root:SetSize(NATIVE_WIDTH, height)
+        -- Same height as the expanded panels: fixed, whatever the content.
+        self.root:SetSize(NATIVE_WIDTH, TotalHeightForBody(0, true))
     end
 end
 
