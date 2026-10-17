@@ -881,12 +881,6 @@ function Shell:BuildShell()
     if native then
         -- The same Back element the opened frame uses, at the same spot.
         header.backButton = CreateBackButton(header, shell, function() Shell:GoBack() end)
-        -- Combat only: while a prewarmed category page is showing, this plain
-        -- Back sits above the secure Back overlay (which would close
-        -- everything) and returns to the category list instead.
-        shell.combatBack = CreateBackButton(header, shell, function() Shell:HideCombatPage() end)
-        shell.combatBack:SetFrameLevel(600)
-        shell.combatBack:Hide()
     else
         header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
             tooltipText = "Back",
@@ -1033,7 +1027,7 @@ function Shell:BuildShell()
     -- Plain wrapper: in combat a ScrollFrame holding protected item buttons
     -- can't be shown/hidden itself, but a parent nothing protected anchors to
     -- can - that is how combat category pages swap (see ShowCombatPage).
-    shell.mainHost = CreateFrame("Frame", nil, shell)
+    shell.mainHost = CreateFrame("Frame", nil, shell, self.useSecure and "SecureHandlerBaseTemplate" or nil)
     shell.mainHost:SetAllPoints(shell)
     shell.mainHost:SetFrameLevel(shell:GetFrameLevel())
     shell.scrollFrame = CreateFrame("ScrollFrame", "PocketsShellScrollFrame", shell.mainHost)
@@ -1566,9 +1560,6 @@ function Shell:SyncStateFromVisibility()
     else
         self.state = self.STATE.GLANCE
         self.expandedVisible = false
-        if self.combatPage then
-            self:HideCombatPage()
-        end
     end
     self:SetEscapeCatcherShown(self:EscapeActive())
 end
@@ -1600,6 +1591,20 @@ local TOGGLE_SNIPPET = [[
     local e = self:GetFrameRef("expanded")
     local r = self:GetFrameRef("root")
     local action = self:GetAttribute("pocketsaction") or "toggle"
+    local main = self:GetFrameRef("main")
+    local n = self:GetAttribute("npages") or 0
+    if action == "back" then
+        -- Back from a combat category page returns to the category list.
+        for i = 1, n do
+            local h = self:GetFrameRef("page" .. i)
+            if h and h:IsShown() then
+                h:Hide()
+                if main then main:Show() end
+                return
+            end
+        end
+        action = "close"
+    end
     local open
     if action == "open" then
         open = true
@@ -1614,6 +1619,12 @@ local TOGGLE_SNIPPET = [[
     else
         e:Hide()
         r:Show()
+        -- Next open starts at the category list again.
+        for i = 1, n do
+            local h = self:GetFrameRef("page" .. i)
+            if h then h:Hide() end
+        end
+        if main then main:Show() end
     end
 ]]
 
@@ -1629,12 +1640,21 @@ local function MakeSecureClicker(name, parent, action)
     b:SetAttribute("pocketsaction", action)
     b:SetAttribute("_onclick", TOGGLE_SNIPPET)
     b:RegisterForClicks("AnyUp")
+    Shell.pageClickers = Shell.pageClickers or {}
+    table.insert(Shell.pageClickers, b)
+    b:HookScript("PreClick", function()
+        Shell.pageShownBeforeClick = Shell:AnyCombatPageShown()
+    end)
     b:HookScript("PostClick", function()
         -- The overlay swallows the click in combat: X / portrait / Back on the
         -- opened frame fold it back to the Mini through the plain-Lua path.
-        if (action == "nativeclose" or action == "close") and Shell.nativeOpen then
+        -- (Back out of a category page only returns to the list.)
+        local backedOutOfPage = action == "back" and Shell.pageShownBeforeClick
+        if (action == "nativeclose" or action == "close" or action == "back") and Shell.nativeOpen
+            and not backedOutOfPage then
             Shell:SetNativeOpen(false)
         end
+        Shell:SyncCombatPageUI()
         Shell:OnSecureToggle()
     end)
     return b
@@ -1651,7 +1671,17 @@ function Shell:BuildSecureControls()
 
     -- Whenever the expanded frame hides (X, Escape, toggle), Glance returns.
     SecureHandlerWrapScript(self.expanded, "OnHide", toggle,
-        [[ local r = owner:GetFrameRef("root") if r then r:Show() end ]])
+        [[
+            local r = owner:GetFrameRef("root")
+            if r then r:Show() end
+            local n = owner:GetAttribute("npages") or 0
+            for i = 1, n do
+                local h = owner:GetFrameRef("page" .. i)
+                if h then h:Hide() end
+            end
+            local m = owner:GetFrameRef("main")
+            if m then m:Show() end
+        ]])
     self.expanded:HookScript("OnHide", function()
         if Shell:IsCombatBlocked() then
             Shell:Render()
@@ -1681,7 +1711,7 @@ function Shell:BuildSecureControls()
     -- the same combat-safe overlay as the X (the normal click is insecure).
     Overlay(self.expanded.portraitButton, "close")
     -- Back would need a re-layout to Menu; in combat it closes instead.
-    Overlay(self.frame.shell.header.backButton, "close")
+    Overlay(self.frame.shell.header.backButton, "back")
     -- The Mini: in combat a click opens All Items (the root can't be resized
     -- into the native frame then). Hides along with the Mini.
     if self.mini then
@@ -1739,6 +1769,7 @@ function Shell:Prewarm()
         self:RenderExpandedContent(target)
         if target == self.STATE.MENU then
             self:BuildCombatPages()
+            self:SyncPageRefs()
         end
     end)
     self.state, self.context = savedState, savedContext
@@ -2017,12 +2048,9 @@ function Shell:RenderMenu()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
         row:SetScript("OnClick", function()
-            if Shell:IsCombatBlocked() then
-                Shell:ShowCombatPage(entry.categoryID)
-                return
-            end
             Shell:SetState(Shell.STATE.CATEGORY, { categoryID = entry.categoryID })
         end)
+        self:WireMenuRowOverlay(row)
         row:Show()
 
         y = y + L.LIST_ROW_HEIGHT
@@ -2250,7 +2278,7 @@ end
 
 function Shell:CreateCombatPage(shell)
     local page = {}
-    page.host = CreateFrame("Frame", nil, shell)
+    page.host = CreateFrame("Frame", nil, shell, Shell.useSecure and "SecureHandlerBaseTemplate" or nil)
     page.host:SetAllPoints(shell)
     page.host:SetFrameLevel(shell:GetFrameLevel())
     page.scroll = CreateFrame("ScrollFrame", nil, page.host)
@@ -2305,48 +2333,101 @@ function Shell:BuildCombatPages()
     end
 end
 
--- Plain Show/Hide only: allowed in combat.
-function Shell:ShowCombatPage(categoryID)
-    local shell = self.frame.shell
-    local page = shell.combatPages and shell.combatPages[categoryID]
-    if not page then
-        return
-    end
-    self:ResetCombatPages()
-    shell.mainHost:Hide()
-    page.host:Show()
-    self.combatPage = categoryID
-    local chrome = self.expanded.chrome
-    if chrome then
-        chrome:SetTitle((Constants.CATEGORY_LABEL[categoryID] or ""):lower())
-    end
-    shell.combatBack:Show()
-end
-
-function Shell:HideCombatPage()
-    self:ResetCombatPages()
-    local shell = self.frame.shell
-    shell.mainHost:Show()
-    local chrome = self.expanded.chrome
-    if chrome then
-        chrome:SetTitle("pockets")
-    end
-end
-
--- Hides every combat page and its Back; leaves the main body untouched.
+-- In combat the hosts (protected, they hold protected item buttons) can only
+-- be shown/hidden by secure snippets: category rows and Back carry secure
+-- overlays (see BuildSecureControls / WireMenuRowOverlay). Out of combat,
+-- plain calls are fine.
 function Shell:ResetCombatPages()
     local shell = self.frame and self.frame.shell
-    if not shell then
+    if not shell or self:IsCombatBlocked() then
         return
     end
     for _, page in pairs(shell.combatPages or {}) do
         page.host:Hide()
     end
     shell.mainHost:Show()
-    if shell.combatBack then
-        shell.combatBack:Hide()
+end
+
+function Shell:AnyCombatPageShown()
+    local shell = self.frame and self.frame.shell
+    for _, page in pairs(shell and shell.combatPages or {}) do
+        if page.host:IsShown() then
+            return true
+        end
     end
-    self.combatPage = nil
+    return false
+end
+
+-- Title follows whichever page (if any) the secure click left showing.
+function Shell:SyncCombatPageUI()
+    local shell = self.frame and self.frame.shell
+    local chrome = self.expanded and self.expanded.chrome
+    if not shell or not chrome or not shell.combatPages then
+        return
+    end
+    for categoryID, page in pairs(shell.combatPages) do
+        if page.host:IsShown() then
+            chrome:SetTitle((Constants.CATEGORY_LABEL[categoryID] or ""):lower())
+            return
+        end
+    end
+    if self:IsMini() then
+        chrome:SetTitle("pockets")
+    end
+end
+
+-- Out of combat only: hand every secure clicker the current main host and
+-- page list (its snippets reset pages on close / go Back through them).
+function Shell:SyncPageRefs()
+    local shell = self.frame.shell
+    local hosts = {}
+    for _, page in pairs(shell.combatPages or {}) do
+        table.insert(hosts, page.host)
+    end
+    for _, clicker in ipairs(self.pageClickers or {}) do
+        clicker:SetFrameRef("main", shell.mainHost)
+        for i, host in ipairs(hosts) do
+            clicker:SetFrameRef("page" .. i, host)
+        end
+        clicker:SetAttribute("npages", #hosts)
+    end
+    -- Menu row overlays: each opens its row's category page.
+    for _, row in ipairs(shell.menuRows) do
+        local overlay = row.pageOverlay
+        if overlay then
+            local page = row.categoryID and shell.combatPages and shell.combatPages[row.categoryID]
+            overlay:SetFrameRef("main", shell.mainHost)
+            if page then
+                overlay:SetFrameRef("page", page.host)
+            end
+            overlay.hasPage = page ~= nil
+        end
+    end
+end
+
+local PAGE_SNIPPET = [[
+    local main = self:GetFrameRef("main")
+    local page = self:GetFrameRef("page")
+    if main and page then
+        main:Hide()
+        page:Show()
+    end
+]]
+
+-- A secure overlay on a Menu row (combat only): opens that category's page.
+function Shell:WireMenuRowOverlay(row)
+    if row.pageOverlay or not self.useSecure then
+        return
+    end
+    local o = CreateFrame("Button", nil, row, "SecureHandlerClickTemplate")
+    o:SetAllPoints(row)
+    o:SetFrameLevel(row:GetFrameLevel() + 10)
+    o:SetAttribute("_onclick", PAGE_SNIPPET)
+    o:RegisterForClicks("AnyUp")
+    o:HookScript("PostClick", function() Shell:SyncCombatPageUI() end)
+    o:Hide()
+    RegisterStateDriver(o, "visibility", "[combat] show; hide")
+    row.pageOverlay = o
 end
 
 --------------------------------------------------
