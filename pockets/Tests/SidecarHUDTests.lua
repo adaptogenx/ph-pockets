@@ -118,24 +118,3 @@ TestRunner:Register("Sidecar: gold stays compact and keeps its denomination", fu
         and F(124000000) == "12.4kg" and F(12000000000) == "1.2mg" and F(-5) == "0c" and F(nil) == "0c"
     return ok, ok and "OK" or string.format("%s %s %s", F(1520000), F(124000000), F(12000000000))
 end)
-
-TestRunner:Register("Sidecar: recent node hover shows the big preview only when enabled", function()
-    local node = Shell.sidecar.strip.icons[1]
-    local settings = Pockets.SavedSettings
-    local original = settings.recentItemPreviewEnabled
-    local record = { itemID = 6948, texture = "Interface\\Icons\\INV_Misc_Rune_01", quantity = 1 }
-    local enter, leave = SidecarHUD.ItemHover(record)
-    settings.recentItemPreviewEnabled = false
-    enter(node)
-    local frame = Pockets.UI.ItemPreview.frame
-    local offOK = not (frame and frame:IsShown())
-    settings.recentItemPreviewEnabled = true
-    enter(node)
-    local onOK = Pockets.UI.ItemPreview.frame:IsShown()
-    leave(node)
-    local hidden = not Pockets.UI.ItemPreview.frame:IsShown()
-    GameTooltip:Hide()
-    settings.recentItemPreviewEnabled = original
-    local ok = offOK and onOK and hidden
-    return ok, ok and "OK" or string.format("off=%s on=%s hidden=%s", tostring(offOK), tostring(onOK), tostring(hidden))
-end)

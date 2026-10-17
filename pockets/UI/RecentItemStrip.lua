@@ -154,7 +154,10 @@ function RecentItemStrip:Create(parent, opts)
             -- more specific anchor via the hover preview above.
             button.isRecentItem = true
             button:ClearAllPoints()
-            button:SetPoint("LEFT", self, "LEFT", (i - 1) * (self._iconSize + self._gap), 0)
+            -- positionFor(i, shown) lets a caller space/align the icons itself
+            -- (Mini mode justifies them across the HUD's width).
+            local x = self.positionFor and self.positionFor(i, count) or (i - 1) * (self._iconSize + self._gap)
+            button:SetPoint("LEFT", self, "LEFT", x, 0)
             button:Show()
         end
 

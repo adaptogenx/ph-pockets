@@ -100,109 +100,6 @@ function SidecarHUD.FormatCount(n)
     return tostring(n)
 end
 
--- Recent strip: fixed-size frame (never resizes with content), five plain
--- 24px icon buttons. Hover = item tooltip (+ big preview when enabled);
--- click = open Recent. Never uses the item.
-function SidecarHUD.CreateStrip(root, handlers, spec)
-    spec = spec or SidecarHUD.STRIP_SPEC
-    local strip = CreateFrame("Frame", nil, root, "BackdropTemplate")
-    strip:SetSize(SidecarHUD.StripWidth(spec.icons, spec), spec.height)
-    if spec.backdrop then -- the Sidecar strip has no outer frame
-        PHUI.ApplyBackdrop(strip, {
-            backdrop = spec.backdrop,
-            bgColor = PHUI.Colors.BG_DARK,
-            bgAlpha = L.GLANCE_ALPHA,
-            borderColor = PHUI.Colors.BORDER_BRONZE,
-        })
-    end
-    strip:Hide()
-    strip.icons = {}
-    local bronze = PHUI.Colors.BORDER_BRONZE
-    for i = 1, spec.icons do
-        local btn = CreateFrame("Button", nil, strip, "BackdropTemplate")
-        btn:SetSize(spec.icon, spec.icon)
-        btn:SetPoint("LEFT", strip, "LEFT",
-            spec.padX + (i - 1) * (spec.icon + spec.gap), 0)
-        btn:RegisterForClicks("AnyUp")
-        btn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        btn:SetBackdropColor(0.16, 0.14, 0.11, 0.95) -- visible slot behind each icon
-        btn.icon = btn:CreateTexture(nil, "ARTWORK")
-        btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
-        btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
-        btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        btn.count = PHUI.CreateLabel(btn, "primary", nil, PHUI.Fonts.NODE_STACK)
-        btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
-        btn.count:SetJustifyH("RIGHT")
-        btn:SetScript("OnClick", function() handlers.openRecent() end)
-        btn:SetScript("OnEnter", function(self)
-            if self.onEnter then self.onEnter(self) end
-        end)
-        btn:SetScript("OnLeave", function(self)
-            GameTooltip:Hide()
-            if self.onLeave then self.onLeave(self) end
-        end)
-        btn:RegisterForDrag("LeftButton")
-        btn:SetScript("OnDragStart", handlers.dragStart)
-        btn:SetScript("OnDragStop", handlers.dragStop)
-        btn.defaultBorder = bronze
-        btn:Hide()
-        strip.icons[i] = btn
-    end
-    return strip
-end
-
--- Real item tooltip on hover (bag slot when known, else the link/id), plus
--- the big floating preview when the player enabled it. Display only.
-function SidecarHUD.ItemHover(item)
-    local function enter(node)
-        GameTooltip:SetOwner(node, "ANCHOR_RIGHT")
-        local BagAPI = Pockets.Adapters.BagAPI
-        local ok = false
-        if item.bagID and item.slotID then
-            ok = pcall(BagAPI.SetTooltipToBagItem, BagAPI, GameTooltip, item.bagID, item.slotID)
-        end
-        if not ok then
-            local link = item.itemLink or (item.itemID and ("item:" .. item.itemID))
-            ok = link ~= nil and pcall(GameTooltip.SetHyperlink, GameTooltip, link)
-        end
-        if ok then
-            GameTooltip:Show()
-        else
-            GameTooltip:Hide()
-        end
-        if Pockets.SavedSettings.recentItemPreviewEnabled then
-            Pockets.UI.ItemPreview:Show(item)
-        end
-    end
-    local function leave()
-        Pockets.UI.ItemPreview:Hide()
-    end
-    return enter, leave
-end
-
--- Configures one strip icon (or hides it) for a recent-item record.
-function SidecarHUD.ConfigureStripIcon(btn, item)
-    if not item then
-        btn:Hide()
-        return
-    end
-    btn.icon:SetTexture(item.texture)
-    btn.count:SetText((item.quantity or 0) > 1 and tostring(item.quantity) or "")
-    local color = item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
-    local c = btn.defaultBorder
-    if color and item.quality > 1 then
-        btn:SetBackdropBorderColor(color.r, color.g, color.b, 1)
-    else
-        btn:SetBackdropBorderColor(c[1], c[2], c[3], 1)
-    end
-    btn.onEnter, btn.onLeave = SidecarHUD.ItemHover(item)
-    btn:Show()
-end
-
 -- Gap between strip icons so five of them span exactly `width` (never less
 -- than the minimum gap).
 function SidecarHUD.StripGap(width)
@@ -295,7 +192,16 @@ function SidecarHUD:Build(root, handlers)
     local sidecar = { root = root, handlers = handlers }
     sidecar.gold = CreateBadge(root, handlers)
     sidecar.ammo = CreateBadge(root, handlers)
-    sidecar.strip = SidecarHUD.CreateStrip(root, handlers, SidecarHUD.STRIP_SPEC)
+    -- The recent strip is the same real-item-button strip Glance uses
+    -- (UI/RecentItemStrip.lua): right-click uses the item, tooltips, drag and
+    -- the big preview all work. Icons are placed by SidecarHUD:Layout.
+    local spec = SidecarHUD.STRIP_SPEC
+    sidecar.strip = Pockets.UI.RecentItemStrip:Create(root, {
+        width = SidecarHUD.StripWidth(spec.icons, spec),
+        iconSize = spec.icon,
+        gap = spec.gap,
+    })
+    sidecar.strip:Hide()
     return sidecar
 end
 
@@ -345,6 +251,7 @@ function SidecarHUD:Layout(sidecar)
 
     local strip = sidecar.strip
     strip:SetWidth(containerW)
+    strip._width = containerW
     strip:ClearAllPoints()
     local side = flip and "RIGHT" or "LEFT"
     if stripAbove then
@@ -352,20 +259,11 @@ function SidecarHUD:Layout(sidecar)
     else
         strip:SetPoint("TOP" .. side, root, "BOTTOM" .. side, 0, -L.SIDECAR_STRIP_BELOW)
     end
-    local shown = 0
-    for _, btn in ipairs(strip.icons) do
-        if btn:IsShown() then
-            shown = shown + 1
-        end
+    strip.positionFor = function(i, shown)
+        return SidecarHUD.IconX(i, shown, containerW, align)
     end
-    local n = 0
-    for _, btn in ipairs(strip.icons) do
-        if btn:IsShown() then
-            n = n + 1
-            btn:ClearAllPoints()
-            btn:SetPoint("LEFT", strip, "LEFT", SidecarHUD.IconX(n, shown, containerW, align), 0)
-        end
-    end
+    local shown = strip:SetItems(sidecar.recent or {})
+    strip:SetShown(shown > 0)
 end
 
 -- layout: pass false in combat (anchors are left untouched).
@@ -406,11 +304,10 @@ function SidecarHUD:Render(sidecar, layout)
         ammo:Hide()
     end
 
-    for i, btn in ipairs(sidecar.strip.icons) do
-        SidecarHUD.ConfigureStripIcon(btn, recent[i])
-    end
     sidecar.sideW = sideW
-    sidecar.strip:SetShown(#recent > 0)
+    -- The strip's real item buttons are protected in combat: they are only
+    -- re-laid-out (in Layout) out of combat.
+    sidecar.recent = recent
 
     if layout ~= false then
         self:Layout(sidecar)
