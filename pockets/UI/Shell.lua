@@ -296,6 +296,7 @@ function Shell:BuildNativeGauge(root, chrome, onPortraitClick)
     btn:SetFrameLevel(530)
     btn:RegisterForClicks("AnyUp")
     btn:SetScript("OnClick", onPortraitClick)
+    root.portraitButton = btn -- so a combat-safe secure overlay can sit on it
     btn:RegisterForDrag("LeftButton")
     btn:SetScript("OnDragStart", function()
         local handler = root:GetScript("OnDragStart")
@@ -1603,6 +1604,9 @@ function Shell:BuildSecureControls()
         Overlay(tab, "open")
     end
     Overlay(self.frame.shell.header.closeButton, "close")
+    -- Clicking the bag portrait also closes the expanded panel, so it needs
+    -- the same combat-safe overlay as the X (the normal click is insecure).
+    Overlay(self.expanded.portraitButton, "close")
     -- Back would need a re-layout to Menu; in combat it closes instead.
     Overlay(self.frame.shell.header.backButton, "close")
 
