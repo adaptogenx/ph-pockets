@@ -382,6 +382,22 @@ local function CreateTitleActions(chrome)
     return plus, log
 end
 
+-- Back arrow on the title bar, ~6px right of the ring. One builder for the
+-- opened frame (where it collapses back to the Mini, like a close) and the
+-- expanded panels (where it goes up a level).
+local function CreateBackButton(parent, frame, onClick)
+    local button = PHUI.CreateIconButton(parent, 22, nil, { tooltipText = "Back", onClick = onClick })
+    button:SetFrameLevel(530)
+    button:SetSize(22, 22)
+    button:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -8)
+    local arrow = button:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(24, 24)
+    arrow:SetPoint("CENTER", button, "CENTER", 0, 0)
+    arrow:SetTexture(PHUI.Icons.PREV)
+    button.arrow = arrow
+    return button
+end
+
 function Shell:BuildNativeBody(root, chrome)
     -- Inset panel behind the list, like Professions' content panels. Uses
     -- Blizzard's template when this client has it, otherwise nothing.
@@ -653,6 +669,8 @@ function Shell:BuildGlance()
     -- EXPERIMENT: Loot Log / All Items buttons on the title bar (shared builder).
     if chrome and chrome.CloseButton then
         self.nativePlusButton, self.nativeLogButton = CreateTitleActions(chrome)
+        -- Back on the opened frame's category page: works like a close.
+        self.nativeBackButton = CreateBackButton(chrome, frame, function() Shell:SetNativeOpen(false) end)
     end
 
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
@@ -846,23 +864,17 @@ function Shell:BuildShell()
         PHUI.ApplyBackdrop(header, { bgAlpha = L.EXPANDED_CHROME_ALPHA })
     end
 
-    header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
-        tooltipText = "Back",
-        onClick = function() Shell:GoBack() end,
-    })
-    header.backButton:SetPoint("LEFT", header, "LEFT", native and 0 or L.SHELL_PADDING, 0) -- native: ~6px right of the ring
-    header.backButton.glyph = PHUI.CreateLabel(header.backButton, "primary", "\226\128\185", PHUI.Fonts.SMALL) -- "<"
-    header.backButton.glyph:SetPoint("CENTER", 0, 0)
     if native then
-        -- A real arrow texture (a font glyph read as a speck) in a box that
-        -- fits the title bar's height, like the loot / plus buttons.
-        header.backButton:SetSize(22, 22)
-        header.backButton.glyph:Hide()
-        local arrow = header.backButton:CreateTexture(nil, "OVERLAY")
-        arrow:SetSize(24, 24)
-        arrow:SetPoint("CENTER", header.backButton, "CENTER", 0, 0)
-        arrow:SetTexture(PHUI.Icons.PREV)
-        header.backButton.arrow = arrow
+        -- The same Back element the opened frame uses, at the same spot.
+        header.backButton = CreateBackButton(header, shell, function() Shell:GoBack() end)
+    else
+        header.backButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, nil, {
+            tooltipText = "Back",
+            onClick = function() Shell:GoBack() end,
+        })
+        header.backButton:SetPoint("LEFT", header, "LEFT", L.SHELL_PADDING, 0)
+        header.backButton.glyph = PHUI.CreateLabel(header.backButton, "primary", "\226\128\185", PHUI.Fonts.SMALL) -- "<"
+        header.backButton.glyph:SetPoint("CENTER", 0, 0)
     end
 
     header.titleText = PHUI.CreateLabel(header, "primary", "Pockets", PHUI.Fonts.TITLE)
@@ -1843,7 +1855,8 @@ function Shell:ConfigureHeader()
     local function SetTitle(text)
         header.titleText:SetText(text)
         if chrome then
-            chrome:SetTitle(text)
+            -- Lower case, to match the template title "pockets" everywhere.
+            chrome:SetTitle(text:lower())
         end
     end
 
