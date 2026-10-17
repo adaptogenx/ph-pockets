@@ -813,7 +813,7 @@ function Shell:BuildShell()
     frame.chrome = chrome
     if chrome then
         frame:SetBackdrop(nil)
-        self:BuildNativeGauge(frame, chrome, function() Shell:SetState(Shell.STATE.GLANCE) end)
+        self:BuildNativeGauge(frame, chrome, function() Shell:CloseAll() end)
     end
     local native = chrome ~= nil
     -- Same inner box as the opened frame's list: Blizzard's inset panel
@@ -888,7 +888,7 @@ function Shell:BuildShell()
     -- never shift between Menu/Category/All.
     if native then
         header.closeButton = chrome.CloseButton -- the template's own X
-        header.closeButton:SetScript("OnClick", function() Shell:SetState(Shell.STATE.GLANCE) end)
+        header.closeButton:SetScript("OnClick", function() Shell:CloseAll() end)
     else
         header.closeButton = PHUI.CreateCloseButton(header, {
             size = L.SHELL_HEADER_CLOSE_WIDTH,
@@ -1386,8 +1386,24 @@ function Shell:SetEscapeCatcherShown(shown)
     end
 end
 
+-- Escape (and the X / bag-portrait on an expanded panel) goes ALL the way
+-- back to the Mini: out of any panel, and out of the opened frame.
+function Shell:CloseAll()
+    if self.state ~= self.STATE.GLANCE then
+        self:SetState(self.STATE.GLANCE)
+    end
+    if self.nativeOpen then
+        self:SetNativeOpen(false)
+    end
+end
+
+-- True while something is open that Escape should dismiss.
+function Shell:EscapeActive()
+    return self.state ~= self.STATE.GLANCE or self.nativeOpen == true
+end
+
 function Shell:HandleEscape()
-    self:SetState(self.STATE.GLANCE)
+    self:CloseAll()
 end
 
 function Shell:OnDataChanged()
@@ -1523,7 +1539,7 @@ function Shell:SyncStateFromVisibility()
         self.state = self.STATE.GLANCE
         self.expandedVisible = false
     end
-    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
+    self:SetEscapeCatcherShown(self:EscapeActive())
 end
 
 function Shell:RenderInCombat()
@@ -1706,7 +1722,7 @@ function Shell:Render()
     end
     -- The Escape catcher is a plain (non-protected) frame, so it follows
     -- the state even in combat - Escape keeps working.
-    self:SetEscapeCatcherShown(self.state ~= self.STATE.GLANCE)
+    self:SetEscapeCatcherShown(self:EscapeActive())
 
     if self:IsCombatBlocked() then
         self:RenderInCombat()
@@ -1726,7 +1742,7 @@ function Shell:Render()
     self.expandedVisible = state ~= self.STATE.GLANCE and not self.userHidden
 
     if state == self.STATE.GLANCE then
-        self:SetEscapeCatcherShown(false)
+        self:SetEscapeCatcherShown(self.nativeOpen == true)
         if self.appliedHudMode ~= self:GetHudMode() then
             self:ApplyHudMode()
         end
