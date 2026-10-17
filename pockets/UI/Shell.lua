@@ -1541,12 +1541,14 @@ end
 -- follows what is actually on screen.
 function Shell:SyncStateFromVisibility()
     if self.expanded:IsShown() then
-        local shown = self.displayedState
+        -- What is actually laid out in the frame (the prewarmed view if it was
+        -- last reset out of combat), not the last view the player navigated to.
+        local shown = self.laidOutState
         if not shown or shown == self.STATE.GLANCE then
             shown = self:GetCombatOpenState()
         end
         self.state = shown
-        self.context = self.displayedContext or {}
+        self.context = self.laidOutContext or {}
         self.userHidden = false
         self.expandedVisible = true
     else
