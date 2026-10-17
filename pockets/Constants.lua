@@ -122,6 +122,8 @@ Constants.LOOT_CONTEXT_GRACE_SECONDS = 5
 ]]
 Constants.HUD_ICON = "Interface\\Buttons\\Button-Backpack-Up"
 Constants.GOLD_ICON = "Interface\\MoneyFrame\\UI-GoldIcon"
+Constants.SILVER_ICON = "Interface\\MoneyFrame\\UI-SilverIcon"
+Constants.COPPER_ICON = "Interface\\MoneyFrame\\UI-CopperIcon"
 
 Constants.CATEGORY_ICON = {
     recent = "Interface\\Icons\\INV_Scroll_02",

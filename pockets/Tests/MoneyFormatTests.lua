@@ -38,3 +38,13 @@ Pockets.Tests.TestRunner:Register("MoneyFormat: zero copper still renders (never
     local ok = actual == "0c"
     return ok, ok and "OK" or string.format("expected \"0c\", got %q", tostring(actual))
 end)
+
+Pockets.Tests.TestRunner:Register("MoneyFormat: coin icon follows the largest denomination", function()
+    local C = Pockets.Constants
+    local F = Pockets.UI.MoneyFormat
+    local ok = F:CoinIcon(0) == C.COPPER_ICON and F:CoinIcon(99) == C.COPPER_ICON
+        and F:CoinIcon(100) == C.SILVER_ICON and F:CoinIcon(9999) == C.SILVER_ICON
+        and F:CoinIcon(10000) == C.GOLD_ICON and F:CoinIcon(123456789) == C.GOLD_ICON
+        and F:CoinIcon(nil) == C.COPPER_ICON
+    return ok, ok and "OK" or "bad coin icon"
+end)

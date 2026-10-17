@@ -2541,7 +2541,9 @@ function Shell:ConfigureFooterRows(rows)
     rows.bag:SetPrimaryColor(color.r, color.g, color.b)
     ResizeFooterMetric(rows.bag)
 
-    rows.gold:SetPrimary(Pockets.UI.MoneyFormat:Format(Pockets.Adapters.MoneyAPI:GetMoney()))
+    local money = Pockets.Adapters.MoneyAPI:GetMoney()
+    rows.gold:SetTexture(Pockets.UI.MoneyFormat:CoinIcon(money))
+    rows.gold:SetPrimary(Pockets.UI.MoneyFormat:Format(money))
     ResizeFooterMetric(rows.gold)
     rows.gold:ClearAllPoints()
     -- Same gap the Gold icon already keeps against ITS OWN text

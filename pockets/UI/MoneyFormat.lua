@@ -36,6 +36,18 @@ end
 --
 -- Negative amounts (Loot Log expenses) render with a leading "-" on the
 -- same breakdown, matching pH's Ledger (never for zero).
+-- The coin icon for an amount's largest denomination: gold coin once there
+-- is at least a full gold, silver below that, copper below a full silver.
+function MoneyFormat:CoinIcon(copper)
+    copper = math.floor(tonumber(copper) or 0)
+    if copper >= 10000 then
+        return Pockets.Constants.GOLD_ICON
+    elseif copper >= 100 then
+        return Pockets.Constants.SILVER_ICON
+    end
+    return Pockets.Constants.COPPER_ICON
+end
+
 function MoneyFormat:Format(copper)
     copper = math.floor(tonumber(copper) or 0)
     if copper < 0 then

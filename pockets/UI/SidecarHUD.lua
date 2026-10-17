@@ -279,7 +279,7 @@ function SidecarHUD:Render(sidecar, layout)
     sidecar.model = model
 
     local gold = sidecar.gold
-    local sideW = SetBadge(gold, Constants.GOLD_ICON, SidecarHUD.FormatGold(model.gold))
+    local sideW = SetBadge(gold, Pockets.UI.MoneyFormat:CoinIcon(model.gold), SidecarHUD.FormatGold(model.gold))
     local money = Pockets.UI.MoneyFormat:Format(model.gold)
     gold.onEnter = function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
