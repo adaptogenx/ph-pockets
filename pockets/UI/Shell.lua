@@ -767,8 +767,22 @@ end
 -- EXPERIMENT: Mini <-> native frame. Out of combat only (it resizes the
 -- root). Returns whether the state changed.
 function Shell:SetNativeOpen(open)
-    if not self:IsMini() or not self.root.chrome or self:IsCombatBlocked() then
+    if not self:IsMini() or not self.root.chrome then
         return false
+    end
+    if self:IsCombatBlocked() then
+        -- Combat close: the root can't be resized, but the chrome and Mini
+        -- are plain frames - swap them directly. ApplyHudMode (resize) is
+        -- forced once combat ends.
+        if open or not self.nativeOpen then
+            return false
+        end
+        self.nativeOpen = false
+        self.root.chrome:Hide()
+        self.mini:Show()
+        self.appliedHudMode = nil
+        self:Render()
+        return true
     end
     self.nativeOpen = open and true or false
     if not open then
