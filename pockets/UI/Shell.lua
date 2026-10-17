@@ -353,6 +353,25 @@ local function CreateStyledSearchBox(parent)
     return box
 end
 
+-- The title bar's action buttons: [Loot Log] [+ All Items] just left of the
+-- template's X. ONE builder for the opened frame and the expanded panel, so
+-- the buttons are the same elements at the same spot in every view.
+local function CreateTitleActions(chrome)
+    local plus = PHUI.CreateNativeIconButton(chrome, 20, PHUI.Icons.PLUS, {
+        tooltipText = "All Items",
+        onClick = function() Shell:SetState(Shell.STATE.ALL) end,
+    })
+    plus:SetFrameLevel(530)
+    plus:SetPoint("RIGHT", chrome.CloseButton, "LEFT", -6, 0)
+    local log = PHUI.CreateIconButton(chrome, 20, PHUI.Icons.SCROLL, {
+        tooltipText = "Loot Log",
+        onClick = function() Shell:OpenLootLog() end,
+    })
+    log:SetFrameLevel(530)
+    log:SetPoint("RIGHT", plus, "LEFT", -4, 0)
+    return plus, log
+end
+
 function Shell:BuildNativeBody(root, chrome)
     -- Inset panel behind the list, like Professions' content panels. Uses
     -- Blizzard's template when this client has it, otherwise nothing.
@@ -621,23 +640,9 @@ function Shell:BuildGlance()
             Shell:SetNativeOpen(false)
         end)
     end
-    -- EXPERIMENT: Loot Log button on the title bar, just left of the X.
+    -- EXPERIMENT: Loot Log / All Items buttons on the title bar (shared builder).
     if chrome and chrome.CloseButton then
-        local logButton = PHUI.CreateIconButton(chrome, 20, PHUI.Icons.SCROLL, {
-            tooltipText = "Loot Log",
-            onClick = function() Shell:OpenLootLog() end,
-        })
-        logButton:SetFrameLevel(530)
-        -- [Loot Log] [+ All Items] [X], same order as the expanded header.
-        local plusButton = PHUI.CreateNativeIconButton(chrome, 20, PHUI.Icons.PLUS, {
-            tooltipText = "All Items",
-            onClick = function() Shell:SetState(Shell.STATE.ALL) end,
-        })
-        plusButton:SetFrameLevel(530)
-        plusButton:SetPoint("RIGHT", chrome.CloseButton, "LEFT", -6, 0)
-        logButton:SetPoint("RIGHT", plusButton, "LEFT", -4, 0)
-        self.nativeLogButton = logButton
-        self.nativePlusButton = plusButton
+        self.nativePlusButton, self.nativeLogButton = CreateTitleActions(chrome)
     end
 
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
@@ -872,20 +877,25 @@ function Shell:BuildShell()
 
     -- Contextual action (+ / search) sits immediately LEFT of the
     -- always-present X, never in the far-right slot itself.
-    header.plusButton = PHUI.CreateNativeIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.PLUS, {
-        tooltipText = "All Items",
-        onClick = function() Shell:SetState(Shell.STATE.ALL) end,
-    })
-    header.plusButton:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+    if native then
+        -- The very same title-bar buttons the opened frame uses.
+        header.plusButton, header.lootButton = CreateTitleActions(chrome)
+    else
+        header.plusButton = PHUI.CreateNativeIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.PLUS, {
+            tooltipText = "All Items",
+            onClick = function() Shell:SetState(Shell.STATE.ALL) end,
+        })
+        header.plusButton:SetPoint("RIGHT", header.closeButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
 
-    -- Loot Log entry, immediately left of "+" (same boxed icon-button
-    -- style/size as Glance's Search). Hidden wherever "+"'s slot is taken
-    -- by something else (All's search box) or where it's already open.
-    header.lootButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.SCROLL, {
-        tooltipText = "Loot Log",
-        onClick = function() Shell:OpenLootLog() end,
-    })
-    header.lootButton:SetPoint("RIGHT", header.plusButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+        -- Loot Log entry, immediately left of "+" (same boxed icon-button
+        -- style/size as Glance's Search). Hidden wherever "+"'s slot is taken
+        -- by something else (All's search box) or where it's already open.
+        header.lootButton = PHUI.CreateIconButton(header, L.SHELL_HEADER_SIDE_WIDTH, PHUI.Icons.SCROLL, {
+            tooltipText = "Loot Log",
+            onClick = function() Shell:OpenLootLog() end,
+        })
+        header.lootButton:SetPoint("RIGHT", header.plusButton, "LEFT", -L.SHELL_HEADER_ACTION_GAP, 0)
+    end
 
     if native then
         -- Same look and place as the opened frame's search field: the strip
