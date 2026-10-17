@@ -233,7 +233,8 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName, blockedFunc)
     if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         -- Names the protected call that was refused (only ours).
         if addonName == ADDON_NAME and Pockets.Debug then
-            Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc))
+            local stack = _G.debugstack and _G.debugstack(2, 6, 0) or ""
+            Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc) .. "\n" .. stack)
         end
         return
     end
