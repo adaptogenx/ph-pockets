@@ -1743,7 +1743,12 @@ function Shell:Render()
 
     if state == self.STATE.GLANCE then
         self:SetEscapeCatcherShown(self.nativeOpen == true)
-        if self.appliedHudMode ~= self:GetHudMode() then
+        -- Self-heal: appliedHudMode stays "mini" while the Mini is folded away
+        -- into the opened frame, so a Mini left hidden after a close would
+        -- never be re-applied.
+        local miniLost = self:IsMini() and not self.nativeOpen and self.mini
+            and not self.mini:IsShown()
+        if self.appliedHudMode ~= self:GetHudMode() or miniLost then
             self:ApplyHudMode()
         end
         self:RenderGlance()
