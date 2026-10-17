@@ -1612,7 +1612,14 @@ local function MakeSecureClicker(name, parent, action)
     b:SetAttribute("pocketsaction", action)
     b:SetAttribute("_onclick", TOGGLE_SNIPPET)
     b:RegisterForClicks("AnyUp")
-    b:HookScript("PostClick", function() Shell:OnSecureToggle() end)
+    b:HookScript("PostClick", function()
+        -- The overlay swallows the click in combat: X / portrait / Back on the
+        -- opened frame fold it back to the Mini through the plain-Lua path.
+        if (action == "nativeclose" or action == "close") and Shell.nativeOpen then
+            Shell:SetNativeOpen(false)
+        end
+        Shell:OnSecureToggle()
+    end)
     return b
 end
 
