@@ -537,7 +537,7 @@ function Shell:Initialize()
     -- there is nothing to draw, so say so instead of erroring.
     local hasTemplate, probe = pcall(CreateFrame, "Frame", nil, UIParent, "PortraitFrameTemplate")
     if not hasTemplate or not probe or not probe.PortraitContainer then
-        print("|cffff5555[Pockets]|r This client has no PortraitFrameTemplate; the Pockets HUD is disabled.")
+        Pockets.Debug:LogError("This client has no PortraitFrameTemplate; the Pockets HUD is disabled.")
         return
     end
     probe:Hide()
