@@ -51,14 +51,6 @@ Constants.CATEGORY_LABEL = {
     [Constants.CATEGORY.OTHER] = "Other",
 }
 
--- Category body presentation preference (Category List/Grid view pass).
--- Grid is the existing, preserved-exactly implementation; List is new.
--- Grid stays the default until a deliberate future product decision.
-Constants.CATEGORY_VIEW_MODE = {
-    GRID = "GRID",
-    LIST = "LIST",
-}
-
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
 Constants.CAPACITY_COLOR_THRESHOLDS = {
     YELLOW_AT = 0.70,
@@ -440,7 +432,6 @@ Constants.DEFAULT_SETTINGS = {
         y = -100,
         locked = false,
     },
-    categoryViewMode = Constants.CATEGORY_VIEW_MODE.GRID,
     -- Opt-in (v1 stays minimal/opinionated by default - PRD §4 non-goals
     -- warn against a large configuration surface, so new visual extras
     -- default OFF rather than always-on).
