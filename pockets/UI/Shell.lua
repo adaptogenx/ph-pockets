@@ -886,7 +886,7 @@ function Shell:Initialize()
     -- its snippet opens the prewarmed expanded panel when the Mini is showing,
     -- so no extra frame has to become protected (a secure child/anchor would
     -- make the Mini unshowable from plain Lua in combat).
-    local rootTemplate = self.useSecure and "SecureHandlerClickTemplate,BackdropTemplate" or "BackdropTemplate"
+    local rootTemplate = self.useSecure and "SecureHandlerBaseTemplate,SecureHandlerClickTemplate,BackdropTemplate" or "BackdropTemplate"
     local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, rootTemplate)
     self.root = frame
 
