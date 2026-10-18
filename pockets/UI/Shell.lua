@@ -547,12 +547,7 @@ function Shell:Initialize()
     -- combat. Insecure code may still show/hide them out of combat.
     self.useSecure = Pockets.Adapters.BagAPI:UsesSecureItemAttributes() == true
     local frameTemplate = self.useSecure and "SecureHandlerBaseTemplate,BackdropTemplate" or "BackdropTemplate"
-    -- The root is a secure CLICK frame (still protected, as before): in combat
-    -- its snippet opens the prewarmed expanded panel when the Mini is showing,
-    -- so no extra frame has to become protected (a secure child/anchor would
-    -- make the Mini unshowable from plain Lua in combat).
-    local rootTemplate = self.useSecure and "SecureHandlerBaseTemplate,SecureHandlerClickTemplate,BackdropTemplate" or "BackdropTemplate"
-    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, rootTemplate)
+    local frame = CreateFrame("Button", "PocketsShellFrame", UIParent, frameTemplate)
     self.root = frame
 
     -- The expanded view (Menu/Category/All/Search/Loot) is its OWN top-level
@@ -564,25 +559,6 @@ function Shell:Initialize()
     local expanded = CreateFrame("Button", "PocketsExpandedFrame", UIParent, frameTemplate)
     expanded:Hide()
     self.expanded = expanded
-
-    if self.useSecure then
-        if frame.SetFrameRef then
-            frame:SetFrameRef("expanded", expanded)
-        else
-            _G.SecureHandlerSetFrameRef(frame, "expanded", expanded)
-        end
-        -- Combat only; out of combat the normal insecure OnClick below runs.
-        frame:SetAttribute("_onclick", [[
-            if not PlayerInCombat() then return end
-            self:GetFrameRef("expanded"):Show()
-            self:Hide()
-        ]])
-        frame:HookScript("PostClick", function()
-            if Shell:IsCombatBlocked() then
-                Shell:OnSecureToggle()
-            end
-        end)
-    end
 
     -- Legacy single-frame facade: `Shell.frame` forwards methods to whichever
     -- frame is currently on screen (expanded for non-Glance states) and
@@ -649,9 +625,9 @@ function Shell:Initialize()
     -- Render() defers itself while isDragging is true and OnDragStop
     -- flushes it once the drag has fully settled, so no resize can ever
     -- happen mid-move.
-    frame:HookScript("OnClick", function()
+    frame:SetScript("OnClick", function()
         if Shell:IsCombatBlocked() then
-            return -- the secure snippet handles combat
+            return -- the secure overlay handles combat (BuildSecureControls)
         end
         if Shell.state ~= Shell.STATE.GLANCE then
             return
@@ -1089,6 +1065,15 @@ function Shell:BuildSecureControls()
         o:Hide()
         RegisterStateDriver(o, "visibility", "[combat] show; hide")
     end
+    -- The Mini: in combat a click opens the prewarmed panel. The overlay is a
+    -- child of the root (already protected) and covers only the Mini's own
+    -- footprint, so the sidecar's item buttons stay clickable and the Mini
+    -- itself stays a plain frame that can be shown from Lua.
+    local mini = MakeSecureClicker(nil, self.root, "open")
+    mini:SetAllPoints(self.root)
+    mini:SetFrameLevel(self.root:GetFrameLevel() + 50)
+    mini:Hide()
+    RegisterStateDriver(mini, "visibility", "[combat] show; hide")
     Overlay(self.frame.shell.header.closeButton, "close")
     -- Clicking the bag portrait also closes the expanded panel, so it needs
     -- the same combat-safe overlay as the X (the normal click is insecure).

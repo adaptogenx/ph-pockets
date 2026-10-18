@@ -88,14 +88,19 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
 end)
 
 TestRunner:Register("Mini: footprint matches the Mini layout tokens", function()
+    local detail
     local ok = WithMini(function()
         local w, h = Shell.root:GetSize()
         local bw, bh = Shell.mini.badge:GetSize()
+        detail = string.format("root=%sx%s want %sx%s; badge=%sx%s want %sx%s; shown=%s",
+            tostring(w), tostring(h), tostring(L.MINI_WIDTH), tostring(L.MINI_HEIGHT),
+            tostring(bw), tostring(bh), tostring(L.MINI_BADGE_WIDTH), tostring(L.MINI_BADGE_HEIGHT),
+            tostring(Shell.mini:IsShown()))
         return w == L.MINI_WIDTH and h == L.MINI_HEIGHT
             and h == L.MINI_PORTRAIT_SIZE - L.MINI_BADGE_OVERLAP + L.MINI_BADGE_HEIGHT
             and bw == L.MINI_BADGE_WIDTH and bh == L.MINI_BADGE_HEIGHT and Shell.mini:IsShown()
     end)
-    return ok, ok and "OK" or "bad Mini footprint"
+    return ok, ok and "OK" or detail
 end)
 
 TestRunner:Register("Mini: clicking opens the category list (Menu) directly, not Glance", function()

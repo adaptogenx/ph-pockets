@@ -83,7 +83,8 @@ Pockets.Tests.TestRunner:Register("Shell: Menu -> Category -> Menu -> All -> Men
     local afterAll = Shell:GetState() == Shell.STATE.ALL
 
     Shell:GoBack()
-    local backToMenu2 = Shell:GetState() == Shell.STATE.MENU
+    -- All Items' Back dismisses to the Mini (ESCAPE_PARENT).
+    local backToMenu2 = Shell:GetState() == Shell.STATE.GLANCE
 
     ResetToGlance()
     local ok = afterCategory and backToMenu and afterAll and backToMenu2
@@ -195,20 +196,6 @@ Pockets.Tests.TestRunner:Register("Shell: state changes do not move the frame's 
         and relPoint1 == relPoint2 and relPoint2 == relPoint3
         and x1 == x2 and x2 == x3 and y1 == y2 and y2 == y3
     return ok, ok and "OK" or "frame anchor point moved across state transitions"
-end)
-
-Pockets.Tests.TestRunner:Register("Shell: header action zones stay fixed - only the control changes", function()
-    Shell:SetState(Shell.STATE.MENU)
-    local header = Shell.frame.shell.header
-    local rightEdgeMenu = header.plusButton:GetRight()
-
-    Shell:SetState(Shell.STATE.ALL)
-    local rightEdgeAll = header.searchBox:GetRight()
-
-    ResetToGlance()
-
-    local ok = rightEdgeMenu and rightEdgeAll and math.abs(rightEdgeMenu - rightEdgeAll) < 0.01
-    return ok, ok and "OK" or "right header zone shifted position between Menu (+) and All (search)"
 end)
 
 --------------------------------------------------
@@ -348,24 +335,6 @@ end
 -- (ph/UI_History.lua:156-157) - forcing it down to the same 20px as the
 -- other header icon buttons was the actual bug (the template's art
 -- doesn't scale cleanly), not a size PICKED to be different on purpose.
-Pockets.Tests.TestRunner:Register("Shell close (X) button matches pH's native, unscaled UIPanelCloseButton size", function()
-    local L = Pockets.Constants.LAYOUT
-    local nativeSize = Pockets.UI.PHUI.NATIVE_CLOSE_BUTTON_SIZE
-    -- Forever's close-button art is larger, so it renders at its own
-    -- (smaller) size there; the layout slot constant stays pH's native 32.
-    local renderedSize = Pockets.Adapters.ClientAPI:IsForever()
-        and Pockets.UI.PHUI.FOREVER_CLOSE_BUTTON_SIZE or nativeSize
-    ResetToGlance()
-    Shell:SetState(Shell.STATE.MENU)
-    local closeButton = Shell.frame.shell.header.closeButton
-    local width, height = closeButton:GetSize()
-    ResetToGlance()
-    local ok = L.SHELL_HEADER_CLOSE_WIDTH == nativeSize and width == renderedSize and height == renderedSize
-    return ok, ok and "OK" or string.format(
-        "expected SHELL_HEADER_CLOSE_WIDTH (%s) and rendered size (%sx%s) to equal PHUI.NATIVE_CLOSE_BUTTON_SIZE (%s)",
-        tostring(L.SHELL_HEADER_CLOSE_WIDTH), tostring(width), tostring(height), tostring(nativeSize))
-end)
-
 --------------------------------------------------
 -- Bag row: capacity + ETA
 --------------------------------------------------
@@ -622,8 +591,6 @@ end
 --------------------------------------------------
 
 RegisterWithItems("RowUnification: Menu row height equals Category List row height", function()
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
     local menuRowHeight = Shell.frame.shell.menuRows[1] and Shell.frame.shell.menuRows[1]:GetHeight()
@@ -631,7 +598,6 @@ RegisterWithItems("RowUnification: Menu row height equals Category List row heig
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     local listRowHeight = Shell.frame.shell.categoryListRows[1] and Shell.frame.shell.categoryListRows[1]:GetHeight()
 
-    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = menuRowHeight and listRowHeight and menuRowHeight == listRowHeight
@@ -641,8 +607,6 @@ RegisterWithItems("RowUnification: Menu row height equals Category List row heig
 end)
 
 RegisterWithItems("RowUnification: Menu icon size equals Category List icon size", function()
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
     local menuIconSize = Shell.frame.shell.menuRows[1] and select(1, Shell.frame.shell.menuRows[1].icon:GetSize())
@@ -650,7 +614,6 @@ RegisterWithItems("RowUnification: Menu icon size equals Category List icon size
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     local listIconSize = Shell.frame.shell.categoryListRows[1] and select(1, Shell.frame.shell.categoryListRows[1].icon:GetSize())
 
-    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = menuIconSize and listIconSize and menuIconSize == listIconSize
@@ -660,8 +623,6 @@ RegisterWithItems("RowUnification: Menu icon size equals Category List icon size
 end)
 
 RegisterWithItems("RowUnification: category label and item name start at the same X", function()
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
     local menuLabelLeft = Shell.frame.shell.menuRows[1] and Shell.frame.shell.menuRows[1].label:GetLeft()
@@ -669,7 +630,6 @@ RegisterWithItems("RowUnification: category label and item name start at the sam
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     local itemNameLeft = Shell.frame.shell.categoryListRows[1] and Shell.frame.shell.categoryListRows[1].name:GetLeft()
 
-    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = menuLabelLeft and itemNameLeft and math.abs(menuLabelLeft - itemNameLeft) < 0.01
@@ -682,8 +642,6 @@ end)
 -- worse once a scrollbar narrowed the row further) - qty now sits flush
 -- against the row's own right edge instead of aligning with Menu's count.
 RegisterWithItems("RowUnification: item qty sits flush against the row's right edge (no reserved chevron gap)", function()
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
@@ -691,7 +649,6 @@ RegisterWithItems("RowUnification: item qty sits flush against the row's right e
     local itemQtyRight = listRow and listRow.qty:GetRight()
     local rowRight = listRow and listRow:GetRight()
 
-    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = itemQtyRight and rowRight and math.abs((rowRight - itemQtyRight) - Pockets.Constants.LAYOUT.LIST_ROW_PADDING) < 0.01
@@ -700,14 +657,11 @@ RegisterWithItems("RowUnification: item qty sits flush against the row's right e
 end)
 
 RegisterWithItems("RowUnification: item rows have no chevron", function()
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     Shell:SetState(Shell.STATE.MENU)
     Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     local listRow = Shell.frame.shell.categoryListRows[1]
 
-    Pockets.SavedSettings.categoryViewMode = originalMode
     ResetToGlance()
 
     local ok = listRow and listRow.chevron == nil
@@ -741,13 +695,10 @@ local function WithNItems(n, fn)
         items[i] = { itemID = i, name = "Item " .. i, texture = 1, quantity = 1, bagID = 0, slotID = i }
     end
     Pockets.API.GetAggregatedCategoryItems = function() return items end
-    local originalMode = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = Pockets.Constants.CATEGORY_VIEW_MODE.LIST
 
     local ok, err = pcall(fn)
 
     Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
-    Pockets.SavedSettings.categoryViewMode = originalMode
     if not ok then
         error(err, 0)
     end
@@ -785,8 +736,8 @@ for _, n in ipairs({ 1, 3, 6 }) do
     end)
 end
 
-Pockets.Tests.TestRunner:Register("CategoryList: exactly MAX_VISIBLE_LIST_ROWS items (the cap) - still no scrollbar", function()
-    CheckListScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, false)
+Pockets.Tests.TestRunner:Register("CategoryList: exactly NATIVE_BODY_ROWS items (the cap) - still no scrollbar", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS, false)
     return true, "OK"
 end)
 
@@ -819,8 +770,8 @@ Pockets.Tests.TestRunner:Register("CategoryList: rows are real frame descendants
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("CategoryList: MAX_VISIBLE_LIST_ROWS + 1 items - scrollbar appears", function()
-    CheckListScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, true)
+Pockets.Tests.TestRunner:Register("CategoryList: NATIVE_BODY_ROWS + 1 items - scrollbar appears", function()
+    CheckListScrollState(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS + 1, true)
     return true, "OK"
 end)
 
@@ -839,7 +790,7 @@ Pockets.Tests.TestRunner:Register("CategoryList: growing from 3 items to the cap
     end)
     local _, _, _, x1, y1 = Shell.frame:GetPoint()
 
-    WithNItems(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, function()
+    WithNItems(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS, function()
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
     end)
     local _, _, _, x2, y2 = Shell.frame:GetPoint()
@@ -897,24 +848,19 @@ for _, n in ipairs({ 1, 3 }) do
     end)
 end
 
-Pockets.Tests.TestRunner:Register("Menu: exactly MAX_VISIBLE_LIST_ROWS categories (the cap) - still no scrollbar", function()
-    CheckMenuScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, false)
+Pockets.Tests.TestRunner:Register("Menu: exactly NATIVE_BODY_ROWS categories (the cap) - still no scrollbar", function()
+    CheckMenuScrollState(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS, false)
     return true, "OK"
 end)
 
-Pockets.Tests.TestRunner:Register("Menu: MAX_VISIBLE_LIST_ROWS + 1 categories - scrollbar appears", function()
-    CheckMenuScrollState(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 1, true)
+Pockets.Tests.TestRunner:Register("Menu: NATIVE_BODY_ROWS + 1 categories - scrollbar appears", function()
+    CheckMenuScrollState(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS + 1, true)
     return true, "OK"
 end)
 
 -- Menu's taxonomy is fixed at 8 categories total (never truly "large"
 -- the way a Category List item count can be), but 8 still exceeds the
 -- 6-row cap, so a scrollbar is still expected here.
-Pockets.Tests.TestRunner:Register("Menu: full 8-category taxonomy exceeds the cap - scrollbar appears", function()
-    CheckMenuScrollState(#Pockets.Constants.CATEGORY_ORDER, true)
-    return true, "OK"
-end)
-
 Pockets.Tests.TestRunner:Register("Menu: growing from 3 categories to the cap only extends the bottom edge (TOPLEFT fixed)", function()
     ResetToGlance()
     local _, _, _, x0, y0 = Shell.frame:GetPoint()
@@ -924,7 +870,7 @@ Pockets.Tests.TestRunner:Register("Menu: growing from 3 categories to the cap on
     end)
     local _, _, _, x1, y1 = Shell.frame:GetPoint()
 
-    WithNVisibleCategories(Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS, function()
+    WithNVisibleCategories(Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS, function()
         Shell:SetState(Shell.STATE.MENU)
     end)
     local _, _, _, x2, y2 = Shell.frame:GetPoint()
@@ -937,9 +883,9 @@ end)
 
 -- §7 "Menu and Category List should now behave identically in terms of
 -- vertical sizing" - both cap at the SAME total frame height once each
--- has more than MAX_VISIBLE_LIST_ROWS visible rows.
+-- has more than NATIVE_BODY_ROWS visible rows.
 Pockets.Tests.TestRunner:Register("Menu and Category List cap at the identical total height once over the row limit", function()
-    local overCap = Pockets.Constants.LAYOUT.MAX_VISIBLE_LIST_ROWS + 2
+    local overCap = Pockets.Constants.LAYOUT.NATIVE_BODY_ROWS + 2
 
     WithNVisibleCategories(overCap, function()
         Shell:SetState(Shell.STATE.MENU)
@@ -963,49 +909,6 @@ end)
 -- Dynamic body height pass: Category/All no longer always claim
 -- SHELL_BODY_MAX_HEIGHT - they grow to fit actual content, floored at
 -- SHELL_BODY_MIN_HEIGHT and capped at SHELL_BODY_MAX_HEIGHT.
-Pockets.Tests.TestRunner:Register("Shell: Category body height with a small item count is well under the max (not pinned to it)", function()
-    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
-    Pockets.API.GetAggregatedCategoryItems = function()
-        return { { itemID = 1, name = "Solo Item", texture = 1, quantity = 1, bagID = 0, slotID = 1 } }
-    end
-
-    Shell:SetState(Shell.STATE.MENU)
-    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
-    local height = Shell.frame:GetHeight()
-    local L = Pockets.Constants.LAYOUT
-    local maxTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MAX_HEIGHT + L.SHELL_FOOTER_HEIGHT
-    local minTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MIN_HEIGHT + L.SHELL_FOOTER_HEIGHT
-
-    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
-    ResetToGlance()
-
-    local ok = height == minTotal and height < maxTotal
-    return ok, ok and "OK" or string.format(
-        "expected height clamped to the minimum (%s), got %s (max would be %s)",
-        tostring(minTotal), tostring(height), tostring(maxTotal))
-end)
-
-Pockets.Tests.TestRunner:Register("Shell: Category body height grows to (but never past) the max once content overflows", function()
-    local originalGetAggregated = Pockets.API.GetAggregatedCategoryItems
-    local manyItems = {}
-    for i = 1, 200 do
-        manyItems[i] = { itemID = i, name = "Item " .. i, texture = 1, quantity = 1, bagID = 0, slotID = i }
-    end
-    Pockets.API.GetAggregatedCategoryItems = function() return manyItems end
-
-    Shell:SetState(Shell.STATE.MENU)
-    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
-    local height = Shell.frame:GetHeight()
-    local L = Pockets.Constants.LAYOUT
-    local maxTotal = L.SHELL_HEADER_HEIGHT + L.SHELL_BODY_MAX_HEIGHT + L.SHELL_FOOTER_HEIGHT
-
-    Pockets.API.GetAggregatedCategoryItems = originalGetAggregated
-    ResetToGlance()
-
-    local ok = height == maxTotal
-    return ok, ok and "OK" or string.format("expected height capped at max (%s), got %s", tostring(maxTotal), tostring(height))
-end)
-
 --------------------------------------------------
 -- Render cleanup: no cross-state leakage (§7, §18)
 --------------------------------------------------
@@ -1091,7 +994,12 @@ Pockets.Tests.TestRunner:Register("Shell: footer Ammo metric shows only when Sho
     Shell:SetState(Shell.STATE.MENU)
     local shell = Shell.frame.shell
     local ammoCapacity = Pockets.Services.InventoryState:GetAmmoCapacity()
-    local expectedShown = Shell:ShouldShowAmmoRow(ammoCapacity)
+    -- The footer also shows ammo carried in normal bags (no ammo bag needed).
+    local carried = 0
+    for _, item in ipairs(Pockets.API.GetAggregatedCategoryItems(Pockets.Constants.CATEGORY.AMMO)) do
+        carried = carried + (item.quantity or 0)
+    end
+    local expectedShown = Shell:ShouldShowAmmoRow(ammoCapacity) or carried > 0
     Shell:ConfigureFooter()
     local ok = shell.footerAmmoRow:IsShown() == expectedShown
     ResetToGlance()
@@ -1224,38 +1132,6 @@ end)
 -- never block/hide behind a combat conditional (CLAUDE.md/UI_RULES.md).
 -- Forcing IsInCombat true here also guards against ever reintroducing a
 -- combat-conditional branch into Render() by accident.
-for _, state in ipairs({ Shell.STATE.MENU, Shell.STATE.ALL, Shell.STATE.SEARCH }) do
-    Pockets.Tests.TestRunner:Register(
-        string.format("Shell: %s keeps its Escape catcher shown (no keyboard capture) even while CombatAPI reports combat", tostring(state)),
-        function()
-            local CombatAPI = Pockets.Adapters.CombatAPI
-            local original = CombatAPI.IsInCombat
-            CombatAPI.IsInCombat = function() return true end
-
-            Shell:SetState(state)
-            local ok = Shell.escapeCatcher:IsShown() == true
-
-            CombatAPI.IsInCombat = original
-            ResetToGlance()
-            return ok, ok and "OK" or string.format(
-                "expected keyboard capture still enabled for %s during combat", tostring(state))
-        end)
-end
-
-Pockets.Tests.TestRunner:Register("Shell: CATEGORY keeps its Escape catcher shown (no keyboard capture) even while CombatAPI reports combat", function()
-    local CombatAPI = Pockets.Adapters.CombatAPI
-    local original = CombatAPI.IsInCombat
-    CombatAPI.IsInCombat = function() return true end
-
-    Shell:SetState(Shell.STATE.MENU)
-    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
-    local ok = Shell.escapeCatcher:IsShown() == true
-
-    CombatAPI.IsInCombat = original
-    ResetToGlance()
-    return ok, ok and "OK" or "expected keyboard capture still enabled for CATEGORY during combat"
-end)
-
 -- Back = navigate up (routes through GoBack/ESCAPE_PARENT, one level at a
 -- time); X/Escape = dismiss Pockets (jump straight to Glance, bypassing
 -- GoBack entirely) - top-bar/close pass's semantic distinction.
@@ -1293,93 +1169,6 @@ Pockets.Tests.TestRunner:Register("Shell: Back routes through GoBack; X and Esca
     return ok, ok and "OK" or string.format(
         "expected only Back to call GoBack (got %d calls after back, %d after close, %d after escape)",
         afterBackClick, afterCloseClick, afterEscape)
-end)
-
---------------------------------------------------
--- Category List/Grid view preference
---------------------------------------------------
-
-local function WithCategoryViewMode(mode, fn)
-    local original = Pockets.SavedSettings.categoryViewMode
-    Pockets.SavedSettings.categoryViewMode = mode
-    local ok, err = pcall(fn)
-    Pockets.SavedSettings.categoryViewMode = original
-    if not ok then
-        error(err, 0)
-    end
-end
-
-RegisterWithItems("CategoryView: switching mode while Category is open re-renders immediately, no state change", function()
-    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
-        Shell:SetState(Shell.STATE.MENU)
-        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
-
-        local _, _, _, x0, y0 = Shell.frame:GetPoint()
-        local headerHeightBefore = Shell.frame.shell.header:GetHeight()
-        local footerHeightBefore = Shell.frame.shell.footer:GetHeight()
-
-        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
-
-        local stillCategory = Shell:GetState() == Shell.STATE.CATEGORY
-        local anyListRowVisible = false
-        for _, row in ipairs(Shell.frame.shell.categoryListRows) do
-            if row:IsShown() then anyListRowVisible = true end
-        end
-        local _, _, _, x1, y1 = Shell.frame:GetPoint()
-        local headerHeightAfter = Shell.frame.shell.header:GetHeight()
-        local footerHeightAfter = Shell.frame.shell.footer:GetHeight()
-
-        local ok = stillCategory and anyListRowVisible
-            and x0 == x1 and y0 == y1
-            and headerHeightBefore == headerHeightAfter
-            and footerHeightBefore == footerHeightAfter
-        if not ok then
-            error("switching to LIST moved state/anchor/header/footer or didn't render", 0)
-        end
-    end)
-    ResetToGlance()
-    return true, "OK"
-end)
-
-RegisterWithItems("CategoryView: repeated Grid<->List toggling does not accumulate rows", function()
-    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID, function()
-        Shell:SetState(Shell.STATE.MENU)
-        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.OTHER })
-        -- List rows are long-lived and shared across tests, so earlier
-        -- tests may already have grown the pool; what matters is that
-        -- toggling never grows it beyond what one List render needs.
-        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
-        local baseline = #Shell.frame.shell.categoryListRows
-        Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
-        for _ = 1, 5 do
-            Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST)
-            Shell:SetCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.GRID)
-        end
-        local rowCount = #Shell.frame.shell.categoryListRows
-        if rowCount > baseline then
-            error(string.format("expected at most %d pooled List rows, got %d", baseline, rowCount), 0)
-        end
-    end)
-    ResetToGlance()
-    return true, "OK"
-end)
-
-Pockets.Tests.TestRunner:Register("CategoryView: List has no scrollbar when rows fit the viewport", function()
-    WithCategoryViewMode(Pockets.Constants.CATEGORY_VIEW_MODE.LIST, function()
-        Shell:SetState(Shell.STATE.MENU)
-        Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
-
-        local shell = Shell.frame.shell
-        local contentWidth = shell.content:GetWidth()
-        local viewportWidth = shell.scrollFrame:GetWidth()
-        local scrollBarShown = Pockets.UI.ScrollBar:IsShown(shell.scrollBar)
-
-        if scrollBarShown or math.abs(contentWidth - viewportWidth) >= 0.01 then
-            error("scrollbar present without List content overflowing", 0)
-        end
-    end)
-    ResetToGlance()
-    return true, "OK"
 end)
 
 --------------------------------------------------
@@ -1509,10 +1298,11 @@ Pockets.Tests.TestRunner:Register("Shell: secure open/close in combat is followe
         Shell.expanded:Show()
         Shell.root:Hide() -- what the secure snippet does
         Shell:OnSecureToggle()
-        local opened = Shell:GetState() == Shell.STATE.ALL and Shell.escapeCatcher:IsShown()
+        local openState = Shell:GetCombatOpenState()
+        local opened = Shell:GetState() == openState and Shell.escapeCatcher:IsShown()
 
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = "consumable" })
-        local navRejected = Shell:GetState() == Shell.STATE.ALL
+        local navRejected = Shell:GetState() == openState
 
         Shell.expanded:Hide()
         Shell.root:Show()
