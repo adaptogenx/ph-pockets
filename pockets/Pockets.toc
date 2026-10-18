@@ -53,7 +53,6 @@ UI/PositionStrategy.lua
 UI/ItemButtonPool.lua
 UI/ItemPreview.lua
 UI/RecentItemStrip.lua
-UI/PocketsGlance.lua
 UI/MiniHUD.lua
 UI/SidecarHUD.lua
 UI/Search.lua
@@ -89,7 +88,6 @@ Tests/ScrollBarTests.lua
 Tests/MoneyFormatTests.lua
 Tests/APITests.lua
 Tests/ShellTests.lua
-Tests/PocketsGlanceTests.lua
 Tests/MiniHUDTests.lua
 Tests/SidecarHUDTests.lua
 Tests/StackResolverTests.lua

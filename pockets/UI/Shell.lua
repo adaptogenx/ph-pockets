@@ -390,65 +390,15 @@ function Shell:RenderNativeRing()
     end
 end
 
--- WIP (feature/glance-native-template): render ONLY the native
--- PortraitFrameTemplate with its own title text in the header; everything
--- else Glance normally builds (our header buttons, ETA, bag/gold/recent
--- row, tabs) is skipped. Flip to false to restore the full Glance.
-local GLANCE_NATIVE_PREVIEW = true
-
-function Shell:BuildGlance()
+-- The idle HUD: the round Mini with its gold/ammo pills and Recent strip.
+-- Clicking it (or a toggle key) opens the expanded panel.
+function Shell:BuildMini()
     local frame = self.root
-    local T = Pockets.UI.GlanceFrame.TOKENS
-    -- Native Forever portrait frame (bag icon in the ring) when the client
-    -- has the template; otherwise the plain PHUI backdrop stays.
-    local chrome = Pockets.UI.GlanceFrame:CreateChrome(frame, Constants.HUD_ICON, L.GLANCE_ALPHA,
-        GLANCE_NATIVE_PREVIEW and "pockets" or nil, {
-            size = L.MINI_ICON_SIZE,
-            centerX = L.MINI_WIDTH / 2,
-            centerY = -L.MINI_PORTRAIT_SIZE / 2,
-        })
-    frame.chrome = chrome
-    if chrome then
-        self:BuildNativeGauge(frame, chrome, function()
-            if not Shell:IsCombatBlocked() then
-                Shell:SetState(Shell.STATE.MENU)
-            end
-        end)
-    end
-    if chrome then
-        frame:SetBackdrop(nil)
-    end
-    local glance = CreateFrame("Frame", nil, frame)
-    glance:SetAllPoints(frame)
-    -- Always draw above the template chrome's own child frames: its border
-    -- (499), portrait container (399), title (509) and hints (515) sit at
-    -- very high levels (measured with /pockets debug portrait).
-    glance:SetFrameLevel(frame:GetFrameLevel() + 600)
-    frame.glance = glance
-    self.frame.glance = glance
+    frame:SetBackdrop(nil)
+    frame:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
 
-    -- Header (title, ETA, Search/Log/Expand), bag capacity, money, five
-    -- Recent icons and the specialized-bag tabs: see UI/PocketsGlance.lua.
-    if GLANCE_NATIVE_PREVIEW then
-        -- Tall enough for the template's corner art (about 95px each, top and
-        -- bottom) not to overlap, at its natural scale.
-        glance.hudHeight = 200
-        glance.tabs = {}
-    else
-        Pockets.UI.PocketsGlance:Build(glance, {
-            openSearch = function() Shell:SetState(Shell.STATE.SEARCH) end,
-            openLog = function() Shell:OpenLootLog() end,
-            openAll = function() Shell:SetState(Shell.STATE.ALL) end,
-            openMenu = function() Shell:SetState(Shell.STATE.MENU) end,
-        }, chrome ~= nil)
-    end
-    -- Fixed HUD size from the chassis (depends on chrome); never resized after
-    -- (except by a deliberate Mini/Glance mode switch - ApplyHudMode).
-    frame:SetSize(T.HUD_WIDTH, glance.hudHeight)
-
-    -- Mini HUD: built once, shown instead of Glance when the player picks it.
     self.mini = Pockets.UI.MiniHUD:Build(frame)
-    self.mini:Hide()
+
     -- Sidecar HUD pieces (children of the root; the root keeps the Mini
     -- footprint so the Mini never moves). Dragging a badge or strip icon
     -- moves the HUD through the root's own drag handlers.
@@ -470,81 +420,6 @@ function Shell:BuildGlance()
         dragStart = forward("OnDragStart"),
         dragStop = forward("OnDragStop"),
     })
-end
-
---------------------------------------------------
--- HUD mode (Mini / Glance) - Mini HUD TDD §3
---------------------------------------------------
-
-function Shell:GetHudMode()
-    local mode = Pockets.SavedSettings and Pockets.SavedSettings.hudMode
-    local Mode = Constants.HUD_MODE
-    if mode == Mode.MINI then
-        return mode
-    end
-    return Mode.GLANCE
-end
-
-function Shell:IsMini()
-    return self:GetHudMode() == Constants.HUD_MODE.MINI
-end
-
--- Mini mode (the round Mini plus its gold/ammo pills and recent strip)
--- replaces Glance's content; Glance is the only other mode.
-function Shell:UsesMiniCenter()
-    return self:IsMini()
-end
-
--- Swaps which presentation the root frame shows and resizes it. The root's
--- TOPLEFT anchor is never touched, so the HUD stays exactly where it was.
--- Resizes the root: out of combat only.
-function Shell:ApplyHudMode()
-    local root = self.root
-    local T = Pockets.UI.GlanceFrame.TOKENS
-    local mode = self:GetHudMode()
-    if mode ~= Constants.HUD_MODE.GLANCE then
-        root.glance:Hide()
-        if root.chrome then
-            root.chrome:Hide()
-        end
-        root:SetBackdrop(nil)
-        self.mini:Show()
-        root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
-    else
-        if root.chrome and root.chrome.CloseButton then
-            root.chrome.CloseButton:Hide()
-        end
-        self.mini:Hide()
-        Pockets.UI.SidecarHUD:SetShown(self.sidecar, false)
-        root.glance:Show()
-        if root.chrome then
-            root.chrome:Show()
-        else
-            PHUI.ApplyBackdrop(root, { bgAlpha = L.GLANCE_ALPHA })
-        end
-        root:SetSize(T.HUD_WIDTH, root.glance.hudHeight)
-    end
-    self.appliedHudMode = mode
-end
-
--- Persists and applies a HUD mode. Returns false (and changes nothing) in
--- combat or for an unknown mode.
-function Shell:SetHudMode(mode)
-    local Mode = Constants.HUD_MODE
-    if mode ~= Mode.MINI and mode ~= Mode.GLANCE then
-        return false
-    end
-    if self:IsCombatBlocked() then
-        return false
-    end
-    Pockets.SavedSettings.hudMode = mode
-    if self.root then
-        self:ApplyHudMode()
-        if self.state == self.STATE.GLANCE and not self.isDragging then
-            self:Render()
-        end
-    end
-    return true
 end
 
 function Shell:BuildShell()
@@ -1011,7 +886,7 @@ function Shell:Initialize()
     table.insert(UISpecialFrames, "PocketsEscapeCatcher")
     Shell.escapeCatcher = catcher
 
-    self:BuildGlance()
+    self:BuildMini()
     self:BuildShell()
     self:BuildSecureControls()
     self:RestorePosition()
@@ -1347,11 +1222,9 @@ function Shell:RenderInCombat()
     self.renderDeferred = true
     pool:ValidateAll()
     pool:RefreshCounts()
-    if self.mini and self:UsesMiniCenter() then
-        -- Plain textures/text only: safe to update in combat.
-        Pockets.UI.MiniHUD:Render(self.mini)
-        Pockets.UI.SidecarHUD:Render(self.sidecar, false)
-    end
+    -- Plain textures/text only: safe to update in combat.
+    Pockets.UI.MiniHUD:Render(self.mini)
+    Pockets.UI.SidecarHUD:Render(self.sidecar, false)
     self:SyncStateFromVisibility()
 end
 
@@ -1463,13 +1336,6 @@ function Shell:BuildSecureControls()
         o:SetFrameLevel(target:GetFrameLevel() + 10)
         o:Hide()
         RegisterStateDriver(o, "visibility", "[combat] show; hide")
-    end
-    if self.frame.glance.header then -- absent in GLANCE_NATIVE_PREVIEW
-        Overlay(self.frame.glance.header.plusButton, "open")
-        Overlay(self.frame.glance.bagRow, "open")
-    end
-    for _, tab in ipairs(self.frame.glance.tabs) do
-        Overlay(tab, "open")
     end
     Overlay(self.frame.shell.header.closeButton, "close")
     -- Clicking the bag portrait also closes the expanded panel, so it needs
@@ -1588,10 +1454,7 @@ function Shell:Render()
 
     if state == self.STATE.GLANCE then
         self:SetEscapeCatcherShown(false)
-        if self.appliedHudMode ~= self:GetHudMode() then
-            self:ApplyHudMode()
-        end
-        self:RenderGlance()
+        self:RenderMini()
         self:SchedulePrewarm()
         return
     end
@@ -1653,20 +1516,10 @@ end
 -- GLANCE
 --------------------------------------------------
 
-function Shell:RenderGlance()
+function Shell:RenderMini()
     self:RenderNativeRing()
-    if self:UsesMiniCenter() then
-        Pockets.UI.MiniHUD:Render(self.mini)
-        Pockets.UI.SidecarHUD:Render(self.sidecar)
-        return
-    end
-    if self:DeferIfItemsBlocked() then
-        return
-    end
-    -- Values only: the HUD's size and anchor never change here.
-    if not GLANCE_NATIVE_PREVIEW then
-        Pockets.UI.PocketsGlance:Render(self.frame.glance)
-    end
+    Pockets.UI.MiniHUD:Render(self.mini)
+    Pockets.UI.SidecarHUD:Render(self.sidecar)
 end
 
 --------------------------------------------------

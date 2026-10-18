@@ -1,7 +1,7 @@
 --[[
     Tests/SidecarHUDTests.lua - Sidecar HUD: layout tokens, gold fixed /
     ammo conditional, content-sized recent strip, no leftover pieces,
-    mode persistence, anchor, and click routing.
+    anchor, and click routing.
 ]]
 
 local _, Pockets = ...
@@ -11,14 +11,10 @@ local Shell = Pockets.UI.Shell
 local SidecarHUD = Pockets.UI.SidecarHUD
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
-local Mode = Constants.HUD_MODE
 
-local function WithMode(mode, fn)
-    local previous = Shell:GetHudMode()
+local function WithMini(fn)
     Shell:SetState(Shell.STATE.GLANCE)
-    Shell:SetHudMode(mode)
     local ok, a = pcall(fn)
-    Shell:SetHudMode(previous)
     Shell:SetState(Shell.STATE.GLANCE)
     if not ok then
         error(a)
@@ -66,26 +62,20 @@ TestRunner:Register("Sidecar: strip spans the container; icons spaced evenly; al
     return ok, ok and "OK" or "bad strip math"
 end)
 
-TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor", function()
-    local startedMini = Shell:IsMini()
+TestRunner:Register("Sidecar: keeps the Mini footprint and anchor", function()
     local p0, _, rp0, x0, y0 = Shell.root:GetPoint()
-    local ok = WithMode(Mode.MINI, function()
+    local ok = WithMini(function()
         local w, h = Shell.root:GetSize()
         local p1, _, rp1, x1, y1 = Shell.root:GetPoint()
-        return Shell:IsMini() and Pockets.SavedSettings.hudMode == Mode.MINI
-            and w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
+        return w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
             and p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
             and Shell.sidecar.gold:IsShown()
     end)
-    -- After restoring the player's mode, the pieces are hidden unless that
-    -- mode is Mini itself.
-    local hidden = startedMini or (not Shell.sidecar.gold:IsShown() and not Shell.sidecar.ammo:IsShown()
-        and not Shell.sidecar.strip:IsShown())
-    return ok and hidden, (ok and hidden) and "OK" or "sidecar mode state wrong"
+    return ok, ok and "OK" or "sidecar footprint or anchor wrong"
 end)
 
 TestRunner:Register("Sidecar: gold centres on the Mini when ammo hides; Mini click opens the list", function()
-    local result = WithMode(Mode.MINI, function()
+    local result = WithMini(function()
         local sidecar = Shell.sidecar
         local InventoryState = Pockets.Services.InventoryState
         local original = InventoryState.GetSpecializedCapacities

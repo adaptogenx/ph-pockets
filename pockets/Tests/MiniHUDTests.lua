@@ -1,7 +1,7 @@
 --[[
     Tests/MiniHUDTests.lua - Mini HUD TDD §6: count formatting, threshold
-    boundaries, ring fraction/segments, main-bag-only counts, mode
-    persistence, anchor preservation, and click -> category list.
+    boundaries, ring fraction/segments, main-bag-only counts, 
+    anchor preservation, and click -> category list.
 ]]
 
 local _, Pockets = ...
@@ -13,15 +13,11 @@ local CapacityRing = Pockets.UI.CapacityRing
 local PHUI = Pockets.UI.PHUI
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
-local Mode = Constants.HUD_MODE
 
--- Runs fn with the given HUD mode, then restores the player's mode.
-local function WithMode(mode, fn)
-    local previous = Shell:GetHudMode()
+-- Runs fn from the idle (closed) state, then returns to it.
+local function WithMini(fn)
     Shell:SetState(Shell.STATE.GLANCE)
-    Shell:SetHudMode(mode)
     local ok, a, b = pcall(fn)
-    Shell:SetHudMode(previous)
     Shell:SetState(Shell.STATE.GLANCE)
     if not ok then
         error(a)
@@ -82,7 +78,7 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
     local original = InventoryState.GetGeneralCapacity
     InventoryState.GetGeneralCapacity = function() return Cap(23, 46) end
     local ok, text, lit = pcall(function()
-        return WithMode(Mode.MINI, function()
+        return WithMini(function()
             return Shell.mini.badge.text:GetText(), Shell.mini.ring:GetLitCount()
         end)
     end)
@@ -91,45 +87,19 @@ TestRunner:Register("Mini: Render fills the ring and badge from main-bag capacit
     return pass, pass and "OK" or string.format("text=%s lit=%s", tostring(text), tostring(lit))
 end)
 
-TestRunner:Register("Mini: footprint matches the Mini layout tokens; no Glance content shown", function()
-    local ok = WithMode(Mode.MINI, function()
+TestRunner:Register("Mini: footprint matches the Mini layout tokens", function()
+    local ok = WithMini(function()
         local w, h = Shell.root:GetSize()
         local bw, bh = Shell.mini.badge:GetSize()
         return w == L.MINI_WIDTH and h == L.MINI_HEIGHT
             and h == L.MINI_PORTRAIT_SIZE - L.MINI_BADGE_OVERLAP + L.MINI_BADGE_HEIGHT
-            and bw == L.MINI_BADGE_WIDTH and bh == L.MINI_BADGE_HEIGHT and Shell.mini:IsShown() and not Shell.root.glance:IsShown()
+            and bw == L.MINI_BADGE_WIDTH and bh == L.MINI_BADGE_HEIGHT and Shell.mini:IsShown()
     end)
     return ok, ok and "OK" or "bad Mini footprint"
 end)
 
-TestRunner:Register("Mini: switching modes preserves the anchor and restores Glance size", function()
-    local T = Pockets.UI.GlanceFrame.TOKENS
-    local p0, _, rp0, x0, y0 = Shell.root:GetPoint()
-    local gw, gh = Shell.root:GetSize()
-    local ok = WithMode(Mode.MINI, function()
-        local p1, _, rp1, x1, y1 = Shell.root:GetPoint()
-        return p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
-    end)
-    local w, h = Shell.root:GetSize()
-    local back = w == gw and h == gh and Shell.root.glance:IsShown() and not Shell.mini:IsShown()
-        and w == T.HUD_WIDTH
-    return ok and back, (ok and back) and "OK" or string.format("anchorOK=%s back=%s", tostring(ok), tostring(back))
-end)
-
-TestRunner:Register("Mini: mode persists in settings; unknown mode is rejected", function()
-    local previous = Shell:GetHudMode()
-    local setMini = Shell:SetHudMode(Mode.MINI)
-    local saved = Pockets.SavedSettings.hudMode == Mode.MINI and Shell:IsMini()
-    local bad = Shell:SetHudMode("bogus")
-    local unchanged = Pockets.SavedSettings.hudMode == Mode.MINI
-    Shell:SetHudMode(previous)
-    local ok = setMini and saved and bad == false and unchanged
-        and Constants.DEFAULT_SETTINGS.hudMode == Mode.GLANCE
-    return ok, ok and "OK" or "mode persistence failed"
-end)
-
 TestRunner:Register("Mini: clicking opens the category list (Menu) directly, not Glance", function()
-    local state = WithMode(Mode.MINI, function()
+    local state = WithMini(function()
         Shell.root:Click()
         return Shell:GetState()
     end)

@@ -59,12 +59,6 @@ Constants.CATEGORY_VIEW_MODE = {
     LIST = "LIST",
 }
 
--- Persistent HUD presentation (Mini HUD TDD §3). Glance stays the default.
-Constants.HUD_MODE = {
-    GLANCE = "GLANCE",
-    MINI = "MINI",
-}
-
 -- Capacity color thresholds (TDD §13.2). Implementation defaults, not user-tunable in v1.
 Constants.CAPACITY_COLOR_THRESHOLDS = {
     YELLOW_AT = 0.70,
@@ -447,7 +441,6 @@ Constants.DEFAULT_SETTINGS = {
         locked = false,
     },
     categoryViewMode = Constants.CATEGORY_VIEW_MODE.GRID,
-    hudMode = Constants.HUD_MODE.GLANCE,
     -- Opt-in (v1 stays minimal/opinionated by default - PRD §4 non-goals
     -- warn against a large configuration surface, so new visual extras
     -- default OFF rather than always-on).
