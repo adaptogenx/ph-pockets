@@ -1232,6 +1232,9 @@ end
 --------------------------------------------------
 
 function Shell:RenderMini()
+    -- The Mini always has its own fixed footprint (out of combat the root can
+    -- be resized, so anything that changed it is healed here).
+    self.root:SetSize(L.MINI_WIDTH, L.MINI_HEIGHT)
     self:RenderNativeRing()
     Pockets.UI.MiniHUD:Render(self.mini)
     Pockets.UI.SidecarHUD:Render(self.sidecar)

@@ -949,16 +949,20 @@ end)
 
 Pockets.Tests.TestRunner:Register("Shell: repeated Menu<->Category transitions do not grow the row/button pool unboundedly", function()
     Shell:SetState(Shell.STATE.MENU)
+    Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
+    Shell:GoBack()
+    -- Earlier tests may already have grown the long-lived row pool; what
+    -- matters is that repeating the transition never grows it further.
+    local baseline = #Shell.frame.shell.menuRows
     for _ = 1, 5 do
         Shell:SetState(Shell.STATE.CATEGORY, { categoryID = Pockets.Constants.CATEGORY.JUNK })
         Shell:GoBack()
     end
     local rowCount = #Shell.frame.shell.menuRows
     ResetToGlance()
-    local ok = rowCount == #Pockets.Constants.CATEGORY_ORDER
+    local ok = rowCount == baseline
     return ok, ok and "OK" or string.format(
-        "expected the Menu row pool to stay at exactly %d rows, got %d",
-        #Pockets.Constants.CATEGORY_ORDER, rowCount)
+        "expected the Menu row pool to stay at %d rows, got %d", baseline, rowCount)
 end)
 
 --------------------------------------------------
