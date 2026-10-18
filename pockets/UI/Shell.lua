@@ -901,7 +901,11 @@ function Shell:Initialize()
     self.expanded = expanded
 
     if self.useSecure then
-        frame:SetFrameRef("expanded", expanded)
+        if frame.SetFrameRef then
+            frame:SetFrameRef("expanded", expanded)
+        else
+            _G.SecureHandlerSetFrameRef(frame, "expanded", expanded)
+        end
         -- Combat only; out of combat the normal insecure OnClick below runs.
         frame:SetAttribute("_onclick", [[
             if not PlayerInCombat() then return end
