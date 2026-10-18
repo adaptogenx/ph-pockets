@@ -53,7 +53,6 @@ works in combat too. Hovering or clicking a category reveals its items.
 ## Commands
 
 - `/pockets show` - Show/hide the HUD
-- `/pockets toggle` - Toggle the full inventory view
 - `/pockets help` - Show user commands
 - `/pockets help dev` - Show debug/testing commands
 

@@ -278,7 +278,6 @@ end)
 local function ShowHelp()
     print("|cff00ff00=== Pockets Commands ===|r")
     print("|cffffff00/pockets show|r - Show/hide the HUD")
-    print("|cffffff00/pockets toggle|r - Toggle the full inventory view")
     print("|cffffff00/pockets recentpreview [on||off]|r - Show or set the large icon + tooltip preview when hovering Recent items (default off)")
     print("|cffffff00/pockets help|r - Show this help")
     print("|cffffff00/pockets help dev|r - Show debug/testing commands")
@@ -317,8 +316,6 @@ local function HandleCommand(msg)
 
     if cmd == "show" then
         Pockets.UI.Shell:Toggle()
-    elseif cmd == "toggle" then
-        Pockets.API.Toggle()
     elseif cmd == "recentpreview" then
         local requested = (args[2] or ""):lower()
         if requested == "on" or requested == "off" then

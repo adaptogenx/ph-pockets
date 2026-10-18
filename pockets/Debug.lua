@@ -447,5 +447,14 @@ function Debug:RunTests()
     local passed, failed = Pockets.Tests.TestRunner:RunAll()
     local color = (failed == 0) and COLOR_GREEN or COLOR_RED
     print(string.format("%s[Pockets Test Suite] %d passed, %d failed%s", color, passed, failed, COLOR_RESET))
+    -- The runner temporarily replaces the shared widget getters, which taints
+    -- them for the rest of the session (forbidden-action errors, lost mouse).
+    -- Results are already in PocketsDB.lastTestRun; reloading clears the taint
+    -- and writes them to disk.
+    print(COLOR_YELLOW .. "[Pockets Test Suite] Reloading the UI in 3s to clear test taint "
+        .. "(results saved to PocketsDB.lastTestRun)." .. COLOR_RESET)
+    if _G.C_Timer and _G.ReloadUI then
+        _G.C_Timer.After(3, _G.ReloadUI)
+    end
     return failed == 0
 end
