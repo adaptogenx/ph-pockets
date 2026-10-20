@@ -23,7 +23,7 @@ function TooltipCounts:Initialize()
         local ok, err = pcall(function()
             local quantity = Pockets.Services.InventoryState:GetCarriedQuantity(itemID)
             if quantity > 0 then
-                tooltip:AddLine(string.format("Pockets: %d", quantity), 0.6, 0.8, 1.0)
+                tooltip:AddLine(string.format("In your pockets: %d", quantity), 0.6, 0.8, 1.0)
                 -- Resize after AddLine; guarded above against re-entry.
                 tooltip:Show()
             end

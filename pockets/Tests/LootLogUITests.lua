@@ -156,18 +156,6 @@ end)
 -- Shell integration
 --------------------------------------------------
 
-TestRunner:Register("LootLog Shell: Glance header scroll icon opens Loot Log; Back returns to Glance", function()
-    return WithFreshLog(function()
-        Shell:SetState(Shell.STATE.GLANCE)
-        Shell.frame.glance.header.lootButton:Click()
-        local opened = Shell:GetState() == Shell.STATE.LOOT
-        Shell:GoBack()
-        local back = Shell:GetState() == Shell.STATE.GLANCE
-        local ok = opened and back
-        return ok, ok and "OK" or string.format("opened=%s back=%s", tostring(opened), tostring(back))
-    end)
-end)
-
 TestRunner:Register("LootLog Shell: opened from Category, Back returns to that same Category", function()
     return WithFreshLog(function()
         Shell:SetState(Shell.STATE.MENU)
@@ -194,18 +182,6 @@ TestRunner:Register("LootLog Shell: X and Escape dismiss straight to Glance", fu
     end)
 end)
 
-TestRunner:Register("LootLog Shell: header shows title, hides + and scroll icons", function()
-    return WithFreshLog(function()
-        Shell:SetState(Shell.STATE.GLANCE)
-        Shell:OpenLootLog()
-        local header = Shell.frame.shell.header
-        local ok = header.titleText:GetText() == "Loot Log" and not header.plusButton:IsShown()
-            and not header.lootButton:IsShown() and header.closeButton:IsShown() and header.backButton:IsShown()
-        Shell:SetState(Shell.STATE.GLANCE)
-        return ok, ok and "OK" or "Loot Log header chrome wrong"
-    end)
-end)
-
 TestRunner:Register("LootLog Shell: scroll icon matches the other expanded-header icon buttons' size", function()
     return WithFreshLog(function()
         Shell:SetState(Shell.STATE.MENU)
@@ -226,15 +202,6 @@ TestRunner:Register("LootLog Shell: anchor is identical across Glance -> Loot Lo
         local p3, _, r3, x3, y3 = Shell.frame:GetPoint()
         local ok = p1 == p2 and p2 == p3 and r1 == r2 and r2 == r3 and x1 == x2 and x2 == x3 and y1 == y2 and y2 == y3
         return ok, ok and "OK" or "TOPLEFT anchor moved"
-    end)
-end)
-
-TestRunner:Register("LootLog Shell: width matches the other expanded views", function()
-    return WithFreshLog(function()
-        Shell:OpenLootLog()
-        local ok = Shell.frame:GetWidth() == L.SHELL_WIDTH
-        Shell:SetState(Shell.STATE.GLANCE)
-        return ok, ok and "OK" or "Loot Log width differs from SHELL_WIDTH"
     end)
 end)
 

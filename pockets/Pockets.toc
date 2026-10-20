@@ -47,19 +47,14 @@ Core/StackConsolidator.lua
 # UI
 UI/Layout.lua
 UI/MoneyFormat.lua
-UI/Header.lua
 UI/MetricRow.lua
 UI/PositionStrategy.lua
 UI/ItemButtonPool.lua
 UI/ItemPreview.lua
 UI/RecentItemStrip.lua
-UI/PocketsGlance.lua
 UI/MiniHUD.lua
 UI/SidecarHUD.lua
 UI/Search.lua
-UI/FlowLayout.lua
-UI/CategoryHeader.lua
-UI/ItemGrid.lua
 UI/ScrollBar.lua
 UI/LootLog.lua
 UI/Shell.lua
@@ -84,12 +79,10 @@ Tests/MailAPITests.lua
 Tests/SearchTests.lua
 Tests/ItemButtonPoolTests.lua
 Tests/SecureBindingTests.lua
-Tests/FlowLayoutTests.lua
 Tests/ScrollBarTests.lua
 Tests/MoneyFormatTests.lua
 Tests/APITests.lua
 Tests/ShellTests.lua
-Tests/PocketsGlanceTests.lua
 Tests/MiniHUDTests.lua
 Tests/SidecarHUDTests.lua
 Tests/StackResolverTests.lua

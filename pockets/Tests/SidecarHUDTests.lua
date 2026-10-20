@@ -1,7 +1,7 @@
 --[[
     Tests/SidecarHUDTests.lua - Sidecar HUD: layout tokens, gold fixed /
     ammo conditional, content-sized recent strip, no leftover pieces,
-    mode persistence, anchor, and click routing.
+    anchor, and click routing.
 ]]
 
 local _, Pockets = ...
@@ -11,14 +11,10 @@ local Shell = Pockets.UI.Shell
 local SidecarHUD = Pockets.UI.SidecarHUD
 local Constants = Pockets.Constants
 local L = Constants.LAYOUT
-local Mode = Constants.HUD_MODE
 
-local function WithMode(mode, fn)
-    local previous = Shell:GetHudMode()
+local function WithMini(fn)
     Shell:SetState(Shell.STATE.GLANCE)
-    Shell:SetHudMode(mode)
     local ok, a = pcall(fn)
-    Shell:SetHudMode(previous)
     Shell:SetState(Shell.STATE.GLANCE)
     if not ok then
         error(a)
@@ -66,26 +62,20 @@ TestRunner:Register("Sidecar: strip spans the container; icons spaced evenly; al
     return ok, ok and "OK" or "bad strip math"
 end)
 
-TestRunner:Register("Sidecar: mode keeps the Mini footprint and anchor", function()
-    local startedMini = Shell:IsMini()
+TestRunner:Register("Sidecar: keeps the Mini footprint and anchor", function()
     local p0, _, rp0, x0, y0 = Shell.root:GetPoint()
-    local ok = WithMode(Mode.MINI, function()
+    local ok = WithMini(function()
         local w, h = Shell.root:GetSize()
         local p1, _, rp1, x1, y1 = Shell.root:GetPoint()
-        return Shell:IsMini() and Pockets.SavedSettings.hudMode == Mode.MINI
-            and w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
+        return w == L.MINI_WIDTH and h == L.MINI_HEIGHT and Shell.mini:IsShown()
             and p0 == p1 and rp0 == rp1 and x0 == x1 and y0 == y1
             and Shell.sidecar.gold:IsShown()
     end)
-    -- After restoring the player's mode, the pieces are hidden unless that
-    -- mode is Mini itself.
-    local hidden = startedMini or (not Shell.sidecar.gold:IsShown() and not Shell.sidecar.ammo:IsShown()
-        and not Shell.sidecar.strip:IsShown())
-    return ok and hidden, (ok and hidden) and "OK" or "sidecar mode state wrong"
+    return ok, ok and "OK" or "sidecar footprint or anchor wrong"
 end)
 
 TestRunner:Register("Sidecar: gold centres on the Mini when ammo hides; Mini click opens the list", function()
-    local result = WithMode(Mode.MINI, function()
+    local result = WithMini(function()
         local sidecar = Shell.sidecar
         local InventoryState = Pockets.Services.InventoryState
         local original = InventoryState.GetSpecializedCapacities
@@ -117,4 +107,31 @@ TestRunner:Register("Sidecar: gold stays compact and keeps its denomination", fu
     local ok = F(0) == "0c" and F(45) == "45c" and F(1200) == "12s" and F(1520000) == "152g"
         and F(124000000) == "12.4kg" and F(12000000000) == "1.2mg" and F(-5) == "0c" and F(nil) == "0c"
     return ok, ok and "OK" or string.format("%s %s %s", F(1520000), F(124000000), F(12000000000))
+end)
+
+TestRunner:Register("Sidecar: ETA shows only when filling with enough confidence", function()
+    local E = Constants.ESTIMATOR_STATE
+    local ok = SidecarHUD.FormatEta(E.FILLING, 0.8, 13 * 60) == "13m to full"
+        and SidecarHUD.FormatEta(E.FILLING, 0.8, 20) == "<1m to full"
+        and SidecarHUD.FormatEta(E.FILLING, 0.4, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.FILLING, 0.8, nil) == nil
+        and SidecarHUD.FormatEta(E.STABLE, 1, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.WARMING_UP, 1, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.FULL, 1, nil) == nil
+    return ok, ok and "OK" or "ETA gating wrong"
+end)
+
+TestRunner:Register("Sidecar: ETA pill sits on the same side as the gold/ammo badges, level with the Mini's count badge", function()
+    local sidecar = Shell.sidecar
+    if not sidecar.eta then
+        return false, "no sidecar.eta"
+    end
+    SidecarHUD:Layout(sidecar)
+    local etaPoint, _, etaRel, _, etaY = sidecar.eta:GetPoint()
+    local goldPoint = sidecar.gold:GetPoint()
+    local centre = -etaY + sidecar.eta:GetHeight() / 2
+    local want = L.MINI_HEIGHT - L.MINI_BADGE_HEIGHT / 2
+    local ok = etaPoint == goldPoint and etaRel == "TOPLEFT" and math.abs(centre - want) < 0.01
+    return ok, ok and "OK" or string.format("eta=%s gold=%s centre=%s want=%s",
+        tostring(etaPoint), tostring(goldPoint), tostring(centre), tostring(want))
 end)

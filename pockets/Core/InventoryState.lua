@@ -186,10 +186,6 @@ function InventoryState:GetAmmoCapacity()
     return self.ammoCapacity or self:BuildCapacityResult({ used = 0, total = 0 })
 end
 
-function InventoryState:GetUtilization()
-    return self:GetGeneralCapacity().utilization
-end
-
 function InventoryState:GetItems()
     return self.items
 end

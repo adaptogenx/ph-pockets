@@ -196,16 +196,6 @@ function PHUI.ApplyBackdrop(frame, opts)
     frame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], opts.borderAlpha or borderColor[4] or 1)
 end
 
--- Creates a plain themed panel frame.
-function PHUI.CreatePanel(parent, width, height, opts)
-    local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    if width and height then
-        panel:SetSize(width, height)
-    end
-    PHUI.ApplyBackdrop(panel, opts)
-    return panel
-end
-
 --------------------------------------------------
 -- Text styling
 --------------------------------------------------
@@ -329,55 +319,8 @@ function PHUI.CreateNativeIcon(parent, size, texture, opts)
 end
 
 --------------------------------------------------
--- Disabled-state helper (ph/ph/UI_HUD.lua:1049 - overflow menu items,
--- alpha 0.45 when disabled)
---------------------------------------------------
-function PHUI.SetDisabled(frame, isDisabled)
-    frame.isActionDisabled = isDisabled and true or false
-    frame:SetAlpha(frame.isActionDisabled and 0.45 or 1.0)
-end
-
---------------------------------------------------
 -- Buttons
 --------------------------------------------------
-
--- Chrome text button: backdrop panel + centered label + hover
--- border-color highlight to ACCENT_GOLD (matches pH's stop/primary
--- button treatment, UI_HUD.lua:1124-1139).
-function PHUI.CreateButton(parent, width, height, text, opts)
-    opts = opts or {}
-    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    button:SetSize(width, height)
-    PHUI.ApplyBackdrop(button, opts)
-
-    button.text = PHUI.CreateLabel(button, opts.textStyle or "primary", text, PHUI.Fonts.SMALL)
-    button.text:SetPoint("CENTER", 0, 0)
-
-    local borderColor = opts.borderColor or PHUI.Colors.BORDER_BRONZE
-    button:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(PHUI.Colors.ACCENT_GOLD[1], PHUI.Colors.ACCENT_GOLD[2], PHUI.Colors.ACCENT_GOLD[3], 1.0)
-        if opts.tooltipText then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(opts.tooltipText)
-            GameTooltip:Show()
-        end
-    end)
-    button:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], 1.0)
-        if opts.tooltipText then
-            GameTooltip:Hide()
-        end
-    end)
-    if opts.onClick then
-        button:SetScript("OnClick", function(self)
-            if not self.isActionDisabled then
-                opts.onClick(self)
-            end
-        end)
-    end
-
-    return button
-end
 
 -- Chrome icon button: backdrop panel + centered icon (trimmed with the
 -- 0.08/0.92 texcoord inset pH uses to crop default icon padding) + hover

@@ -53,24 +53,11 @@ local function EnsureSavedVariables()
         PocketsDB.settings = {}
     end
 
-    -- Category view preference (Category List/Grid view pass): falls
-    -- back safely to the default for anything but the two known values,
-    -- rather than trusting an old/corrupted/hand-edited save.
-    local Mode = Pockets.Constants.CATEGORY_VIEW_MODE
-    if PocketsDB.settings.categoryViewMode ~= Mode.GRID and PocketsDB.settings.categoryViewMode ~= Mode.LIST then
-        PocketsDB.settings.categoryViewMode = Pockets.Constants.DEFAULT_SETTINGS.categoryViewMode
-    end
+    -- The category Grid view is gone (the list is the only view).
+    PocketsDB.settings.categoryViewMode = nil
 
-    -- HUD mode (Mini/Glance): anything unknown falls back to Glance so an
-    -- old or hand-edited save never changes the HUD unexpectedly.
-    local HudMode = Pockets.Constants.HUD_MODE
-    local savedHud = PocketsDB.settings.hudMode
-    if savedHud == "RADIAL" or savedHud == "SIDECAR" then
-        -- Radial was retired and Sidecar became "mini".
-        PocketsDB.settings.hudMode = HudMode.MINI
-    elseif savedHud ~= HudMode.GLANCE and savedHud ~= HudMode.MINI then
-        PocketsDB.settings.hudMode = Pockets.Constants.DEFAULT_SETTINGS.hudMode
-    end
+    -- The HUD mode setting is gone (Mini is the only HUD); drop stale values.
+    PocketsDB.settings.hudMode = nil
 
     -- nil (never saved before) means "use the default"; an explicit
     -- true/false from a prior session must survive untouched.
@@ -233,7 +220,8 @@ mainFrame:SetScript("OnEvent", function(_, event, addonName, blockedFunc)
     if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         -- Names the protected call that was refused (only ours).
         if addonName == ADDON_NAME and Pockets.Debug then
-            Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc))
+            local stack = _G.debugstack and _G.debugstack(2, 6, 0) or ""
+            Pockets.Debug:LogError(event .. ": " .. tostring(blockedFunc) .. "\n" .. stack)
         end
         return
     end
@@ -290,9 +278,6 @@ end)
 local function ShowHelp()
     print("|cff00ff00=== Pockets Commands ===|r")
     print("|cffffff00/pockets show|r - Show/hide the HUD")
-    print("|cffffff00/pockets toggle|r - Toggle the full inventory view")
-    print("|cffffff00/pockets categoryview [grid||list]|r - Show or set the Category body view")
-    print("|cffffff00/pockets hud [mini||glance]|r - Show or set the HUD mode (default glance)")
     print("|cffffff00/pockets recentpreview [on||off]|r - Show or set the large icon + tooltip preview when hovering Recent items (default off)")
     print("|cffffff00/pockets help|r - Show this help")
     print("|cffffff00/pockets help dev|r - Show debug/testing commands")
@@ -331,33 +316,6 @@ local function HandleCommand(msg)
 
     if cmd == "show" then
         Pockets.UI.Shell:Toggle()
-    elseif cmd == "toggle" then
-        Pockets.API.Toggle()
-    elseif cmd == "categoryview" then
-        local Mode = Pockets.Constants.CATEGORY_VIEW_MODE
-        local requested = (args[2] or ""):upper()
-        if requested == Mode.GRID or requested == Mode.LIST then
-            Pockets.UI.Shell:SetCategoryViewMode(requested)
-            print("[Pockets] Category view set to " .. requested)
-        elseif requested == "" then
-            print("[Pockets] Category view is currently " .. tostring(Pockets.SavedSettings.categoryViewMode))
-        else
-            print("[Pockets] Usage: /pockets categoryview grid||list")
-        end
-    elseif cmd == "hud" then
-        local Mode = Pockets.Constants.HUD_MODE
-        local requested = (args[2] or ""):upper()
-        if requested == Mode.MINI or requested == Mode.GLANCE then
-            if Pockets.UI.Shell:SetHudMode(requested) then
-                print("[Pockets] HUD mode set to " .. requested:lower())
-            else
-                print("[Pockets] Can't change the HUD mode in combat.")
-            end
-        elseif requested == "" then
-            print("[Pockets] HUD mode is currently " .. tostring(Pockets.SavedSettings.hudMode):lower())
-        else
-            print("[Pockets] Usage: /pockets hud mini||glance")
-        end
     elseif cmd == "recentpreview" then
         local requested = (args[2] or ""):lower()
         if requested == "on" or requested == "off" then

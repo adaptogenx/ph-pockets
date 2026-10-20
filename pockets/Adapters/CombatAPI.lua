@@ -28,7 +28,3 @@ function CombatAPI:CanMutateProtected(frame)
     return true
 end
 
--- Hover-triggered expansion is disabled in combat; clicking is always allowed.
-function CombatAPI:CanHoverExpand()
-    return not self:IsInCombat()
-end

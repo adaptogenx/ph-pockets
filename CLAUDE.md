@@ -19,8 +19,7 @@ architected so pH and Pockets can share core implementations later
 
 **Source of truth for scope/behavior**: `Pockets_PRD.md` (product),
 `Pockets_TDD.md` (technical design), and `Pockets_UI_SPEC.md` (exact UI
-geometry/icons/hover behavior - authoritative over `Pockets_UI_Reference.png`
-when they differ). When in doubt about a requirement, re-read the relevant
+geometry/icons/hover behavior). When in doubt about a requirement, re-read the relevant
 section number referenced in code comments before guessing.
 
 ## UI Design

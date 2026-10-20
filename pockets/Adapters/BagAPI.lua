@@ -229,16 +229,6 @@ function BagAPI:GetSlotInfo(bagID, slotIndex)
     }
 end
 
--- Returns whether the given bagID is a general-purpose (Bags) container.
-function BagAPI:IsGeneralBag(bagID)
-    for _, generalID in ipairs(self.GENERAL_BAG_IDS) do
-        if generalID == bagID then
-            return true
-        end
-    end
-    return false
-end
-
 -- Pure bitmask check, split out from IsAmmoBag so the actual detection
 -- rule is unit-testable without a live bag/inventory API (bug found here
 -- previously: IsAmmoBag was reading GetItemInfo()'s 9th return value -
@@ -530,13 +520,6 @@ function BagAPI:HandleModifiedItemClick(itemLink)
     if itemLink and HandleModifiedItemClick then
         HandleModifiedItemClick(itemLink)
     end
-end
-
-function BagAPI:GetItemLink(bagID, slotIndex)
-    if C_Container and C_Container.GetContainerItemLink then
-        return C_Container.GetContainerItemLink(bagID, slotIndex)
-    end
-    return GetContainerItemLink(bagID, slotIndex)
 end
 
 -- Points a GameTooltip at the live item in a bag/slot (shows durability,

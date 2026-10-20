@@ -81,13 +81,3 @@ function ItemCategorizer:GetDisplayCategory(item)
     return self:Categorize(item) or CATEGORY.OTHER
 end
 
-function ItemCategorizer:GetCategoryDefinition(categoryID)
-    return {
-        id = categoryID,
-        label = Pockets.Constants.CATEGORY_LABEL[categoryID] or categoryID,
-    }
-end
-
-function ItemCategorizer:GetCategories()
-    return Pockets.Constants.CATEGORY_ORDER
-end
