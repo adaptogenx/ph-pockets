@@ -688,8 +688,13 @@ function Shell:RestorePosition()
     if Pockets.UI.ItemButtonPool:IsStructurallyBlocked() then
         return
     end
-    PositionStrategy:ApplyRootPosition(self.root, Pockets.CharDB.hud)
-    PositionStrategy:ApplyRootPosition(self.expanded, Pockets.CharDB.hud)
+    local hud = Pockets.CharDB.hud
+    PositionStrategy:ApplyRootPosition(self.root, hud)
+    -- The Mini sits wherever the player parked it; the (much larger) panel
+    -- opens at the same top-left but is shifted just enough to stay on screen.
+    local x, y = PositionStrategy.ClampToScreen(hud.x or 0, hud.y or 0,
+        L.NATIVE_PANEL_WIDTH, TotalPanelHeight(), UIParent:GetWidth(), UIParent:GetHeight())
+    PositionStrategy:ApplyRootPosition(self.expanded, { x = x, y = y })
 end
 
 -- The frame currently on screen for the current state (Glance root, or the

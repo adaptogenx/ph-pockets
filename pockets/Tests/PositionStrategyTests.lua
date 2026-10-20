@@ -94,3 +94,23 @@ Pockets.Tests.TestRunner:Register("PositionStrategy: resizing a positioned frame
         and before.point == after.point and before.relativePoint == after.relativePoint
     return ok, ok and "OK" or "resizing the frame shifted its TOPLEFT anchor"
 end)
+
+Pockets.Tests.TestRunner:Register("PositionStrategy: ClampToScreen keeps a panel on screen, shifting only as needed", function()
+    local C = PositionStrategy.ClampToScreen
+    local function eq(x, y, ex, ey)
+        local rx, ry = C(x, y, 300, 400, 1920, 1080)
+        return rx == ex and ry == ey
+    end
+    local ok = eq(100, -100, 100, -100)          -- fits: untouched
+        and eq(1800, -100, 1620, -100)           -- too far right: pulled left
+        and eq(100, -900, 100, -680)             -- too low: pulled up
+        and eq(1800, -900, 1620, -680)           -- both
+        and eq(-20, 10, 0, 0)                    -- off the left/top edge: pulled in
+    return ok, ok and "OK" or "ClampToScreen math wrong"
+end)
+
+Pockets.Tests.TestRunner:Register("PositionStrategy: ClampToScreen with a panel larger than the screen pins it to the top-left", function()
+    local x, y = PositionStrategy.ClampToScreen(500, -500, 3000, 2000, 1920, 1080)
+    local ok = x == 0 and y == 0
+    return ok, ok and "OK" or string.format("expected 0,0 got %s,%s", tostring(x), tostring(y))
+end)

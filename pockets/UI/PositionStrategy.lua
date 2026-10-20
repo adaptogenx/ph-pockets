@@ -25,6 +25,17 @@ function PositionStrategy:GetRootAnchor()
     return "TOPLEFT"
 end
 
+-- Where a w x h panel anchored at the saved TOPLEFT offset (x right, y down
+-- is negative - UIParent TOPLEFT coordinates) must sit so it stays fully on
+-- screen: shifted left/up only as far as needed, never past the screen's
+-- left/top edge. Pure, so the expanded panel (which can't be re-anchored in
+-- combat) is positioned ahead of time, out of combat.
+function PositionStrategy.ClampToScreen(x, y, w, h, screenW, screenH)
+    local left = math.max(0, math.min(x, screenW - w))
+    local down = math.max(0, math.min(-y, screenH - h))
+    return left, -down
+end
+
 -- Anchors `frame` to UIParent using the strategy's anchor on both sides,
 -- so SetSize()-driven growth always extends away from that one fixed
 -- point (right/down for TOPLEFT) regardless of current dimensions.
