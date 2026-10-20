@@ -60,7 +60,7 @@ rules; the spec states the numbers.
     confirming it's already used by a real, shipped addon or documented
     Blizzard constant.
 12. **Tooltip content stays terse.** `UI/TooltipCounts.lua` adds exactly
-    one line (`Pockets: <count>`) and never duplicates it on tooltip
+    one line (`In your pockets: <count>`) and never duplicates it on tooltip
     refresh.
 13. **Flyouts stay independently closable.** `CategoryFlyout` and
     `ItemFlyout` each manage their own show/hide so click navigation keeps

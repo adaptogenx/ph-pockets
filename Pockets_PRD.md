@@ -190,7 +190,7 @@ Example:
 ```text
 Netherweave Cloth
 ...
-Pockets: 63
+In your pockets: 63
 ```
 
 Requirements:
