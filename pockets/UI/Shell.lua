@@ -1491,6 +1491,10 @@ end
 -- paint whatever was deferred.
 function Shell:OnCombatEnded()
     self:UpdateCombatBindings()
+    -- Repair the layout after a secure close of the opened Mini.
+    if self.root and self.mini and self:IsMini() then
+        self:ApplyHudMode()
+    end
     local pool = Pockets.UI.ItemButtonPool
     local hadDeferred = pool:Reconcile()
     if self.renderDeferred or hadDeferred then
@@ -1538,6 +1542,10 @@ function Shell:SyncStateFromVisibility()
     else
         self.state = self.STATE.GLANCE
         self.expandedVisible = false
+        -- A combat close of the opened Mini hides its chrome securely.
+        if self.nativeOpen and self.root.chrome and not self.root.chrome:IsShown() then
+            self.nativeOpen = false
+        end
     end
     self:SetEscapeCatcherShown(self:EscapeActive())
 end
@@ -1569,6 +1577,12 @@ local TOGGLE_SNIPPET = [[
     local e = self:GetFrameRef("expanded")
     local r = self:GetFrameRef("root")
     local action = self:GetAttribute("pocketsaction") or "toggle"
+    if action == "nativeclose" then
+        -- The opened Mini (native chrome) folds back to the Mini.
+        self:GetFrameRef("chrome"):Hide()
+        self:GetFrameRef("mini"):Show()
+        return
+    end
     local open
     if action == "open" then
         open = true
@@ -1595,6 +1609,10 @@ local function MakeSecureClicker(name, parent, action)
     local b = CreateFrame("Button", name, parent, "SecureHandlerClickTemplate")
     b:SetFrameRef("expanded", Shell.expanded)
     b:SetFrameRef("root", Shell.root)
+    if Shell.root.chrome and Shell.mini then
+        b:SetFrameRef("chrome", Shell.root.chrome)
+        b:SetFrameRef("mini", Shell.mini)
+    end
     b:SetAttribute("pocketsaction", action)
     b:SetAttribute("_onclick", TOGGLE_SNIPPET)
     b:RegisterForClicks("AnyUp")
@@ -1644,6 +1662,25 @@ function Shell:BuildSecureControls()
     Overlay(self.expanded.portraitButton, "close")
     -- Back would need a re-layout to Menu; in combat it closes instead.
     Overlay(self.frame.shell.header.backButton, "close")
+    -- The opened Mini: its X and bag portrait fold it back to the Mini.
+    if self.root.chrome and self.root.chrome.CloseButton then
+        Overlay(self.root.chrome.CloseButton, "nativeclose")
+        Overlay(self.root.portraitButton, "nativeclose")
+        -- Escape (the catcher is in UISpecialFrames) does the same in combat.
+        SecureHandlerWrapScript(self.escapeCatcher, "OnHide", toggle, [[
+            if not PlayerInCombat() then return end
+            local c = owner:GetFrameRef("chrome")
+            local m = owner:GetFrameRef("mini")
+            local g = owner:GetFrameRef("glance")
+            if c:IsShown() and not m:IsShown() and not g:IsShown() then
+                c:Hide()
+                m:Show()
+            end
+        ]])
+        toggle:SetFrameRef("chrome", self.root.chrome)
+        toggle:SetFrameRef("mini", self.mini)
+        toggle:SetFrameRef("glance", self.root.glance)
+    end
 
     -- Key binding -> secure toggle, active only in combat; out of combat
     -- the normal binding runs Pockets_ToggleFullInventory (full behavior).

@@ -1,8 +1,8 @@
 ## Interface: 11509, 20504, 16001
 ## Title: Pockets
 ## Notes: Minimal, opinionated bag HUD with progressive disclosure, bag-full ETA, and automatic categorization (WoW Classic Anniversary, TBC-compatible)
-## Author: Claude Code
-## Version: 0.1.0
+## Author: Adaptogen <DADS>
+## Version: 1.0.0
 ## SavedVariables: PocketsDB
 ## SavedVariablesPerCharacter: PocketsCharDB
 
