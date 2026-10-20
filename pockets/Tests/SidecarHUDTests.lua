@@ -108,3 +108,30 @@ TestRunner:Register("Sidecar: gold stays compact and keeps its denomination", fu
         and F(124000000) == "12.4kg" and F(12000000000) == "1.2mg" and F(-5) == "0c" and F(nil) == "0c"
     return ok, ok and "OK" or string.format("%s %s %s", F(1520000), F(124000000), F(12000000000))
 end)
+
+TestRunner:Register("Sidecar: ETA shows only when filling with enough confidence", function()
+    local E = Constants.ESTIMATOR_STATE
+    local ok = SidecarHUD.FormatEta(E.FILLING, 0.8, 13 * 60) == "13m to full"
+        and SidecarHUD.FormatEta(E.FILLING, 0.8, 20) == "<1m to full"
+        and SidecarHUD.FormatEta(E.FILLING, 0.4, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.FILLING, 0.8, nil) == nil
+        and SidecarHUD.FormatEta(E.STABLE, 1, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.WARMING_UP, 1, 13 * 60) == nil
+        and SidecarHUD.FormatEta(E.FULL, 1, nil) == nil
+    return ok, ok and "OK" or "ETA gating wrong"
+end)
+
+TestRunner:Register("Sidecar: ETA pill sits on the same side as the gold/ammo badges, level with the Mini's count badge", function()
+    local sidecar = Shell.sidecar
+    if not sidecar.eta then
+        return false, "no sidecar.eta"
+    end
+    SidecarHUD:Layout(sidecar)
+    local etaPoint, _, etaRel, _, etaY = sidecar.eta:GetPoint()
+    local goldPoint = sidecar.gold:GetPoint()
+    local centre = -etaY + sidecar.eta:GetHeight() / 2
+    local want = L.MINI_HEIGHT - L.MINI_BADGE_HEIGHT / 2
+    local ok = etaPoint == goldPoint and etaRel == "TOPLEFT" and math.abs(centre - want) < 0.01
+    return ok, ok and "OK" or string.format("eta=%s gold=%s centre=%s want=%s",
+        tostring(etaPoint), tostring(goldPoint), tostring(centre), tostring(want))
+end)

@@ -53,6 +53,15 @@ function SidecarHUD.BuildModel(gold, specialized, ammoItems)
     return { gold = gold or 0, ammo = ammo }
 end
 
+-- "18m to full" for the Mini's count badge, or nil. Prefers omission to a
+-- noisy number: only the FILLING state with enough confidence shows one.
+function SidecarHUD.FormatEta(state, confidence, seconds)
+    if state ~= Constants.ESTIMATOR_STATE.FILLING or (confidence or 0) < 0.5 or not seconds then
+        return nil
+    end
+    return Pockets.UI.Layout:FormatETA(seconds)
+end
+
 -- The newest recent items for the strip (newest first, max 5).
 function SidecarHUD.BuildRecent(recent)
     local out = {}
@@ -192,6 +201,14 @@ function SidecarHUD:Build(root, handlers)
     local sidecar = { root = root, handlers = handlers }
     sidecar.gold = CreateBadge(root, handlers)
     sidecar.ammo = CreateBadge(root, handlers)
+    -- Bag-full ETA: a text-only pill beside the Mini's count badge (right of
+    -- it, or left when the HUD is on the right of the screen).
+    sidecar.eta = CreateBadge(root, handlers)
+    sidecar.eta:SetHeight(L.SIDECAR_BADGE_HEIGHT - 2)
+    sidecar.eta.icon:Hide()
+    sidecar.eta.text:ClearAllPoints()
+    sidecar.eta.text:SetPoint("CENTER", sidecar.eta, "CENTER", 0, 0)
+    PHUI.ApplyTextStyle(sidecar.eta.text, "muted")
     -- The recent strip is the same real-item-button strip Glance uses
     -- (UI/RecentItemStrip.lua): right-click uses the item, tooltips, drag and
     -- the big preview all work. Icons are placed by SidecarHUD:Layout.
@@ -247,6 +264,18 @@ function SidecarHUD:Layout(sidecar)
     else
         place(sidecar.gold, -(L.MINI_PORTRAIT_SIZE - L.SIDECAR_BADGE_HEIGHT) / 2)
         place(sidecar.ammo, columnTop - L.SIDECAR_BADGE_HEIGHT - L.SIDECAR_BADGE_GAP)
+    end
+
+    -- ETA pill: vertically centred on the Mini's count badge, same side as
+    -- the other badges.
+    local eta = sidecar.eta
+    local etaCentre = L.MINI_HEIGHT - L.MINI_BADGE_HEIGHT / 2
+    local etaTop = -(etaCentre - eta:GetHeight() / 2)
+    eta:ClearAllPoints()
+    if flip then
+        eta:SetPoint("TOPRIGHT", root, "TOPLEFT", -L.SIDECAR_MINI_GAP, etaTop)
+    else
+        eta:SetPoint("TOPLEFT", root, "TOPLEFT", L.MINI_WIDTH + L.SIDECAR_MINI_GAP, etaTop)
     end
 
     local strip = sidecar.strip
@@ -305,6 +334,17 @@ function SidecarHUD:Render(sidecar, layout)
     end
 
     sidecar.sideW = sideW
+
+    local estimator = Pockets.Services.CapacityEstimator
+    local etaText = SidecarHUD.FormatEta(estimator:GetState(), estimator:GetConfidence(), estimator:GetETA())
+    local eta = sidecar.eta
+    if etaText then
+        eta.text:SetText(etaText)
+        eta:SetWidth(2 * L.SIDECAR_BADGE_PAD + eta.text:GetStringWidth())
+        eta:Show()
+    else
+        eta:Hide()
+    end
     -- The strip's real item buttons are protected in combat: they are only
     -- re-laid-out (in Layout) out of combat.
     sidecar.recent = recent
@@ -318,6 +358,7 @@ function SidecarHUD:SetShown(sidecar, shown)
     if not shown then
         sidecar.gold:Hide()
         sidecar.ammo:Hide()
+        sidecar.eta:Hide()
         sidecar.strip:Hide()
     end
 end
