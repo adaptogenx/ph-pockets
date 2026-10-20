@@ -1583,16 +1583,6 @@ function Shell:ResetCombatPages()
     shell.mainHost:Show()
 end
 
-function Shell:AnyCombatPageShown()
-    local shell = self.frame and self.frame.shell
-    for _, page in pairs(shell and shell.combatPages or {}) do
-        if page.host:IsShown() then
-            return true
-        end
-    end
-    return false
-end
-
 -- Title follows whichever page (if any) the secure click left showing.
 function Shell:SyncCombatPageUI()
     local shell = self.frame and self.frame.shell

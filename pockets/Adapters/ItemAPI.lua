@@ -146,12 +146,6 @@ function ItemAPI:GetIcon(itemID)
     return GetItemIcon and GetItemIcon(itemID) or nil
 end
 
--- Returns whether an item is currently a quest item (WoW Classic quest flag).
-function ItemAPI:IsQuestItem(itemID, itemLink)
-    local _, _, _, _, _, itemClass = self:RawGetItemInfo(itemLink or itemID)
-    return itemClass == (ITEM_CLASS_QUEST or "Quest")
-end
-
 -- Clears the metadata cache. Intended for tests/debug only.
 function ItemAPI:ResetCache()
     self.ItemCache = {}

@@ -3,7 +3,6 @@
 **Status:** v1 implementation spec  
 **Audience:** Coding agent / Claude  
 **Related:** `Pockets_PRD.md`, `Pockets_TDD.md`  
-**Visual reference:** `Pockets_UI_Reference.png`
 
 ## 1. Authority and goal
 
@@ -333,19 +332,3 @@ This UI revision is complete when:
 13. Hover expansion is suppressed in combat while click navigation remains.
 14. Shift-B uses the same interactive item-button behavior.
 15. The UI remains substantially smaller than a conventional all-bags-open layout.
-
-## 17. Visual reference rules
-
-See `Pockets_UI_Reference.png`.
-
-Use the image for:
-
-- overall HUD → categories → items hierarchy;
-- prominent square bag icon;
-- fixed-width category navigation;
-- right-aligned counts;
-- category icon concept;
-- item grid concept;
-- panel relationships.
-
-Do **not** use it as authority for exact dimensions, texture paths, fonts, borders, or decorative embellishments. This written spec and the TDD take precedence.
